@@ -7,11 +7,14 @@ format = """
 [](fg:#9ece6a bg:#7dcfff)$docker_context$kubernetes\
 [](fg:#7dcfff)\
 $fill\
-$cmd_duration\
-$time\
+[$cmd_duration](fg:#c0caf5) [$time](fg:#c0caf5)\
 $line_break\
 $character
 """
+
+[fill]
+symbol = " "
+style = "bg:none"
 
 # ========================
 # DIRECTORY
