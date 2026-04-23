@@ -1,0 +1,97 @@
+add_newline = false
+
+format = """
+[](fg:#7aa2f7)$directory\
+[](fg:#7aa2f7 bg:#bb9af7)$git_branch$git_status\
+[](fg:#bb9af7 bg:#9ece6a)$python$nodejs$rust$golang\
+[](fg:#9ece6a bg:#7dcfff)$docker_context$kubernetes\
+[](fg:#7dcfff)\
+$fill\
+$cmd_duration\
+$time\
+$line_break\
+$character
+"""
+
+# ========================
+# DIRECTORY
+# ========================
+[directory]
+style = "fg:#1a1b26 bg:#7aa2f7 bold"
+truncation_length = 2
+truncate_to_repo = true
+format = "[ $path ]($style)"
+
+# ========================
+# GIT
+# ========================
+[git_branch]
+symbol = " "
+style = "fg:#1a1b26 bg:#bb9af7 bold"
+format = "[$symbol$branch ]($style)"
+
+[git_status]
+style = "fg:#1a1b26 bg:#bb9af7 bold"
+format = "[$all_status$ahead_behind ]($style)"
+
+# ========================
+# LANGUAGES
+# ========================
+[python]
+symbol = " "
+style = "fg:#1a1b26 bg:#9ece6a bold"
+format = "[$symbol$virtualenv ]($style)"
+
+[nodejs]
+symbol = " "
+style = "fg:#1a1b26 bg:#9ece6a bold"
+format = "[$symbol$version ]($style)"
+
+[rust]
+symbol = " "
+style = "fg:#1a1b26 bg:#9ece6a bold"
+format = "[$symbol$version ]($style)"
+
+[golang]
+symbol = " "
+style = "fg:#1a1b26 bg:#9ece6a bold"
+format = "[$symbol$version ]($style)"
+
+# ========================
+# CONTAINERS
+# ========================
+[docker_context]
+symbol = " "
+style = "fg:#1a1b26 bg:#7dcfff bold"
+format = "[$symbol$context ]($style)"
+only_with_files = true
+
+[kubernetes]
+symbol = "󱃾 "
+style = "fg:#1a1b26 bg:#7dcfff bold"
+format = "[$symbol$context ]($style)"
+
+# ========================
+# CMD DURATION
+# ========================
+[cmd_duration]
+min_time = 100
+show_milliseconds = true
+format = "[ $duration ]($style)"
+style = "fg:#c0caf5 bg:none"
+
+# ========================
+# TIME
+# ========================
+[time]
+disabled = false
+time_format = "%H:%M"
+format = "[ $time ]($style)"
+style = "fg:#c0caf5 bg:none"
+
+# ========================
+# CHARACTER
+# ========================
+[character]
+success_symbol = "[❯](bold #7aa2f7)"
+error_symbol = "[❯](bold #f7768e)"
