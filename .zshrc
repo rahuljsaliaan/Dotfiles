@@ -58,6 +58,8 @@ alias ls='eza --icons --group-directories-first'
 alias ll='eza -l --icons --group-directories-first'
 alias lt='eza --tree --icons'
 
+alias bat=batcat
+
 # ==============================
 # -------- ZOXIDE --------------
 # ==============================
@@ -81,7 +83,12 @@ export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --info=inline"
 # Clean dropdown history (no numbers, fixed UI refresh)
 fzf-history-widget() {
   local selected
-  selected=$(history 1 | sed 's/^[ ]*[0-9]\+[ ]*//' | tac | fzf --query="$LBUFFER") || return
+
+  selected=$(history 1 | sed 's/^[ ]*[0-9]\+[ ]*//' | tac | \
+    fzf --query="$LBUFFER") || {
+      zle reset-prompt
+      return
+    }
 
   BUFFER="$selected"
   CURSOR=${#BUFFER}
@@ -90,6 +97,40 @@ fzf-history-widget() {
 }
 zle -N fzf-history-widget
 bindkey '^R' fzf-history-widget
+
+# File search + preview + open in VS Code
+ff() {
+  local file
+  file=$(fdfind | fzf --height 40% --layout=reverse \
+    --preview '
+      if [ -d {} ]; then
+        eza --tree --level=2 --icons {}
+      else
+        case "$(file --mime-type -b {})" in
+          text/*)
+            batcat --style=numbers --color=always {}
+            ;;
+          *)
+            echo "Binary / non-text file: {}"
+            ;;
+        esac
+      fi
+    ' \
+    --preview-window=right:60%) || return
+
+  [ -n "$file" ] && code "$file"
+}
+# Folder search + cd into it
+fdc() {
+  local dir
+  dir=$(fdfind -t d | fzf --height 40% --layout=reverse) || return
+
+  [ -n "$dir" ] && cd "$dir"
+}
+
+# Optional keybindings
+bindkey -s '^P' 'ff\n'     # Ctrl + P → file search
+bindkey -s '^O' 'fdc\n'    # Ctrl + O → folder jump
 
 # ==============================
 # -------- STARSHIP ------------
