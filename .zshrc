@@ -89,3 +89,4 @@ bindkey '^R' fzf-history-widget
 unset PROMPT
 unset RPROMPT
 eval "$(starship init zsh)"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
