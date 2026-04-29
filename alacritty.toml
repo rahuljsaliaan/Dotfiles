@@ -2,8 +2,9 @@
 # WINDOW
 # ==============================
 [window]
-opacity = 0.70
+opacity = 0.95
 decorations = "full"
+blur = true
 
 # Good rectangular launch size (not square)
 dimensions = { columns = 85, lines = 25 }
