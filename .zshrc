@@ -52,8 +52,6 @@ eval "$(pyenv init -)"
 # ==============================
 # -------- ALIASES -------------
 # ==============================
-alias code="flatpak run com.visualstudio.code"
-
 alias ls='eza --icons --group-directories-first'
 alias ll='eza -l --icons --group-directories-first'
 alias lt='eza --tree --icons'
@@ -138,3 +136,4 @@ bindkey -s '^O' 'fdc\n'    # Ctrl + O → folder jump
 unset PROMPT
 unset RPROMPT
 eval "$(starship init zsh)"
+. "$HOME/.local/bin/env"
