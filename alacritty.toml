@@ -19,7 +19,8 @@ size = 12.5
 
 [font.normal]
 family = "Hack Nerd Font"
-style = "Regular"
+# Using the "Bold" style forces the thicker, heavier weight for normal characters
+style = "Bold"
 
 [font.bold]
 family = "Hack Nerd Font"
