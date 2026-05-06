@@ -130,6 +130,20 @@ fdc() {
 bindkey -s '^P' 'ff\n'     # Ctrl + P → file search
 bindkey -s '^O' 'fdc\n'    # Ctrl + O → folder jump
 
+# Clear py-cache
+function pyclean() {
+    echo "--- DELETING PYTHON CACHE FILES ---"
+    
+    # Delete and print individual .pyc and .pyo files in real-time
+    find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -print -delete
+    
+    # Remove __pycache__ directories while verbosely printing what is deleted
+    find . -type d -name "__pycache__" -exec rm -rfv {} +
+    
+    echo "-----------------------------------"
+    echo "Python caches cleaned successfully!"
+}
+
 # ==============================
 # -------- STARSHIP ------------
 # ==============================
