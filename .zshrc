@@ -144,6 +144,67 @@ function pyclean() {
     echo "Python caches cleaned successfully!"
 }
 
+# AWSM Dynamic Workspace Manager
+workspace() {
+    local SESSION_DIR="$HOME/.config/another-window-session-manager/sessions"
+    local DCONF_BASE="/org/gnome/shell/extensions/another-window-session-manager"
+
+    if [[ -z "$1" ]]; then
+        echo "Available Workspaces:"
+        if [[ -d "$SESSION_DIR" ]]; then
+            find "$SESSION_DIR" -mindepth 1 -maxdepth 1 \
+                ! -name "currentSession" \
+                -printf "  - %f\n" | sed 's/\.json$//'
+        else
+            echo "Error: Session directory not found at $SESSION_DIR"
+        fi
+        echo ""
+        echo "Usage: workspace <name> (e.g., workspace Dev)"
+        return 0
+    fi
+
+    local TARGET="$1"
+    local TARGET_PATH="$SESSION_DIR/$TARGET"
+
+    if [[ ! -d "$TARGET_PATH" && ! -f "$TARGET_PATH" ]]; then
+        if [[ -f "${TARGET_PATH}.json" ]]; then
+            TARGET_PATH="${TARGET_PATH}.json"
+        else
+            echo "Error: Workspace '$TARGET' not found."
+            return 1
+        fi
+    fi
+
+    echo "Status: Activating workspace '$TARGET'..."
+
+    # Save original dconf values to restore after
+    local PREV_SESSION PREV_AUTORESTORE PREV_NO_DIALOG
+    PREV_SESSION=$(dconf read "$DCONF_BASE/autorestore-sessions")
+    PREV_AUTORESTORE=$(dconf read "$DCONF_BASE/enable-autorestore-sessions")
+    PREV_NO_DIALOG=$(dconf read "$DCONF_BASE/restore-at-startup-without-asking")
+
+    # Point AWSM at the target session, enable it, skip the confirm dialog
+    dconf write "$DCONF_BASE/autorestore-sessions" "'$TARGET'"
+    dconf write "$DCONF_BASE/enable-autorestore-sessions" "true"
+    dconf write "$DCONF_BASE/restore-at-startup-without-asking" "true"
+
+    echo "Status: Launching applications..."
+    if ! gdbus call --session \
+        --dest org.gnome.Shell.Extensions.awsm \
+        --object-path /org/gnome/Shell/Extensions/awsm \
+        --method org.gnome.Shell.Extensions.awsm.Autostart.RestoreSession; then
+        echo "Error: D-Bus call failed."
+    fi
+
+    # Restore original dconf values
+    dconf write "$DCONF_BASE/autorestore-sessions" "$PREV_SESSION"
+    [[ -n "$PREV_AUTORESTORE" ]] && dconf write "$DCONF_BASE/enable-autorestore-sessions" "$PREV_AUTORESTORE" \
+        || dconf reset "$DCONF_BASE/enable-autorestore-sessions"
+    [[ -n "$PREV_NO_DIALOG" ]] && dconf write "$DCONF_BASE/restore-at-startup-without-asking" "$PREV_NO_DIALOG" \
+        || dconf reset "$DCONF_BASE/restore-at-startup-without-asking"
+
+    echo "Status: Workspace '$TARGET' is ready."
+}
 # ==============================
 # -------- STARSHIP ------------
 # ==============================
