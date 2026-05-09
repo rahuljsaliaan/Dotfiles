@@ -36,11 +36,6 @@ eval "$(dircolors -b)"
 # -------- ENV -----------------
 # ==============================
 
-# NVM
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
-
 # PYENV (Python version manager)
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
@@ -212,3 +207,6 @@ unset PROMPT
 unset RPROMPT
 eval "$(starship init zsh)"
 . "$HOME/.local/bin/env"
+
+# MISE
+eval "$(~/.local/bin/mise activate zsh)"
