@@ -113,6 +113,27 @@ ff() {
 
   [ -n "$file" ] && code "$file"
 }
+# File search + preview + open in Zed
+fz() {
+  local file
+  file=$(fdfind | fzf --height 40% --layout=reverse \
+    --preview '
+      if [ -d {} ]; then
+        eza --tree --level=2 --icons {}
+      else
+        case "$(file --mime-type -b {})" in
+          text/*)
+            batcat --style=numbers --color=always {}
+            ;;
+          *)
+            echo "Binary / non-text file: {}"
+            ;;
+        esac
+      fi
+    ' \
+    --preview-window=right:60%) || return
+  [ -n "$file" ] && zed "$file"
+}
 # Folder search + cd into it
 fdc() {
   local dir
