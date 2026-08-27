@@ -36,6 +36,14 @@ eval "$(dircolors -b)"
 # -------- ENV -----------------
 # ==============================
 
+# LOCALE
+# tmux reads the locale to decide whether the terminal is UTF-8 capable, and
+# when it is not, replaces every multi-byte character with "_" -- which
+# silently strips the Nerd Font glyphs out of the tmux status line. Plain
+# "en_IN" carries no codeset, so name the UTF-8 variant explicitly.
+export LANG=en_IN.UTF-8
+
+
 # PYENV (Python version manager)
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
