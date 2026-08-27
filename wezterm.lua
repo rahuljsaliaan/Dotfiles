@@ -13,17 +13,18 @@ local DECORATIONS_OFF = "RESIZE"
 -- Fraction of the active screen the first window should cover, per axis.
 -- Width is intentionally the smaller of the two: the screen is far wider than
 -- it is tall, so equal fractions give a window that feels wide but squat.
-local WINDOW_WIDTH_FRACTION = 0.55
+local WINDOW_WIDTH_FRACTION = 0.75
 local WINDOW_HEIGHT_FRACTION = 0.70
 
 -- ==============================
 -- WINDOW
 -- ==============================
--- Acrylic/frosted glass = transparency + blur behind the window. WezTerm only
--- ships blur for macOS and Windows, so on GNOME/Wayland the blur half comes
--- from the compositor ("Blur my Shell" extension, Applications pipeline).
--- This is the transparency half.
-config.window_background_opacity = 0.90
+-- Plain transparency, no blur. WezTerm only ships blur for macOS and Windows,
+-- and the GNOME/Wayland route (Blur my Shell) positions its backdrop in
+-- monitor coordinates, which breaks on a multi-monitor desktop -- the blur is
+-- created but clipped away from the window. Not worth the collateral damage it
+-- caused to other apps, so this is transparency alone.
+config.window_background_opacity = 0.85
 
 -- No title bar. "RESIZE" keeps the resize edges (unlike "NONE"); move the
 -- window with Super+drag since there is no titlebar left to grab. Rounded
@@ -33,8 +34,8 @@ config.window_decorations = DECORATIONS_OFF
 
 -- Fallback size for windows spawned after startup (Ctrl+Shift+N). The first
 -- window is sized from the screen instead -- see STARTUP GEOMETRY below.
-config.initial_cols = 85
-config.initial_rows = 25
+config.initial_cols = 170
+config.initial_rows = 50
 
 config.window_padding = { left = 12, right = 12, top = 10, bottom = 10 }
 
@@ -171,18 +172,24 @@ config.term = "xterm-256color"
 -- own window. Centring is the compositor's job, via
 -- `org.gnome.mutter center-new-windows`.
 --
--- "100% of the screen" reference, measured on this machine: a maximized window
--- using the font and padding configured above fills a 210x56 cell grid on a
--- 1920x1200 screen. Scaling that by the live screen size converts the
--- fractions above into the cell counts spawn_window() wants, so the result
--- tracks whatever display is attached rather than assuming a resolution.
+-- Cell size in pixels for the font configured above, measured on this machine
+-- at scale 1.0 / 96dpi (both monitors here match): a maximized window gains one
+-- column per ~9px of width, and the vertical padding differential (80px of
+-- padding costs 5 rows) puts the cell height at 16px.
 --
--- Re-measure if font_size or window_padding changes: maximize a window and run
--- `stty size`, which prints rows then cols.
-local REF_SCREEN_WIDTH_PX = 1920
-local REF_SCREEN_HEIGHT_PX = 1200
-local REF_GRID_COLS = 210
-local REF_GRID_ROWS = 56
+-- Expressed as pixels per cell rather than a screen-to-grid ratio on purpose:
+-- a ratio silently breaks the moment the display resolution changes, whereas
+-- cell size only depends on the font and dpi.
+--
+-- Re-measure if font_size changes: maximize a window and run `stty size`, then
+-- repeat with window_padding raised by a known amount and divide the extra
+-- padding by the rows lost.
+local CELL_WIDTH_PX = 9
+local CELL_HEIGHT_PX = 16
+
+-- window_padding above, totalled per axis
+local PADDING_X = 24
+local PADDING_Y = 20
 
 -- Never open smaller than the old fixed size, however small the screen is
 local MIN_COLS = 85
@@ -193,9 +200,9 @@ wezterm.on("gui-startup", function(cmd)
   local args = cmd or {}
 
   args.width = math.max(MIN_COLS, math.floor(
-    screen.width * (REF_GRID_COLS / REF_SCREEN_WIDTH_PX) * WINDOW_WIDTH_FRACTION))
+    (screen.width * WINDOW_WIDTH_FRACTION - PADDING_X) / CELL_WIDTH_PX))
   args.height = math.max(MIN_ROWS, math.floor(
-    screen.height * (REF_GRID_ROWS / REF_SCREEN_HEIGHT_PX) * WINDOW_HEIGHT_FRACTION))
+    (screen.height * WINDOW_HEIGHT_FRACTION - PADDING_Y) / CELL_HEIGHT_PX))
 
   wezterm.mux.spawn_window(args)
 end)
