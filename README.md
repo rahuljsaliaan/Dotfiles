@@ -4,6 +4,12 @@ Personal configuration, one folder per application. Each folder holds the real
 file; `install.sh` symlinks it into wherever that application expects to find
 it, so the repo stays the single source of truth and edits take effect in place.
 
+## Shortcuts
+
+**[CHEATSHEET.md](CHEATSHEET.md)** — every binding across WezTerm, zsh, tmux and
+Neovim, basic to advanced, with the repo's own customisations marked. Keys in it
+were extracted from the live config rather than written from memory.
+
 ## Install
 
 ```sh
@@ -28,6 +34,7 @@ overwritten. It warns if the Neovim on `PATH` is too old for LazyVim.
 | `starship/` | `~/.config/starship.toml` | Prompt |
 | `mise/` | `~/.config/mise/config.toml` | Runtime and tool versions |
 | `archive/` | *(not linked)* | Configs kept for reference only |
+| `CHEATSHEET.md` | — | Keyboard shortcuts for every tool here |
 
 `nvim/` is linked as a whole directory rather than file by file, so
 `lazy-lock.json` — which lazy.nvim writes into the config directory — lands in
