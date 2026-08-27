@@ -1,0 +1,15 @@
+[tools]
+bun = "latest"
+go = "latest"
+node = "22"
+
+# LazyVim needs Neovim >= 0.11.2; Ubuntu's apt package is stuck at 0.9.5.
+# Pinned here rather than installed system-wide so the version travels with
+# this repo and needs no sudo.
+neovim = "latest"
+
+# LazyVim's optional/required companions, none of which apt provides usefully:
+lazygit = "latest"      # <leader>gg in LazyVim
+tree-sitter = "latest"  # nvim-treesitter parser builds
+fd = "latest"           # Ubuntu names its binary fdfind; LazyVim looks for fd
+ripgrep = "latest"      # Snacks.picker.grep() hard-requires `rg`
