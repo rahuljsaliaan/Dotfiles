@@ -24,7 +24,7 @@ local WINDOW_HEIGHT_FRACTION = 0.70
 -- monitor coordinates, which breaks on a multi-monitor desktop -- the blur is
 -- created but clipped away from the window. Not worth the collateral damage it
 -- caused to other apps, so this is transparency alone.
-config.window_background_opacity = 0.85
+config.window_background_opacity = 0.88
 
 -- No title bar. "RESIZE" keeps the resize edges (unlike "NONE"); move the
 -- window with Super+drag since there is no titlebar left to grab. Rounded
