@@ -121,7 +121,7 @@ appears only while the window is split, so a single pane loses no room.
 
 ### A session per repo ★
 
-`dev` opens (or re-attaches to) a session laid out for one repo:
+`tmux dev` opens (or re-attaches to) a session laid out for one repo:
 
 ```
 ┌───────────────────────────┬───────────────┐
@@ -134,9 +134,16 @@ appears only while the window is split, so a single pane loses no room.
 
 | Command | Result |
 | --- | --- |
-| `dev` | Session for the current directory |
-| `dev ~/path/to/repo` | Session for that repo |
-| `dev` again | Re-attaches; never builds a second copy |
+| `tmux dev` | Session for the current directory |
+| `tmux dev ~/path/to/repo` | Session for that repo |
+| `tmux dev` again | Re-attaches; never builds a second copy |
+
+`dev` is a subcommand only by courtesy of a wrapper function in `.zshrc` —
+tmux's own `command-alias` cannot do it, because aliases are read from
+`tmux.conf` and that is only loaded once a server is running, while tmux
+refuses to start a server for a command it does not recognise. The wrapper
+passes every other argument through to the real tmux. `tmux-dev` is the same
+thing under its own name, for use from a non-zsh shell.
 
 Each pane is **colour-coded by role** in its header — editor blue, shell green,
 the two harnesses magenta and yellow — and the **repo name sits on its own
