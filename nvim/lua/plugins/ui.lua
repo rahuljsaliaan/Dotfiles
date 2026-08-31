@@ -90,11 +90,15 @@ return {
         sources = {
           explorer = {
             layout = {
-              -- Wide enough: the usual left sidebar with the editor alongside.
+              -- Wide enough: sidebar on the right, editor alongside it.
               -- Too narrow: the explorer fills the window on its own, so no
               -- empty editor pane is left sitting next to it.
+              --
+              -- "right" is snacks' own preset for this -- it is defined as the
+              -- sidebar preset with `position = "right"` -- so there is no need
+              -- to hand-override the nested layout table.
               preset = function()
-                return explorer_fills_window() and "explorer_full" or "sidebar"
+                return explorer_fills_window() and "explorer_full" or "right"
               end,
               preview = false,
             },
