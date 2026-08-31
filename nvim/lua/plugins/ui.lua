@@ -63,6 +63,13 @@ end
 -- does not touch `win`, so these key overrides stick.
 local CONFIRM_ACTION = "confirm_or_close_explorer"
 
+-- Directories excluded outright rather than merely hidden. Once gitignored
+-- paths are in scope (see the sources below) these are what would flood the
+-- explorer and make `fd`/`rg` walk tens of thousands of files, and neither is
+-- edited by hand anyway. `exclude` has no runtime toggle the way `hidden` and
+-- `ignored` do, so this list stays short.
+local EXCLUDED_DIRS = { ".git", "node_modules" }
+
 return {
   {
     "folke/snacks.nvim",
@@ -89,6 +96,15 @@ return {
 
         sources = {
           explorer = {
+            -- snacks filters out dotfiles (`hidden`) and gitignored paths
+            -- (`ignored`) by default, which is why files like `.env` or a
+            -- gitignored `temp/` cannot be opened from here -- they are never
+            -- listed in the first place. `H` and `I` still toggle each filter
+            -- while the explorer is open; this only moves the starting point.
+            hidden = true,
+            ignored = true,
+            exclude = EXCLUDED_DIRS,
+
             layout = {
               -- Wide enough: sidebar on the right, editor alongside it.
               -- Too narrow: the explorer fills the window on its own, so no
@@ -122,9 +138,49 @@ return {
               },
             },
           },
+
+          -- Same visibility for the pickers, so anything the explorer shows can
+          -- also be found by name (`<leader>ff`) and grepped (`<leader>sg`).
+          -- `files` has to be set here rather than once at the `picker` level:
+          -- its own source defaults are `hidden = false, ignored = false`, and
+          -- source config beats top-level user config in snacks' merge order,
+          -- so a top-level override would silently miss it -- and with it the
+          -- `smart` picker (`<leader><space>`), which reuses `files`.
+          files = { hidden = true, ignored = true, exclude = EXCLUDED_DIRS },
+          grep = { hidden = true, ignored = true, exclude = EXCLUDED_DIRS },
+
+          -- `<leader>ss` -- the equivalent of VS Code's Ctrl+Shift+O, a
+          -- filterable list of the functions and other symbols in this file.
+          --
+          -- Snacks' default for it is a floating box with its own little
+          -- preview pane off to one side, which is the part that feels worse
+          -- than VS Code: you read the symbol in a cramped second view instead
+          -- of watching the real editor move. `preview = "main"` previews into
+          -- the actual editor window, so moving down the list scrolls the file
+          -- behind it and highlights the symbol in place -- what VS Code does.
+          -- The `lines` source already ships this way; symbols does not.
+          --
+          -- `ivy` puts the list along the bottom rather than over the middle
+          -- of the file, so the code being previewed is not what gets covered.
+          lsp_symbols = {
+            layout = { preset = "ivy", preview = "main" },
+          },
         },
       },
     },
   },
 
+  {
+    -- LazyVim sets which-key's "helix" preset, which anchors the menu to the
+    -- right edge of the screen -- the same edge the explorer above lives on, so
+    -- pressing Space appears to open a menu inside the sidebar. "modern" is a
+    -- floating box at the bottom instead: it reads as sitting over the editor
+    -- rather than as part of the explorer, and the bottom is the cheap edge
+    -- here since only the status line occupies it.
+    --
+    -- "classic" is also at the bottom but spans the full width, which puts it
+    -- flush under the explorer and back to looking like one wide strip.
+    "folke/which-key.nvim",
+    opts = { preset = "modern" },
+  },
 }
