@@ -115,9 +115,10 @@ Prefix is `Ctrl` `b`. Mouse support is on ★, so you can click panes and scroll
 New panes open in the **current pane's directory** ★, not where the session started.
 
 Split a window and each pane grows a **header** ★ showing its number, the
-command running in it, and a blue `▌` on the pane with focus — plus the
-focused pane sits on a **lighter background** than the others. The header
-appears only while the window is split, so a single pane loses no room.
+command running in it, and a blue `▌` on the pane with focus. Borders use
+**heavy lines** ★ (`┃ ━ ┳`) so a divider reads as a real edge rather than a
+hairline. The header appears only while the window is split, so a single pane
+loses no room.
 
 ### A session per repo ★
 
@@ -148,8 +149,8 @@ thing under its own name, for use from a non-zsh shell.
 Each pane is **colour-coded by role** in its header — editor blue, shell green,
 the two harnesses magenta and yellow — and the **repo name sits on its own
 colour** in the status bar, picked by hashing the name, so two of these side by
-side are told apart without reading either. Colour marks what a pane *is*; the
-`▌` and the lighter background still mark which one has *focus*.
+side are told apart without reading either. Colour marks what a pane *is*;
+the `▌` in the header still marks which one has *focus*.
 
 Overrides, if a repo needs something else:
 
@@ -355,8 +356,8 @@ These attach when a language server starts, so they only exist in a supported fi
   `u` `w` turns it off for the current window.
 - The blue **pane border** cannot tell you where focus is when a window is split
   in two: tmux draws one divider and colours it as a border of the active pane,
-  which with two panes it is either way. That is why focus is shown on the pane
-  itself — the `▌` header and the lighter background — rather than on the edge.
+  which with two panes it is either way. The heavy line makes the panes read
+  as separate regions, but what says *which* has focus is the `▌` in its header.
 - Markdown files **render in place** ★ — headings get a glyph, tables become
   ruled grids, code blocks a background. The line under the cursor drops back to
   raw source so it stays editable, which is why one row of a table always looks
