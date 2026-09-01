@@ -47,7 +47,16 @@ export LANG=en_IN.UTF-8
 # PYENV (Python version manager)
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
+
+# --no-rehash, because a bare `pyenv init -` appends `command pyenv rehash` and
+# so rebuilds the shims on every single shell start. Rehash takes a lock at
+# $PYENV_ROOT/shims/.pyenv-shim, and if a shell is ever killed mid-rehash that
+# lock is left behind -- after which every new shell blocks a full 60 seconds
+# waiting for it before the prompt appears. Suspending the hang with C-z only
+# feeds it: the stopped process leaves the lock in place for the next shell.
+# Shims only go stale when a Python or an entry-point-installing package is
+# added, so run `pyenv rehash` by hand at those points instead.
+eval "$(pyenv init - --no-rehash zsh)"
 
 # Rust
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
@@ -120,7 +129,7 @@ fzf-history-widget() {
 zle -N fzf-history-widget
 bindkey '^R' fzf-history-widget
 
-# File search + preview + open in VS Code
+# File search + preview + open in Neovim
 ff() {
   local file
   file=$(fdfind | fzf --height 40% --layout=reverse \
@@ -140,7 +149,7 @@ ff() {
     ' \
     --preview-window=right:60%) || return
 
-  [ -n "$file" ] && code "$file"
+  [ -n "$file" ] && nvim "$file"
 }
 # File search + preview + open in Zed
 fz() {
