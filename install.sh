@@ -22,6 +22,19 @@ LINKS=(
   "tmux/dev-session.sh:$HOME/.local/bin/tmux-dev"
   "mise/config.toml:$HOME/.config/mise/config.toml"
   "nvim:$HOME/.config/nvim"
+  # Claude Code. Linked file by file rather than as a whole ~/.claude: that
+  # directory also holds credentials, session history and hundreds of megabytes
+  # of per-project state, none of which belongs in a public repo.
+  #
+  # settings.json is deliberately absent. Claude Code writes to it at runtime,
+  # so linking it would land those writes -- including the machine- and
+  # org-specific autoMode block -- in the working tree of a public repo.
+  "claude/CLAUDE.md:$HOME/.claude/CLAUDE.md"
+  "claude/statusline-command.sh:$HOME/.claude/statusline-command.sh"
+  # Individual skills, not the skills/ directory, so unpublished local skills
+  # can sit beside these without the link hiding them.
+  "claude/skills/graphify:$HOME/.claude/skills/graphify"
+  "claude/skills/code-cleanup:$HOME/.claude/skills/code-cleanup"
 )
 
 link() {
