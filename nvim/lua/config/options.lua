@@ -21,3 +21,17 @@ vim.opt.wrap = true
 vim.opt.breakindent = true
 vim.opt.breakindentopt = "shift:2"
 vim.opt.showbreak = "↳ "
+
+-- Which Python language server the lang.python extra installs. LazyVim defaults
+-- to pyright; basedpyright is the same engine, forked to unlock what Microsoft
+-- restricts to VS Code -- inlay hints for inferred types and parameter names,
+-- semantic tokens, and the full strict-mode reporting. Same inference, same
+-- speed, and it expects a stricter baseline, so an untyped file will have more
+-- to say on the first open.
+--
+-- Read by the extra at load time (`vim.g.lazyvim_python_lsp or "pyright"`), so
+-- it has to be set here rather than in a plugin spec.
+--
+-- ruff stays alongside it for linting and formatting; LazyVim already silences
+-- the ruff diagnostics that would duplicate the type checker's.
+vim.g.lazyvim_python_lsp = "basedpyright"
