@@ -16,6 +16,31 @@ local DECORATIONS_OFF = "RESIZE"
 local WINDOW_WIDTH_FRACTION = 0.75
 local WINDOW_HEIGHT_FRACTION = 0.70
 
+-- Thickness of the window frame a `tmux dev` session turns on, even on all four
+-- sides since there is no title bar for a heavier top edge to sit under.
+local DEV_BORDER_WIDTH = "0.25cell"
+
+-- The user variable dev-session.sh sets to hand over the repo's accent colour.
+local DEV_ACCENT_VAR = "tmux_dev_accent"
+
+-- ==============================
+-- BACKEND
+-- ==============================
+-- Run under XWayland rather than as a native Wayland client. WezTerm's Wayland
+-- backend displaces a fullscreen window and leaves a black offset band behind
+-- it whenever focus moves to the other monitor -- upstream wezterm#6275, open
+-- and unfixed, reproduced on builds newer than the one here, so there is no
+-- version to upgrade to. Two outputs of different heights (eDP-1 1920x1200,
+-- HDMI-1 1920x1080) make it fire on every focus switch: the fullscreen surface
+-- sized for one output is wrong for the other, and mutter paints the part the
+-- surface fails to cover.
+--
+-- XWayland reaches fullscreen by an entirely different path and does not have
+-- the bug. It would normally cost sharpness on a HiDPI screen, but both
+-- monitors here are scale 1 with fractional scaling off, so it costs nothing.
+-- Delete this line to go back to the Wayland backend.
+config.enable_wayland = false
+
 -- ==============================
 -- WINDOW
 -- ==============================
@@ -213,6 +238,45 @@ end)
 -- WezTerm has no built-in action for showing/hiding decorations, so this
 -- flips `window_decorations` as a per-window config override. Bound to
 -- Ctrl+Shift+Alt+T in the KEYBOARD section above.
+-- A frame around the whole window, in the repo's own colour.
+--
+-- tmux cannot draw this: its pane borders exist only *between* panes, so there
+-- is no option there for an outer edge -- the terminal has to draw it. But the
+-- colour is tmux's to choose, since it is the accent dev-session.sh derives
+-- from the repo name for the status badge, and wezterm knows nothing about
+-- which repo a session is for.
+--
+-- So dev-session.sh sends the colour over as an OSC 1337 user variable and this
+-- turns it into a per-window override. Being an override rather than a config
+-- value is what keeps the border to `tmux dev` windows: a plain wezterm window
+-- is never sent the variable and so never grows a border.
+wezterm.on("user-var-changed", function(window, pane, name, value)
+  if name ~= DEV_ACCENT_VAR then
+    return
+  end
+
+  local overrides = window:get_config_overrides() or {}
+
+  -- An empty value clears the border, so leaving a dev session can put the
+  -- window back to unframed without restarting it.
+  if value == "" then
+    overrides.window_frame = nil
+  else
+    overrides.window_frame = {
+      border_left_width = DEV_BORDER_WIDTH,
+      border_right_width = DEV_BORDER_WIDTH,
+      border_top_height = DEV_BORDER_WIDTH,
+      border_bottom_height = DEV_BORDER_WIDTH,
+      border_left_color = value,
+      border_right_color = value,
+      border_top_color = value,
+      border_bottom_color = value,
+    }
+  end
+
+  window:set_config_overrides(overrides)
+end)
+
 wezterm.on("toggle-titlebar", function(window)
   local overrides = window:get_config_overrides() or {}
 
