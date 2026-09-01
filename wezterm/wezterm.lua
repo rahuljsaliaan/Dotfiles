@@ -41,6 +41,16 @@ local DEV_ACCENT_VAR = "tmux_dev_accent"
 -- Delete this line to go back to the Wayland backend.
 config.enable_wayland = false
 
+-- OpenGL rather than the default WebGpu backend. On this AMD Renoir / Mesa
+-- setup WebGpu leaves stale glyphs behind after a scroll -- text from earlier
+-- frames surviving in cells nothing redrew, which reads as windows bleeding
+-- through each other and sent me chasing highlight groups and terminfo for it.
+-- OpenGL repaints the damaged region properly.
+--
+-- If artifacts ever come back, "Software" is the check: clean there means the
+-- GPU path is at fault rather than wezterm's drawing.
+config.front_end = "OpenGL"
+
 -- ==============================
 -- WINDOW
 -- ==============================
