@@ -114,6 +114,52 @@ Prefix is `Ctrl` `b`. Mouse support is on ★, so you can click panes and scroll
 
 New panes open in the **current pane's directory** ★, not where the session started.
 
+Split a window and each pane grows a **header** ★ showing its number, the
+command running in it, and a blue `▌` on the pane with focus. Borders use
+**heavy lines** ★ (`┃ ━ ┳`) so a divider reads as a real edge rather than a
+hairline. The header appears only while the window is split, so a single pane
+loses no room.
+
+### A session per repo ★
+
+`tmux dev` opens (or re-attaches to) a session laid out for one repo:
+
+```
+┌───────────────────────────┬───────────────┐
+│ editor  (nvim)            │ harness 1     │
+│                           ├───────────────┤
+├───────────────────────────┤ harness 2     │
+│ shell                     │               │
+└───────────────────────────┴───────────────┘
+```
+
+| Command | Result |
+| --- | --- |
+| `tmux dev` | Session for the current directory |
+| `tmux dev ~/path/to/repo` | Session for that repo |
+| `tmux dev` again | Re-attaches; never builds a second copy |
+
+`dev` is a subcommand only by courtesy of a wrapper function in `.zshrc` —
+tmux's own `command-alias` cannot do it, because aliases are read from
+`tmux.conf` and that is only loaded once a server is running, while tmux
+refuses to start a server for a command it does not recognise. The wrapper
+passes every other argument through to the real tmux. `tmux-dev` is the same
+thing under its own name, for use from a non-zsh shell.
+
+Each pane is **colour-coded by role** in its header — editor blue, shell green,
+the two harnesses magenta and yellow — and the **repo name sits on its own
+colour** in the status bar, picked by hashing the name, so two of these side by
+side are told apart without reading either. Colour marks what a pane *is*;
+the `▌` in the header still marks which one has *focus*.
+
+Overrides, if a repo needs something else:
+
+| Variable | Effect |
+| --- | --- |
+| `DEV_EDITOR_CMD=helix` | Different editor |
+| `DEV_HARNESS_CMD=` | Leave the harness panes at a plain shell |
+| `DEV_HARNESS_CMD='claude -c'` | Resume instead of starting fresh |
+
 ### Windows and sessions
 
 | Keys | Action |
@@ -152,6 +198,8 @@ New panes open in the **current pane's directory** ★, not where the session st
 | `h` | Collapse directory |
 | `i` or `/` | Jump to the search box, then type to filter |
 | `a` / `d` / `r` | Create / delete / rename |
+| `H` | Hide / show dotfiles — shown by default ★ |
+| `I` | Hide / show gitignored files — shown by default ★ |
 | `Esc` | Back to the file list, or close |
 
 ### Moving around
@@ -263,6 +311,7 @@ These attach when a language server starts, so they only exist in a supported fi
 | --- | --- |
 | `l` / `L` | Line numbers / relative numbers |
 | `w` | Line wrap |
+| `m` ★ | Markdown rendering |
 | `s` | Spell check |
 | `d` | Diagnostics |
 | `g` | Indent guides |
@@ -294,7 +343,25 @@ These attach when a language server starts, so they only exist in a supported fi
 - Neovim shows **relative line numbers**, which is what makes `5j` / `12k`
   practical — read the number beside the line you want and prefix the motion.
 - The explorer is **responsive** ★: below 120 columns it takes the whole window
-  (with `q` to come back), and at 120+ it is a sidebar with the editor beside
-  it. Resize and press `Space` `e` again to see the other layout.
+  (with `q` to come back), and at 120+ it is a right-hand sidebar with the
+  editor beside it. Resize and press `Space` `e` again to see the other layout.
+- The explorer and the file pickers show **dotfiles and gitignored files** ★
+  — `.env`, a gitignored `temp/` — since a file that is never listed is a
+  file you cannot open. `H` and `I` turn each filter back on for the session.
+  `.git` and `node_modules` are left out of every list, with no toggle.
+- Long lines **soft-wrap** ★ rather than running off the right edge — which
+  matters most with the explorer open and the editor ~40 columns narrower.
+  Wrapping happens at spaces, a wrapped row keeps its indent and is marked
+  `↳`, and the file on disk is untouched — no line break is written. `Space`
+  `u` `w` turns it off for the current window.
+- The blue **pane border** cannot tell you where focus is when a window is split
+  in two: tmux draws one divider and colours it as a border of the active pane,
+  which with two panes it is either way. The heavy line makes the panes read
+  as separate regions, but what says *which* has focus is the `▌` in its header.
+- Markdown files **render in place** ★ — headings get a glyph, tables become
+  ruled grids, code blocks a background. The line under the cursor drops back to
+  raw source so it stays editable, which is why one row of a table always looks
+  unrendered. `Space` `u` `m` toggles it. Formatting is deliberately not part of
+  this: nothing reflows the hand-wrapped prose in this file on save.
 - Keys in this file were extracted from the live config rather than written from
   memory. If something here is wrong, `Space` `s` `k` is the source of truth.
