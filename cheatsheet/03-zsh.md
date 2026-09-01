@@ -25,12 +25,17 @@ Line editing, fuzzy history and the handful of commands defined here.
 | Command | Action |
 | --- | --- |
 | `ff` ★ | File picker with preview → opens in Neovim |
-| `fz` ★ | File picker with preview → opens in Zed |
-| `fdc` ★ | Directory picker → `cd` |
+| `fz` ★ | Frecent directory picker with preview → `cd` (zoxide) |
+| `fdc` ★ | Directory picker → `cd`, walking the tree below here |
 | `workspace [name]` ★ | Restore a saved window layout; no argument lists them |
 | `pyclean` ★ | Delete `__pycache__` and `.pyc` recursively |
-| `z <partial>` | Jump to a frecent directory (zoxide) |
+| `z <partial>` | Jump to a frecent directory by name (zoxide) |
 | `ls` / `ll` / `lt` ★ | eza with icons — plain, long, tree |
+
+
+`fdc` and `fz` look alike and answer different questions: `fdc` walks the
+filesystem below where you are, `fz` draws on zoxide's record of everywhere you
+have actually been, so it reaches a repo three directories up without a path.
 
 ---
 
