@@ -16,6 +16,10 @@ LINKS=(
   "starship/starship.toml:$HOME/.config/starship.toml"
   "wezterm/wezterm.lua:$HOME/.config/wezterm/wezterm.lua"
   "tmux/tmux.conf:$HOME/.config/tmux/tmux.conf"
+  # Not a config -- a launcher, so it goes somewhere on PATH rather than into
+  # ~/.config. Named for what it drives, and reachable as `tmux dev` too via
+  # the wrapper in .zshrc.
+  "tmux/dev-session.sh:$HOME/.local/bin/tmux-dev"
   "mise/config.toml:$HOME/.config/mise/config.toml"
   "nvim:$HOME/.config/nvim"
 )
