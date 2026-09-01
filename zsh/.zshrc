@@ -151,26 +151,20 @@ ff() {
 
   [ -n "$file" ] && nvim "$file"
 }
-# File search + preview + open in Zed
+# Frecent directory picker + preview + cd
+#
+# The counterpart to fdc: fdc walks the filesystem *below here*, this one draws
+# on zoxide's database of everywhere you have actually been, so it reaches a
+# repo three directories up without a path. zoxide ships `zi` for this already
+# -- kept as its own function only for the eza preview, which `zi` has no way
+# to add.
 fz() {
-  local file
-  file=$(fdfind | fzf --height 40% --layout=reverse \
-    --preview '
-      if [ -d {} ]; then
-        eza --tree --level=2 --icons {}
-      else
-        case "$(file --mime-type -b {})" in
-          text/*)
-            batcat --style=numbers --color=always {}
-            ;;
-          *)
-            echo "Binary / non-text file: {}"
-            ;;
-        esac
-      fi
-    ' \
+  local dir
+  dir=$(zoxide query -l | fzf --height 40% --layout=reverse \
+    --preview 'eza --tree --level=2 --icons --color=always {}' \
     --preview-window=right:60%) || return
-  [ -n "$file" ] && zed "$file"
+
+  [ -n "$dir" ] && cd "$dir"
 }
 # Folder search + cd into it
 fdc() {
