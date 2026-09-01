@@ -33,6 +33,7 @@ overwritten. It warns if the Neovim on `PATH` is too old for LazyVim.
 | `zsh/` | `~/.zshrc` | Shell |
 | `starship/` | `~/.config/starship.toml` | Prompt |
 | `mise/` | `~/.config/mise/config.toml` | Runtime and tool versions |
+| `claude/` | `~/.claude/` *(file by file)* | Claude Code: global instructions, status line, skills |
 | `archive/` | *(not linked)* | Configs kept for reference only |
 | `CHEATSHEET.md` | — | Keyboard shortcuts for every tool here |
 
@@ -40,6 +41,17 @@ overwritten. It warns if the Neovim on `PATH` is too old for LazyVim.
 `lazy-lock.json` — which lazy.nvim writes into the config directory — lands in
 the repo and keeps plugin versions reproducible. Plugin updates will therefore
 show up as changes here; that is intended.
+
+`claude/` is the opposite case: linked file by file, never as a whole
+`~/.claude`. That directory also holds credentials, session history and
+hundreds of megabytes of per-project state, so only the four configuration
+pieces are linked out of it — `CLAUDE.md`, `statusline-command.sh`, and the
+`graphify` and `code-cleanup` skills. Skills are linked individually too, so
+local skills that are not published can sit in `~/.claude/skills` beside them.
+
+`settings.json` is deliberately not here. Claude Code writes to it at runtime,
+so linking it would land those writes — including the machine- and org-specific
+`autoMode` block — in the working tree of a public repo.
 
 ## Requirements
 
