@@ -6,9 +6,11 @@ it, so the repo stays the single source of truth and edits take effect in place.
 
 ## Shortcuts
 
-**[CHEATSHEET.md](CHEATSHEET.md)** — every binding across WezTerm, zsh, tmux and
-Neovim, basic to advanced, with the repo's own customisations marked. Keys in it
-were extracted from the live config rather than written from memory.
+**[CHEATSHEET.md](CHEATSHEET.md)** — the index, with the escapes people look up
+most and a chapter each for WezTerm, zsh, tmux and Neovim, basic to advanced,
+with the repo's own customisations marked. The chapters live in `cheatsheet/`
+and read in order, or on their own. Keys in them were extracted from the live
+config rather than written from memory.
 
 ## Install
 
@@ -35,7 +37,8 @@ overwritten. It warns if the Neovim on `PATH` is too old for LazyVim.
 | `mise/` | `~/.config/mise/config.toml` | Runtime and tool versions |
 | `claude/` | `~/.claude/` *(file by file)* | Claude Code: global instructions, status line, skills |
 | `archive/` | *(not linked)* | Configs kept for reference only |
-| `CHEATSHEET.md` | — | Keyboard shortcuts for every tool here |
+| `CHEATSHEET.md` | — | Index of the shortcut chapters |
+| `cheatsheet/` | — | A chapter per tool, keyboard shortcuts for all of them |
 
 `nvim/` is linked as a whole directory rather than file by file, so
 `lazy-lock.json` — which lazy.nvim writes into the config directory — lands in
