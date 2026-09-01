@@ -76,7 +76,7 @@ There is no title bar to drag, so **move the window with `Super`+drag**.
 | Keys | Action | Notes |
 | --- | --- | --- |
 | `Ctrl` `R` ★ | Fuzzy history search | fzf, newest first |
-| `Ctrl` `P` ★ | Find a file, open in VS Code | Runs `ff` |
+| `Ctrl` `P` ★ | Find a file, open in Neovim | Runs `ff` |
 | `Ctrl` `O` ★ | Find a directory and `cd` into it | Runs `fdc` |
 | `↑` / `↓` ★ | History filtered by what you typed | Type `git ` then `↑` |
 | `Ctrl` `A` / `Ctrl` `E` | Start / end of line | Emacs keybindings (`bindkey -e`) |
@@ -87,7 +87,7 @@ There is no title bar to drag, so **move the window with `Super`+drag**.
 
 | Command | Action |
 | --- | --- |
-| `ff` ★ | File picker with preview → opens in VS Code |
+| `ff` ★ | File picker with preview → opens in Neovim |
 | `fz` ★ | File picker with preview → opens in Zed |
 | `fdc` ★ | Directory picker → `cd` |
 | `workspace [name]` ★ | Restore a saved window layout; no argument lists them |
