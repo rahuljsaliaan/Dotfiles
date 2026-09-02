@@ -181,6 +181,23 @@ return {
     -- "classic" is also at the bottom but spans the full width, which puts it
     -- flush under the explorer and back to looking like one wide strip.
     "folke/which-key.nvim",
-    opts = { preset = "modern" },
+    opts = {
+      preset = "modern",
+
+      -- The preset caps the popup at 25 rows and 90% of the width, which was
+      -- enough before the test and debug extras added two more groups: past
+      -- that the box fills and the rest is only reachable by scrolling, which
+      -- is invisible unless you already know it is there. A fraction rather
+      -- than a row count so it keeps its proportion on any terminal -- values
+      -- below 1 are read as a share of the screen (see Layout.dim).
+      win = {
+        width = 0.95,
+        height = { min = 4, max = 0.8 },
+      },
+
+      -- Wider columns so a long description is not truncated to make room for
+      -- a column that would then be half empty.
+      layout = { width = { min = 24 } },
+    },
   },
 }
