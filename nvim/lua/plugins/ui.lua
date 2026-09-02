@@ -198,6 +198,30 @@ return {
       -- Wider columns so a long description is not truncated to make room for
       -- a column that would then be half empty.
       layout = { width = { min = 24 } },
+
+      -- which-key's trigger is `<auto>` over modes "nxso", and "x" is visual --
+      -- so pressing `v` brought up the whole visual-mode cheat sheet, 60 rows
+      -- of it, over the file you were about to select in. The selection was
+      -- live underneath the whole time, which is exactly what made it look
+      -- like `v` had opened something instead of doing its job.
+      --
+      -- Not solved by dropping "x" from the triggers: that would also take away
+      -- the popup for `Space` and `g` *within* a selection, which is where it
+      -- earns its place. A long delay in visual mode instead -- gone while you
+      -- are selecting, still there if you stop and wait for help.
+      delay = function(ctx)
+        if ctx.plugin then
+          return 0
+        end
+
+        -- v, V and CTRL-V (\22) in the mode string, which also covers select
+        -- mode's s, S and CTRL-S.
+        if vim.fn.mode():find("[vV\22sS\19]") then
+          return 1200
+        end
+
+        return 200
+      end,
     },
   },
 }
