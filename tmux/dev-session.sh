@@ -57,6 +57,11 @@ REPO_ACCENTS=("#7aa2f7" "#bb9af7" "#e0af68" "#9ece6a" "#f7768e" "#7dcfff")
 # follows a checkout instead of freezing at whatever was current when the
 # session opened. tmux re-runs it every status-interval (5s, set in tmux.conf).
 badge() {  # badge <session> <accent> <repo-path>
+  # A session option, read back by tmux.conf's border and header styles. Set
+  # here so the badge, the borders and the window frame can never disagree:
+  # every path that changes the colour goes through this function.
+  tmux set -t "$1" @accent "$2"
+
   tmux set -t "$1" status-left \
     " #[bg=${2},fg=${STATUS_DARKEST},bold]  ${1} #[bg=${STATUS_BG},fg=${STATUS_DIM}]│ #[fg=#7aa2f7] #(git -C '${3}' rev-parse --abbrev-ref HEAD 2>/dev/null) #[fg=#414868]│"
 }
