@@ -203,12 +203,15 @@ fi
 # that is a moment away from attaching, and the small panes land on tmux's
 # minimum size instead of their share. Build the window at the real size.
 if [[ -n ${TMUX:-} ]]; then
-  cols="$(tmux display -p '#{client_width}')"
-  rows="$(tmux display -p '#{client_height}')"
-else
-  cols="$(tput cols 2>/dev/null || echo 80)"
-  rows="$(tput lines 2>/dev/null || echo 24)"
+  cols="$(tmux display -p '#{client_width}' 2>/dev/null || true)"
+  rows="$(tmux display -p '#{client_height}' 2>/dev/null || true)"
 fi
+
+# Either source can come up empty -- $TMUX set but pointing at a server that is
+# gone, or tput with no terminal on stdout -- and an empty -x/-y is fatal rather
+# than merely wrong. Fall through to tput, then to tmux's own 80x24 default.
+[[ -n ${cols:-} ]] || cols="$(tput cols 2>/dev/null || echo 80)"
+[[ -n ${rows:-} ]] || rows="$(tput lines 2>/dev/null || echo 24)"
 
 # Named "dev", not "main": the status bar's window list renders "#I #W", so a
 # window called main shows up as "1 main" next to the repo badge and reads as a
