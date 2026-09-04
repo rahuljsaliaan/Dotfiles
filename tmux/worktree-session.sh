@@ -261,6 +261,42 @@ case "${1:-open}" in
     done <<< "$picks"
     ;;
 
+  switch)
+    # Bound to prefix + S in tmux.conf, and run inside a popup. Every session,
+    # not just this repo's: `tmux dev` sessions are things to switch to as
+    # well, and with four worktrees open the list is long enough that typing a
+    # fragment of a branch beats reading down it.
+    #
+    # tmux's own prefix + s (choose-tree) stays exactly where it was. This is
+    # the fuzzy one, and it carries the branch and a dirty mark, which
+    # choose-tree has no way to show.
+    current="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+
+    # Session paths are fetched one at a time rather than in a single format:
+    # tmux emits "\t" in a format literally rather than as a tab, so there is
+    # no separator that is safe against a path, and the -f filter is the same
+    # trick dev-session.sh uses to read a path back reliably.
+    target="$(
+      tmux list-sessions -F '#{session_name}' 2>/dev/null | while read -r name; do
+        path="$(tmux list-sessions -f "#{==:#{session_name},$name}" \
+          -F '#{session_path}' 2>/dev/null || true)"
+        branch="$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        [[ -n $branch ]] || branch='-'
+        dirty=''
+        [[ -n "$(git -C "$path" status --porcelain 2>/dev/null | head -1)" ]] \
+          && dirty=' ✗'
+        mark=' '
+        [[ $name == "$current" ]] && mark='*'
+        printf '%s\t%s %-30s %s%s\n' "$name" "$mark" "$name" "$branch" "$dirty"
+      done \
+        | fzf --delimiter='\t' --with-nth=2 \
+              --height 100% --layout=reverse --prompt='session> ' \
+        | cut -f1
+    )"
+
+    [[ -n $target ]] && tmux switch-client -t "=$target"
+    ;;
+
   open|"")
     available="$(worktrees)"
     [[ -n $available ]] \
