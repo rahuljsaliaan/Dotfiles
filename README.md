@@ -47,9 +47,9 @@ show up as changes here; that is intended.
 
 `claude/` is the opposite case: linked file by file, never as a whole
 `~/.claude`. That directory also holds credentials, session history and
-hundreds of megabytes of per-project state, so only the four configuration
+hundreds of megabytes of per-project state, so only the five configuration
 pieces are linked out of it — `CLAUDE.md`, `statusline-command.sh`, and the
-`graphify` and `code-cleanup` skills. Skills are linked individually too, so
+`graphify`, `code-cleanup` and `worktree-merge` skills. Skills are linked individually too, so
 local skills that are not published can sit in `~/.claude/skills` beside them.
 
 `settings.json` is deliberately not here. Claude Code writes to it at runtime,
