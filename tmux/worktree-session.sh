@@ -11,6 +11,7 @@
 #   └──────────────────────────────────┴────────────────────────┘
 #
 #   wt                  # pick worktrees to open, one session each
+#   wt <path>           # the same, for the repo or worktree folder at <path>
 #   wt new <branch>...  # branch off origin/HEAD into new worktrees, and open them
 #   wt setup            # re-run the setup hook on a worktree
 #   wt rm               # pick worktrees to remove
@@ -255,14 +256,44 @@ connect() {  # connect <session>
 }
 
 # --------------------------------------------------------------- arguments ---
-# The MAIN checkout, even when this is run from inside a worktree -- which is
-# the normal case once you are working in one and want another. --show-toplevel
-# would answer with the worktree itself, and the pool would then be nested
-# under a branch name instead of the repo's. --git-common-dir points at the one
-# .git every worktree shares, and its parent is the checkout that owns it.
-REPO="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
-  || die 'not inside a git repository'
-REPO="$(dirname "$REPO")"
+# Find the MAIN checkout from a directory, which may be any of three things.
+#
+# The checkout itself, or a worktree of it: --git-common-dir points at the one
+# .git every worktree of a repo shares, and its parent is the checkout that
+# owns it. --show-toplevel would answer with the worktree instead, which would
+# nest a new pool under a branch name rather than the repo's.
+#
+# Or the pool folder holding a project's worktrees -- ~/Worktrees/<repo>. That
+# is not a repository itself, but it is the obvious place to run this from once
+# the worktrees exist, so fall back to asking one of them.
+resolve_repo() {  # resolve_repo <dir> -> echoes the main checkout
+  local dir="$1" common child
+
+  if common="$(git -C "$dir" rev-parse --path-format=absolute \
+      --git-common-dir 2>/dev/null)"; then
+    dirname "$common"
+    return 0
+  fi
+
+  for child in "$dir"/*/; do
+    [[ -d $child ]] || continue
+    if common="$(git -C "$child" rev-parse --path-format=absolute \
+        --git-common-dir 2>/dev/null)"; then
+      dirname "$common"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Resolved only for the subcommands that act on a repo. `switch` lists tmux
+# sessions and nothing else, and it is bound to prefix + S -- which fires from
+# whatever pane you happen to be in, very often not a repository at all.
+require_repo() {
+  REPO="$(resolve_repo "$TARGET")" || die \
+    "no repository at $TARGET -- run this in a checkout, a worktree, or the folder holding them, or pass that path"
+}
 
 # Shared by `new` and the picker: both end up opening sessions, and the cost of
 # too many is the same either way.
@@ -275,9 +306,26 @@ confirm_count() {  # confirm_count <n>
   [[ $reply == [yY] ]]
 }
 
-case "${1:-open}" in
+# A bare path argument opens the picker for that repo, the way `tmux dev [path]`
+# takes one -- so this works pointed at a worktree folder from anywhere, not
+# only from inside the project.
+TARGET="."
+CMD="${1:-open}"
+case "$CMD" in
+  new|setup|rm|switch|open) ;;
+  "") CMD="open" ;;
+  *)
+    [[ -d $CMD ]] || die \
+      "unknown command: $CMD (try: wt, wt <path>, wt new <branch>..., wt setup, wt rm)"
+    TARGET="$CMD"
+    CMD="open"
+    ;;
+esac
+
+case "$CMD" in
   new)
     shift
+    require_repo
     (( $# > 0 )) || die 'usage: wt new <branch> [branch...]'
     confirm_count "$#" || exit 1
 
@@ -319,6 +367,7 @@ case "${1:-open}" in
     ;;
 
   setup)
+    require_repo
     # For a worktree whose setup failed, or one made by hand with `git worktree
     # add`, which never went through `wt new`.
     picks="$(worktrees | pick 'setup>')" || exit 0
@@ -331,6 +380,7 @@ case "${1:-open}" in
     ;;
 
   rm)
+    require_repo
     picks="$(worktrees | pick 'remove>')" || exit 0
     [[ -n $picks ]] || exit 0
 
@@ -386,7 +436,8 @@ case "${1:-open}" in
     [[ -n $target ]] && tmux switch-client -t "=$target"
     ;;
 
-  open|"")
+  open)
+    require_repo
     available="$(worktrees)"
     [[ -n $available ]] \
       || die "no worktrees for $(basename "$REPO") -- make one with: wt new <branch>"
@@ -412,7 +463,4 @@ case "${1:-open}" in
     connect "$first"
     ;;
 
-  *)
-    die "unknown command: $1 (try: wt, wt new <branch>..., wt setup, wt rm)"
-    ;;
 esac
