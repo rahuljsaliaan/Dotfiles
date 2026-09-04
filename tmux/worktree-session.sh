@@ -12,6 +12,7 @@
 #
 #   wt                  # pick worktrees to open, one session each
 #   wt new <branch>     # branch off origin/HEAD into a new worktree, and open it
+#   wt setup            # re-run the setup hook on a worktree
 #   wt rm               # pick worktrees to remove
 #
 # The mirror image of `tmux dev`, and deliberately so. There the editor leads and
@@ -25,6 +26,7 @@
 #
 # Overrides:
 #   DEV_WORKTREE_ROOT=~/wt      where `new` puts worktrees (default: ~/Worktrees)
+#   DEV_WORKTREE_SETUP='npm ci' one-off setup, instead of the repo's hook
 #   DEV_EDITOR_CMD=helix        command for the editor pane (default: nvim .)
 #   DEV_HARNESS_CMD=            empty leaves the harness pane at a plain shell
 #   DEV_HARNESS_CMD='claude -c' resume instead of starting fresh
@@ -95,6 +97,47 @@ slug() {
   s="${s//./_}"
   s="${s//:/_}"
   printf '%s' "$s"
+}
+
+# ------------------------------------------------------------------- setup ---
+# A worktree is a clean checkout: no node_modules, no .venv, and nothing that
+# is gitignored -- so the .env an app needs and the dependencies an agent needs
+# to build or test are all absent. An agent opened on a bare checkout fails in
+# ways that look like its own mistake, so this is where a project says how to
+# get from a checkout to a working tree.
+#
+# A script in the repo root rather than a config format: what it has to do is a
+# shell command, every project's is different, and committing it means everyone
+# -- and every agent -- sets a worktree up the same way.
+#
+# The hook runs with the worktree as its working directory, and is handed
+# $WORKTREE_MAIN (the main checkout) because gitignored files can only be
+# copied from there -- by definition they are not in the branch.
+SETUP_HOOK=".worktree-setup"
+
+run_setup() {  # run_setup <worktree-path> <branch>
+  local cmd
+  if [[ -n ${DEV_WORKTREE_SETUP:-} ]]; then
+    cmd="$DEV_WORKTREE_SETUP"
+  elif [[ -x "$REPO/$SETUP_HOOK" ]]; then
+    cmd="$REPO/$SETUP_HOOK"
+  elif [[ -f "$REPO/$SETUP_HOOK" ]]; then
+    printf 'wt: %s exists but is not executable -- skipped\n' "$SETUP_HOOK" >&2
+    return 0
+  else
+    return 0
+  fi
+
+  printf 'wt: running setup in %s\n' "$1"
+
+  # Not fatal. The worktree has already been created, and stranding it half
+  # made would be worse than handing over one that needs a manual install --
+  # but say so loudly, because the agent about to open on it will hit the same
+  # failure in a much less legible form.
+  if ! (cd "$1" && WORKTREE_MAIN="$REPO" WORKTREE_BRANCH="$2" sh -c "$cmd"); then
+    printf 'wt: setup failed -- %s exists but is not ready. Fix and: wt setup\n' \
+      "$1" >&2
+  fi
 }
 
 # --------------------------------------------------------------- discovery ---
@@ -238,7 +281,20 @@ case "${1:-open}" in
       git -C "$REPO" worktree add -b "$branch" "$dir" "$base"
     fi
 
+    run_setup "$dir" "$branch"
     connect "$(open_session "$branch" "$dir")"
+    ;;
+
+  setup)
+    # For a worktree whose setup failed, or one made by hand with `git worktree
+    # add`, which never went through `wt new`.
+    picks="$(worktrees | pick 'setup>')" || exit 0
+    [[ -n $picks ]] || exit 0
+
+    while IFS=$'\t' read -r branch path; do
+      [[ -n $path ]] || continue
+      run_setup "$path" "$branch"
+    done <<< "$picks"
     ;;
 
   rm)
@@ -331,6 +387,6 @@ case "${1:-open}" in
     ;;
 
   *)
-    die "unknown command: $1 (try: wt, wt new <branch>, wt rm)"
+    die "unknown command: $1 (try: wt, wt new <branch>, wt setup, wt rm)"
     ;;
 esac

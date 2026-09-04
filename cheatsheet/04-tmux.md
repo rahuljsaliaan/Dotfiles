@@ -115,6 +115,7 @@ editor comes along for review.
 | --- | --- |
 | `tmux wt` | Pick worktrees; one session opens on each |
 | `tmux wt new feat/billing` | Branch off `origin/HEAD` into a new worktree, and open it |
+| `tmux wt setup` | Re-run the setup hook on a picked worktree |
 | `tmux wt rm` | Pick worktrees to remove |
 
 The picker is fzf, multi-select with `Tab`, and its preview shows what each
@@ -137,6 +138,31 @@ a time, running the tests after each.
 New worktrees land in `~/Worktrees/<repo>/<branch>`, or under
 `DEV_WORKTREE_ROOT` if it is set. `DEV_EDITOR_CMD` and `DEV_HARNESS_CMD` work
 exactly as they do for `tmux dev`.
+
+### Making a worktree usable ★
+
+A worktree is a **clean checkout** — no `node_modules`, no `.venv`, and nothing
+gitignored, so the `.env` the app needs is absent too. An agent opened on one
+fails in ways that look like its own mistake.
+
+Put an executable `.worktree-setup` in the repo root and `wt new` runs it once,
+in the new worktree, after creating it:
+
+```sh
+#!/bin/sh
+cp "$WORKTREE_MAIN/.env" .
+npm ci
+```
+
+`$WORKTREE_MAIN` is the main checkout — the only place gitignored files can be
+copied from, since by definition they are not in the branch. `$WORKTREE_BRANCH`
+is the branch name. Commit the hook and everyone, agents included, sets a
+worktree up the same way.
+
+A failing hook is reported but never fatal: the worktree still exists, and
+`wt setup` re-runs the hook on one you pick — for a setup that failed, or for a
+worktree made by hand with `git worktree add` that never went through `wt new`.
+`DEV_WORKTREE_SETUP='npm ci'` overrides the hook for a one-off.
 
 ### Windows and sessions
 
