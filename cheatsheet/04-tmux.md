@@ -146,7 +146,14 @@ exactly as they do for `tmux dev`.
 | `Ctrl` `b` `,` | Rename window |
 | `Ctrl` `b` `d` | Detach (leaves everything running) |
 | `Ctrl` `b` `[` | Copy mode — scroll and select |
+| `Ctrl` `b` `s` | Session tree |
+| `Ctrl` `b` `S` ★ | Fuzzy session picker, with branch and dirty mark |
 | `tmux a` | Re-attach to the last session |
+
+Lowercase `s` is tmux's own session tree and is untouched. Capital `S` opens a
+popup listing every session with the branch its directory is on and a `✗` when
+that tree is dirty — the thing the tree cannot show, and what you want once
+`tmux wt` has four sessions open that differ only by branch.
 
 Changing that colour from inside the session:
 
