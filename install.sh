@@ -37,6 +37,7 @@ LINKS=(
   # can sit beside these without the link hiding them.
   "claude/skills/graphify:$HOME/.claude/skills/graphify"
   "claude/skills/code-cleanup:$HOME/.claude/skills/code-cleanup"
+  "claude/skills/worktree-merge:$HOME/.claude/skills/worktree-merge"
 )
 
 link() {

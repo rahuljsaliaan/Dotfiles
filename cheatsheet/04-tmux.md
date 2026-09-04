@@ -130,7 +130,9 @@ reading. A branch with a slash becomes a dash: `feat/billing` opens as
 
 `wt rm` never passes `--force`, so git refuses any worktree still holding
 uncommitted or unmerged work ★ and names the one it kept. Removing a worktree
-never removes its branch, which is what leaves the work mergeable afterwards.
+never removes its branch, which is what leaves the work mergeable afterwards —
+`/worktree-merge` in Claude Code folds those branches back into one, a branch at
+a time, running the tests after each.
 
 New worktrees land in `~/Worktrees/<repo>/<branch>`, or under
 `DEV_WORKTREE_ROOT` if it is set. `DEV_EDITOR_CMD` and `DEV_HARNESS_CMD` work
