@@ -11,7 +11,7 @@
 #   └──────────────────────────────────┴────────────────────────┘
 #
 #   wt                  # pick worktrees to open, one session each
-#   wt new <branch>     # branch off origin/HEAD into a new worktree, and open it
+#   wt new <branch>...  # branch off origin/HEAD into new worktrees, and open them
 #   wt setup            # re-run the setup hook on a worktree
 #   wt rm               # pick worktrees to remove
 #
@@ -255,34 +255,67 @@ connect() {  # connect <session>
 }
 
 # --------------------------------------------------------------- arguments ---
-REPO="$(git rev-parse --show-toplevel 2>/dev/null)" \
+# The MAIN checkout, even when this is run from inside a worktree -- which is
+# the normal case once you are working in one and want another. --show-toplevel
+# would answer with the worktree itself, and the pool would then be nested
+# under a branch name instead of the repo's. --git-common-dir points at the one
+# .git every worktree shares, and its parent is the checkout that owns it.
+REPO="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
   || die 'not inside a git repository'
+REPO="$(dirname "$REPO")"
+
+# Shared by `new` and the picker: both end up opening sessions, and the cost of
+# too many is the same either way.
+confirm_count() {  # confirm_count <n>
+  (( $1 > MAX_SESSIONS )) || return 0
+  printf 'wt: %d selected. Past %d agents at once, reviewing what they did\n' \
+    "$1" "$MAX_SESSIONS" >&2
+  printf 'wt: turns into waving it through.\n' >&2
+  read -r -p "wt: open all $1 anyway? [y/N] " reply
+  [[ $reply == [yY] ]]
+}
 
 case "${1:-open}" in
   new)
-    branch="${2:-}"
-    [[ -n $branch ]] || die 'usage: wt new <branch>'
+    shift
+    (( $# > 0 )) || die 'usage: wt new <branch> [branch...]'
+    confirm_count "$#" || exit 1
 
     pool="$WORKTREE_ROOT/$(basename "$REPO")"
-    dir="$pool/$(slug "$branch")"
-    [[ -e $dir ]] && die "worktree directory already exists: $dir"
     mkdir -p "$pool"
 
     # Branch off the remote's default rather than whatever is checked out here:
     # a worktree started from a half-finished local branch inherits work the
     # agent never asked for, and every one of these is merged back separately.
+    # Fetched once for the whole batch rather than per branch.
     git -C "$REPO" fetch --quiet origin 2>/dev/null || true
     base="$(git -C "$REPO" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
     [[ -n $base ]] || base="$(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
 
-    if git -C "$REPO" show-ref --quiet --verify "refs/heads/$branch"; then
-      git -C "$REPO" worktree add "$dir" "$branch"
-    else
-      git -C "$REPO" worktree add -b "$branch" "$dir" "$base"
-    fi
+    first=""
+    for branch in "$@"; do
+      dir="$pool/$(slug "$branch")"
+      if [[ -e $dir ]]; then
+        printf 'wt: skipped %s -- %s already exists\n' "$branch" "$dir" >&2
+        continue
+      fi
 
-    run_setup "$dir" "$branch"
-    connect "$(open_session "$branch" "$dir")"
+      # An existing branch is checked out as-is; only a new one is cut from the
+      # base. git refuses either way if the branch is already in a worktree.
+      if git -C "$REPO" show-ref --quiet --verify "refs/heads/$branch"; then
+        git -C "$REPO" worktree add "$dir" "$branch" || continue
+      else
+        git -C "$REPO" worktree add -b "$branch" "$dir" "$base" || continue
+      fi
+
+      run_setup "$dir" "$branch"
+      session="$(open_session "$branch" "$dir")"
+      printf 'wt: %s\n' "$session"
+      [[ -n $first ]] || first="$session"
+    done
+
+    [[ -n $first ]] || die 'nothing created'
+    connect "$first"
     ;;
 
   setup)
@@ -361,14 +394,7 @@ case "${1:-open}" in
     picks="$(printf '%s\n' "$available" | pick 'worktree>')" || exit 0
     [[ -n $picks ]] || exit 0
 
-    count="$(printf '%s\n' "$picks" | grep -c .)"
-    if (( count > MAX_SESSIONS )); then
-      printf 'wt: %d selected. Past %d agents at once, reviewing what they did\n' \
-        "$count" "$MAX_SESSIONS" >&2
-      printf 'wt: turns into waving it through.\n' >&2
-      read -r -p "wt: open all $count anyway? [y/N] " reply
-      [[ $reply == [yY] ]] || exit 1
-    fi
+    confirm_count "$(printf '%s\n' "$picks" | grep -c .)" || exit 1
 
     first=""
     while IFS=$'\t' read -r branch path; do
@@ -387,6 +413,6 @@ case "${1:-open}" in
     ;;
 
   *)
-    die "unknown command: $1 (try: wt, wt new <branch>, wt setup, wt rm)"
+    die "unknown command: $1 (try: wt, wt new <branch>..., wt setup, wt rm)"
     ;;
 esac
