@@ -1,6 +1,7 @@
 # Multiplexer — tmux
 
-Panes and windows, and the per-repo session `tmux dev` builds.
+Panes and windows, the per-repo session `tmux dev` builds, and the one per
+worktree behind `tmux wt`.
 
 > **★ marks a binding custom to this repo.** Everything unmarked is an
 > upstream default. Neovim's leader key is `Space`, written out rather than
@@ -89,6 +90,51 @@ Overrides, if a repo needs something else:
 | `DEV_HARNESS_CMD=` | Leave the harness panes at a plain shell |
 | `DEV_HARNESS_CMD='claude -c'` | Resume instead of starting fresh |
 | `DEV_ACCENT='#f7768e'` | Pick the repo's colour instead of deriving it |
+
+### A session per worktree ★
+
+`tmux wt` is the same idea for parallel work: pick git worktrees, and get one
+session on each, with an agent running in every one.
+
+```
+┌──────────────────────────────────┬────────────────────────┐
+│ harness (claude)                 │ editor  (nvim)         │
+│                                  │                        │
+│                                  │                        │
+│                                  ├────────────────────────┤
+│                                  │ shell                  │
+└──────────────────────────────────┴────────────────────────┘
+```
+
+The layout is `tmux dev` inverted, deliberately. There the editor leads and the
+harnesses sit in a narrow column, because you are the one typing. Here the
+agent has the work and you are reading it, so the harness takes 60% and the
+editor comes along for review.
+
+| Command | Result |
+| --- | --- |
+| `tmux wt` | Pick worktrees; one session opens on each |
+| `tmux wt new feat/billing` | Branch off `origin/HEAD` into a new worktree, and open it |
+| `tmux wt rm` | Pick worktrees to remove |
+
+The picker is fzf, multi-select with `Tab`, and its preview shows what each
+worktree is carrying — commits ahead of `origin/HEAD` first, then anything
+uncommitted. Pick more than **four** and it asks before going ahead ★: past
+four agents at once, reviewing what they did turns into waving it through.
+
+Sessions are named `<repo>-<branch>` ★, so they never collide with the plain
+repo name `tmux dev` claims, and each takes **its own colour** from the same
+palette — four running at once are told apart at a glance rather than by
+reading. A branch with a slash becomes a dash: `feat/billing` opens as
+`myrepo-feat-billing`, in a directory called `feat-billing`.
+
+`wt rm` never passes `--force`, so git refuses any worktree still holding
+uncommitted or unmerged work ★ and names the one it kept. Removing a worktree
+never removes its branch, which is what leaves the work mergeable afterwards.
+
+New worktrees land in `~/Worktrees/<repo>/<branch>`, or under
+`DEV_WORKTREE_ROOT` if it is set. `DEV_EDITOR_CMD` and `DEV_HARNESS_CMD` work
+exactly as they do for `tmux dev`.
 
 ### Windows and sessions
 

@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+#
+# Pick git worktrees, and open a tmux session on each one:
+#
+#   ┌──────────────────────────────────┬────────────────────────┐
+#   │ harness (claude)                 │ editor  (nvim)         │
+#   │                                  │                        │
+#   │                                  │                        │
+#   │                                  ├────────────────────────┤
+#   │                                  │ shell                  │
+#   └──────────────────────────────────┴────────────────────────┘
+#
+#   wt                  # pick worktrees to open, one session each
+#   wt new <branch>     # branch off origin/HEAD into a new worktree, and open it
+#   wt rm               # pick worktrees to remove
+#
+# The mirror image of `tmux dev`, and deliberately so. There the editor leads and
+# two harnesses sit in a narrow column, because you are the one typing. Here one
+# agent has the work and you are reading it, so the harness takes the room and
+# the editor is along for review.
+#
+# One session per worktree, named <repo>-<branch>, each on its own colour -- so
+# four agents running at once are told apart at a glance rather than by reading
+# the branch out of the status bar.
+#
+# Overrides:
+#   DEV_WORKTREE_ROOT=~/wt      where `new` puts worktrees (default: ~/Worktrees)
+#   DEV_EDITOR_CMD=helix        command for the editor pane (default: nvim .)
+#   DEV_HARNESS_CMD=            empty leaves the harness pane at a plain shell
+#   DEV_HARNESS_CMD='claude -c' resume instead of starting fresh
+
+set -euo pipefail
+
+# ---------------------------------------------------------------- geometry ---
+# Per cent of the window given to the editor column on the right. The harness
+# keeps the rest, which is the whole point of this layout.
+EDITOR_COLUMN_WIDTH=40
+# Per cent of the right column given to the shell beneath the editor.
+SHELL_ROW_HEIGHT=23
+
+# Past this many at once you stop reviewing what the agents did and start
+# waving it through, which costs more than the parallelism buys. Not a hard
+# limit -- it asks rather than refuses.
+MAX_SESSIONS=4
+
+# ----------------------------------------------------------------- colours ---
+# Tokyo Night, the same values wezterm.lua, tmux.conf and dev-session.sh use.
+STATUS_BG="#222436"
+STATUS_DIM="#414868"
+STATUS_DARKEST="#1a1b26"
+
+REPO_ACCENTS=("#7aa2f7" "#bb9af7" "#e0af68" "#9ece6a" "#f7768e" "#7dcfff")
+
+WORKTREE_ROOT="${DEV_WORKTREE_ROOT:-$HOME/Worktrees}"
+
+EDITOR_CMD="${DEV_EDITOR_CMD:-nvim .}"
+# Assigned with :- rather than :=, so DEV_HARNESS_CMD= (set but empty) is
+# honoured as "no harness" instead of falling back to the default.
+HARNESS_CMD="${DEV_HARNESS_CMD-claude}"
+
+die() { printf 'wt: %s\n' "$1" >&2; exit 1; }
+
+# ------------------------------------------------------------------- badge ---
+# Kept byte-identical to dev-session.sh's, so a worktree session and a repo
+# session are the same object on screen. The branch is a #() shell call rather
+# than a value baked in at creation, so it follows a checkout instead of
+# freezing at whatever was current when the session opened.
+badge() {  # badge <session> <accent> <worktree-path>
+  tmux set -t "$1" @accent "$2"
+
+  tmux set -t "$1" status-left \
+    " #[bg=${2},fg=${STATUS_DARKEST},bold]  ${1} #[bg=${STATUS_BG},fg=${STATUS_DIM}]│ #[fg=#7aa2f7] #(git -C '${3}' rev-parse --abbrev-ref HEAD 2>/dev/null) #[fg=#414868]│"
+}
+
+# See dev-session.sh for why this is base64 in an OSC 1337, and why it needs the
+# DCS passthrough wrapper when there is a tmux between here and wezterm.
+frame_accent() {
+  local b64
+  b64="$(printf '%s' "$1" | base64 | tr -d '\n')"
+
+  if [[ -n ${TMUX:-} ]]; then
+    printf '\033Ptmux;\033\033]1337;SetUserVar=tmux_dev_accent=%s\007\033\\' "$b64"
+  else
+    printf '\033]1337;SetUserVar=tmux_dev_accent=%s\007' "$b64"
+  fi
+}
+
+# ------------------------------------------------------------------- names ---
+# tmux reads "." and ":" in a target as address separators, so they cannot
+# survive into a session name. "/" is legal in one, but a branch like
+# feat/billing would then read as a path in the status bar -- and the worktree
+# directory flattens it the same way, so the two stay in step.
+slug() {
+  local s="${1//\//-}"   # feat/billing -> feat-billing
+  s="${s//./_}"
+  s="${s//:/_}"
+  printf '%s' "$s"
+}
+
+# --------------------------------------------------------------- discovery ---
+# git is the source of truth rather than a directory listing: it knows every
+# worktree wherever it lives, and it knows the ones whose directory has been
+# deleted out from under it, which a listing would silently miss.
+#
+# --porcelain emits a stanza per worktree, blank-line separated. The main
+# checkout is the first stanza and is skipped -- it is not a worktree you would
+# hand to an agent -- as is anything detached, which has no branch to merge.
+worktrees() {  # -> "<branch>\t<path>" per line
+  git -C "$REPO" worktree list --porcelain | awk '
+    /^worktree / { path = substr($0, 10); if (main == "") main = path; next }
+    /^branch /   { branch = substr($0, 8); sub(/^refs\/heads\//, "", branch)
+                   if (path != main) print branch "\t" path }
+  '
+}
+
+# What each worktree is carrying, for the picker's preview pane. Commits first,
+# because that is what you are choosing between; uncommitted state second,
+# because it is the thing that would block a merge later.
+preview_cmd() {
+  cat <<'PREVIEW'
+    p={2}
+    printf '\033[1m%s\033[0m\n\n' "$p"
+    git -C "$p" --no-pager log --oneline --decorate -15 origin/HEAD..HEAD 2>/dev/null \
+      || git -C "$p" --no-pager log --oneline -15
+    printf '\n\033[1m── working tree ──\033[0m\n'
+    git -C "$p" status --short 2>/dev/null | head -20 || true
+PREVIEW
+}
+
+pick() {  # pick <prompt> ; reads worktrees on stdin, writes picks on stdout
+  fzf --multi \
+    --height 40% --layout=reverse \
+    --delimiter='\t' --with-nth=1 \
+    --prompt="$1 " \
+    --preview "$(preview_cmd)" \
+    --preview-window=right:60%
+}
+
+# ----------------------------------------------------------------- session ---
+# Build the session detached and return. Opening several at once means no single
+# one can be attached to from in here, so attaching is the caller's last act.
+open_session() {  # open_session <branch> <path> -> echoes the session name
+  local branch="$1" path="$2" session accent checksum
+  local harness editor shell_pane cols rows
+
+  session="$(slug "$(basename "$REPO")")-$(slug "$branch")"
+
+  if tmux has-session -t "=$session" 2>/dev/null; then
+    printf '%s' "$session"
+    return 0
+  fi
+
+  # Hashing the session name rather than the branch alone: it already carries
+  # both repo and branch, so two worktrees of one repo land on different
+  # colours, and the same worktree keeps its colour across machines.
+  checksum="$(printf '%s' "$session" | cksum | cut -d' ' -f1)"
+  accent="${REPO_ACCENTS[$((checksum % ${#REPO_ACCENTS[@]}))]}"
+
+  # A detached session is 80x24 unless told otherwise and the splits below are
+  # percentages, so without this they divide up 80x24 rather than the terminal
+  # about to attach, and the small panes land on tmux's minimum size.
+  if [[ -n ${TMUX:-} ]]; then
+    cols="$(tmux display -p '#{client_width}' 2>/dev/null || true)"
+    rows="$(tmux display -p '#{client_height}' 2>/dev/null || true)"
+  fi
+  # Tested against 0 and not merely emptiness: #{client_width} resolves to 0,
+  # not to nothing, when the session has no client attached yet -- and -x 0 is
+  # silently clamped to tmux's 80x24, which is exactly what this avoids.
+  (( ${cols:-0} > 0 )) || cols="$(tput cols 2>/dev/null || echo 80)"
+  (( ${rows:-0} > 0 )) || rows="$(tput lines 2>/dev/null || echo 24)"
+
+  # Named for the branch, not "dev": with several of these open the window list
+  # is the only place the branch appears while you are switching between them.
+  tmux new-session -d -s "$session" -c "$path" -n "$(slug "$branch")" \
+    -x "$cols" -y "$rows"
+
+  # Panes by id, never index -- every split renumbers the indices around it.
+  harness="$(tmux list-panes -t "$session:" -F '#{pane_id}' | head -1)"
+  editor="$(tmux split-window -h -l "${EDITOR_COLUMN_WIDTH}%" \
+    -t "$harness" -c "$path" -P -F '#{pane_id}')"
+  shell_pane="$(tmux split-window -v -l "${SHELL_ROW_HEIGHT}%" \
+    -t "$editor" -c "$path" -P -F '#{pane_id}')"
+
+  role() { tmux select-pane -t "$1" -T "$2"; tmux set -p -t "$1" @role "$2"; }
+  role "$harness"    "harness"
+  role "$editor"     "editor"
+  role "$shell_pane" "shell"
+
+  tmux send-keys -t "$editor" "$EDITOR_CMD" C-m
+  [[ -n $HARNESS_CMD ]] && tmux send-keys -t "$harness" "$HARNESS_CMD" C-m
+
+  badge "$session" "$accent" "$path"
+  # Focus the harness, not the editor: the agent is what you came to watch.
+  tmux select-pane -t "$harness"
+
+  printf '%s' "$session"
+}
+
+# Attach last, once every session exists, so the ones after the first are not
+# built behind an already-attached client.
+connect() {  # connect <session>
+  local accent
+  accent="$(tmux show -t "$1" -v @accent 2>/dev/null || true)"
+  frame_accent "$accent"
+
+  if [[ -n ${TMUX:-} ]]; then
+    exec tmux switch-client -t "=$1"
+  fi
+
+  tmux attach-session -t "=$1" || true
+  frame_accent ""
+}
+
+# --------------------------------------------------------------- arguments ---
+REPO="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die 'not inside a git repository'
+
+case "${1:-open}" in
+  new)
+    branch="${2:-}"
+    [[ -n $branch ]] || die 'usage: wt new <branch>'
+
+    pool="$WORKTREE_ROOT/$(basename "$REPO")"
+    dir="$pool/$(slug "$branch")"
+    [[ -e $dir ]] && die "worktree directory already exists: $dir"
+    mkdir -p "$pool"
+
+    # Branch off the remote's default rather than whatever is checked out here:
+    # a worktree started from a half-finished local branch inherits work the
+    # agent never asked for, and every one of these is merged back separately.
+    git -C "$REPO" fetch --quiet origin 2>/dev/null || true
+    base="$(git -C "$REPO" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+    [[ -n $base ]] || base="$(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
+
+    if git -C "$REPO" show-ref --quiet --verify "refs/heads/$branch"; then
+      git -C "$REPO" worktree add "$dir" "$branch"
+    else
+      git -C "$REPO" worktree add -b "$branch" "$dir" "$base"
+    fi
+
+    connect "$(open_session "$branch" "$dir")"
+    ;;
+
+  rm)
+    picks="$(worktrees | pick 'remove>')" || exit 0
+    [[ -n $picks ]] || exit 0
+
+    while IFS=$'\t' read -r branch path; do
+      [[ -n $path ]] || continue
+      session="$(slug "$(basename "$REPO")")-$(slug "$branch")"
+      tmux kill-session -t "=$session" 2>/dev/null || true
+
+      # No --force: git refuses a worktree with uncommitted changes or its own
+      # unmerged commits, which is exactly the check wanted here. Reported and
+      # skipped rather than fatal, so one dirty tree does not strand the rest.
+      if git -C "$REPO" worktree remove "$path" 2>/dev/null; then
+        printf 'wt: removed %s\n' "$branch"
+      else
+        printf 'wt: kept %s -- uncommitted or unmerged work\n' "$branch" >&2
+      fi
+    done <<< "$picks"
+    ;;
+
+  open|"")
+    available="$(worktrees)"
+    [[ -n $available ]] \
+      || die "no worktrees for $(basename "$REPO") -- make one with: wt new <branch>"
+
+    picks="$(printf '%s\n' "$available" | pick 'worktree>')" || exit 0
+    [[ -n $picks ]] || exit 0
+
+    count="$(printf '%s\n' "$picks" | grep -c .)"
+    if (( count > MAX_SESSIONS )); then
+      printf 'wt: %d selected. Past %d agents at once, reviewing what they did\n' \
+        "$count" "$MAX_SESSIONS" >&2
+      printf 'wt: turns into waving it through.\n' >&2
+      read -r -p "wt: open all $count anyway? [y/N] " reply
+      [[ $reply == [yY] ]] || exit 1
+    fi
+
+    first=""
+    while IFS=$'\t' read -r branch path; do
+      [[ -n $path ]] || continue
+      if [[ ! -d $path ]]; then
+        printf 'wt: skipped %s -- directory is gone\n' "$branch" >&2
+        continue
+      fi
+      session="$(open_session "$branch" "$path")"
+      printf 'wt: %s\n' "$session"
+      [[ -n $first ]] || first="$session"
+    done <<< "$picks"
+
+    [[ -n $first ]] || die 'nothing opened'
+    connect "$first"
+    ;;
+
+  *)
+    die "unknown command: $1 (try: wt, wt new <branch>, wt rm)"
+    ;;
+esac
