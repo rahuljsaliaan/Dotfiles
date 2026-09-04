@@ -114,15 +114,19 @@ editor comes along for review.
 | Command | Result |
 | --- | --- |
 | `tmux wt` | Pick worktrees; one session opens on each |
+| `tmux wt ~/Worktrees/myrepo` | The same, for the repo at that path |
 | `tmux wt new feat/billing` | Branch off `origin/HEAD` into a new worktree, and open it |
 | `tmux wt new a b c` | The same for several at once |
 | `tmux wt setup` | Re-run the setup hook on a picked worktree |
 | `tmux wt rm` | Pick worktrees to remove |
 
-Every one of these works from **inside a worktree** as well as from the main
-checkout, so a fifth task that occurs to you while three agents are already
-running is one command away — new worktrees always land beside their siblings
-under the repo's name, never nested under the branch you happened to be in.
+Run it from any of three places: the main checkout, **inside a worktree**, or
+the **folder holding a project's worktrees** — that last one is not a git
+repository itself, so it asks one of the worktrees inside it. Or point it at
+any of them by path from anywhere at all. So a fifth task that occurs to you
+while three agents are already running is one command away, and new worktrees
+always land beside their siblings under the repo's name rather than nested
+under whichever branch you happened to be in.
 
 The picker is fzf, multi-select with `Tab`, and its preview shows what each
 worktree is carrying — commits ahead of `origin/HEAD` first, then anything
