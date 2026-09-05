@@ -10,7 +10,7 @@
 #   └── chore-deps/
 #
 #   wt init <repo>      adopt this folder as <repo>'s worktree folder
-#   wt                  pick which worktrees to open -- one Claude session each
+#   wt                  pick which worktrees to open -- one Claude pane each
 #   wt new <branch>...  add worktrees here, and open them
 #   wt setup            re-run the setup hook on worktrees you pick
 #   wt rm               remove worktrees you pick
@@ -20,11 +20,17 @@
 # the current directory looking for .wt.conf, so each works from the folder
 # itself and from inside any worktree in it.
 #
-# A session is a single pane running the harness -- `tmux dev` is the layout for
-# working by hand, this one is for watching an agent. Split it yourself (Alt =,
-# Alt -) when you want an editor beside it. Sessions are named <repo>-<branch>
-# and coloured by hashing that name, so several open at once are told apart by
-# colour rather than by reading.
+# The worktrees you pick open as panes in one window, side by side, each running
+# the harness in its own checkout:
+#
+#   ┌──────────────────────┬──────────────────────┐
+#   │ claude               │ claude               │
+#   │ fix-login            │ feat-billing         │
+#   └──────────────────────┴──────────────────────┘
+#
+# One session for the project rather than one per worktree, so every agent is on
+# screen at once instead of behind a switch. Two panes sit side by side; three or
+# more tile, which keeps each wide enough to be worth reading.
 #
 # Overrides:
 #   DEV_HARNESS_CMD='claude -c' resume instead of starting fresh
@@ -61,6 +67,18 @@ badge() {  # badge <session> <accent> <worktree-path>
 
   tmux set -t "$1" status-left \
     " #[bg=${2},fg=${STATUS_DARKEST},bold]  ${1} #[bg=${STATUS_BG},fg=${STATUS_DIM}]│ #[fg=#7aa2f7] #(git -C '${3}' rev-parse --abbrev-ref HEAD 2>/dev/null) #[fg=#414868]│"
+}
+
+# The pane-mode session holds several worktrees at once, so there is no single
+# branch to put in the status bar. Each pane's header carries its own instead,
+# through @role and tmux.conf's pane-border-format. A #() against
+# #{pane_current_path} would have followed the focused pane, but tmux does not
+# expand a format inside #() before running it -- it renders empty.
+badge_repo() {  # badge_repo <session> <accent> <repo-name>
+  tmux set -t "$1" @accent "$2"
+
+  tmux set -t "$1" status-left \
+    " #[bg=${2},fg=${STATUS_DARKEST},bold]  ${3} #[bg=${STATUS_BG},fg=${STATUS_DIM}]│"
 }
 
 # See dev-session.sh for why this is base64 in an OSC 1337, and why it needs the
@@ -272,53 +290,84 @@ confirm_count() {  # confirm_count <n>
 }
 
 # ----------------------------------------------------------------- session ---
-# Built detached and returned. Opening several at once means no single one can
-# be attached to from in here, so attaching is the caller's last act.
-open_session() {  # open_session <branch> <path> -> echoes the session name
-  local branch="$1" path="$2" session accent checksum pane cols rows
+# One session for the project, one pane per worktree. Named <repo>-wt so it
+# cannot collide with the bare basename `tmux dev` claims for the same repo.
+wt_session() { printf '%s-wt' "$(slug "$(basename "$REPO")")"; }
 
-  session="$(slug "$(basename "$REPO")")-$(slug "$branch")"
+# Which worktree paths already have a pane, so running this twice adds only what
+# is new rather than opening a second pane onto the same checkout.
+open_paths() {  # open_paths <session>
+  tmux list-panes -t "=$1:" -F '#{pane_current_path}' 2>/dev/null || true
+}
 
-  if tmux has-session -t "=$session" 2>/dev/null; then
-    printf '%s' "$session"
-    return 0
-  fi
+open_picked() {  # open_picked <"branch<TAB>path" lines>
+  local session accent checksum branch path pane cols rows panes
+  session="$(wt_session)"
 
-  # Hashing the session name rather than the branch alone: it carries both repo
-  # and branch, so two worktrees of one repo land on different colours and the
-  # same worktree keeps its colour across machines.
   checksum="$(printf '%s' "$session" | cksum | cut -d' ' -f1)"
   accent="${REPO_ACCENTS[$((checksum % ${#REPO_ACCENTS[@]}))]}"
 
-  # A detached session is 80x24 unless told otherwise. Nothing is split here so
-  # no percentages depend on it, but the harness draws itself to the width it is
-  # given and would wrap at 80 until the first resize.
+  # A detached session is 80x24 unless told otherwise, and panes are split out
+  # of it -- at 80 columns a second pane is 40, which the harness cannot draw
+  # itself into. Tested against 0 rather than emptiness: #{client_width}
+  # resolves to 0, not to nothing, when no client is attached yet.
   if [[ -n ${TMUX:-} ]]; then
     cols="$(tmux display -p '#{client_width}' 2>/dev/null || true)"
     rows="$(tmux display -p '#{client_height}' 2>/dev/null || true)"
   fi
-  # Tested against 0 rather than emptiness: #{client_width} resolves to 0, not
-  # to nothing, when the session has no client attached yet.
   (( ${cols:-0} > 0 )) || cols="$(tput cols 2>/dev/null || echo 80)"
   (( ${rows:-0} > 0 )) || rows="$(tput lines 2>/dev/null || echo 24)"
 
-  # Named for the branch: with several open the window list is the only place
-  # the branch appears while switching between them.
-  tmux new-session -d -s "$session" -c "$path" -n "$(slug "$branch")" \
-    -x "$cols" -y "$rows"
+  while IFS=$'\t' read -r branch path; do
+    [[ -n $path ]] || continue
+    if [[ ! -d $path ]]; then
+      printf 'wt: skipped %s -- directory is gone\n' "$branch" >&2
+      continue
+    fi
 
-  pane="$(tmux list-panes -t "$session:" -F '#{pane_id}' | head -1)"
-  tmux select-pane -t "$pane" -T harness
-  tmux set -p -t "$pane" @role harness
+    if open_paths "$session" | grep -qxF "$path"; then
+      printf 'wt: %s already open\n' "$branch"
+      continue
+    fi
 
-  [[ -n $HARNESS_CMD ]] && tmux send-keys -t "$pane" "$HARNESS_CMD" C-m
+    if tmux has-session -t "=$session" 2>/dev/null; then
+      pane="$(tmux split-window -t "=$session:" -c "$path" -P -F '#{pane_id}')"
+      # Re-tiled after every split rather than once at the end: each split has
+      # to come out of a pane that still has room, and by the fourth the last
+      # one is too small to divide.
+      tmux select-layout -t "=$session:" tiled >/dev/null
+    else
+      tmux new-session -d -s "$session" -c "$path" -n worktrees \
+        -x "$cols" -y "$rows"
+      pane="$(tmux list-panes -t "=$session:" -F '#{pane_id}' | head -1)"
+    fi
 
-  badge "$session" "$accent" "$path"
-  printf '%s' "$session"
+    # The branch, not a role: with several worktrees in one window the header is
+    # the only thing saying which checkout a pane is looking at.
+    tmux select-pane -t "$pane" -T "$branch"
+    tmux set -p -t "$pane" @role "$branch"
+
+    [[ -n $HARNESS_CMD ]] && tmux send-keys -t "$pane" "$HARNESS_CMD" C-m
+    printf 'wt: %s\n' "$branch"
+  done <<< "$1"
+
+  tmux has-session -t "=$session" 2>/dev/null || die 'nothing opened'
+
+  # Two read best side by side, full height each. Past that, tiled keeps every
+  # pane wide enough to be worth reading rather than shaving columns off one.
+  panes="$(tmux list-panes -t "=$session:" | wc -l)"
+  if (( panes <= 2 )); then
+    tmux select-layout -t "=$session:" even-horizontal >/dev/null
+  else
+    tmux select-layout -t "=$session:" tiled >/dev/null
+  fi
+
+  badge_repo "$session" "$accent" "$(basename "$REPO")"
+  connect "$session"
 }
 
-# Attach last, once every session exists, so the ones after the first are not
-# built behind an already-attached client.
+# Attach last, once every pane exists, so the ones after the first are not built
+# behind an already-attached client.
 connect() {  # connect <session>
   local accent
   accent="$(tmux show -t "$1" -v @accent 2>/dev/null || true)"
@@ -330,27 +379,6 @@ connect() {  # connect <session>
 
   tmux attach-session -t "=$1" || true
   frame_accent ""
-}
-
-# Takes the list as an argument rather than on stdin. A pipeline would put the
-# loop -- and connect with it -- on the read end of a pipe, and `tmux attach`
-# needs a terminal on stdin, not the list it was handed. The here-string
-# redirects only the loop, leaving connect on the real one.
-open_picked() {  # open_picked <"branch<TAB>path" lines>
-  local first="" branch path session
-  while IFS=$'\t' read -r branch path; do
-    [[ -n $path ]] || continue
-    if [[ ! -d $path ]]; then
-      printf 'wt: skipped %s -- directory is gone\n' "$branch" >&2
-      continue
-    fi
-    session="$(open_session "$branch" "$path")"
-    printf 'wt: %s\n' "$session"
-    [[ -n $first ]] || first="$session"
-  done <<< "$1"
-
-  [[ -n $first ]] || die 'nothing opened'
-  connect "$first"
 }
 
 # --------------------------------------------------------------- arguments ---
@@ -430,8 +458,16 @@ case "${1:-open}" in
 
     while IFS=$'\t' read -r branch path; do
       [[ -n $path ]] || continue
-      session="$(slug "$(basename "$REPO")")-$(slug "$branch")"
-      tmux kill-session -t "=$session" 2>/dev/null || true
+      # Close the pane looking at it, if one is open -- the worktree is about
+      # to stop existing and a pane sitting in a deleted directory is a shell
+      # with nowhere to be.
+      # Read line by line rather than word-split: a path may contain spaces,
+      # and #{l:|} gives a separator that cannot appear in a pane id.
+      while IFS= read -r entry; do
+        [[ ${entry%%|*} == "$path" ]] || continue
+        tmux kill-pane -t "${entry##*|}" 2>/dev/null || true
+      done < <(tmux list-panes -t "=$(wt_session):" \
+        -F '#{pane_current_path}#{l:|}#{pane_id}' 2>/dev/null || true)
 
       # No --force: git refuses a worktree with uncommitted changes or its own
       # unmerged commits, which is exactly the check wanted here. Reported and
@@ -482,7 +518,7 @@ case "${1:-open}" in
       || die "no worktrees in $POOL -- add one with: wt new <branch>"
 
     picks="$(printf '%s\n' "$available" | pick 'worktree>' \
-      'Tab ticks · Enter opens a Claude session on each ticked worktree')" || exit 0
+      'Tab ticks · Enter opens a Claude pane on each ticked worktree')" || exit 0
     [[ -n $picks ]] || exit 0
 
     confirm_count "$(printf '%s\n' "$picks" | grep -c .)" || exit 1
