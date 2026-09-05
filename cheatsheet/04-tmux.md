@@ -1,7 +1,7 @@
 # Multiplexer — tmux
 
-Panes and windows, the per-repo session `tmux dev` builds, and the one per
-worktree behind `tmux wt`.
+Panes and windows, the per-repo session `tmux dev` builds, and the folder of
+parallel worktrees `tmux wt` drives.
 
 > **★ marks a binding custom to this repo.** Everything unmarked is an
 > upstream default. Neovim's leader key is `Space`, written out rather than
@@ -91,57 +91,67 @@ Overrides, if a repo needs something else:
 | `DEV_HARNESS_CMD='claude -c'` | Resume instead of starting fresh |
 | `DEV_ACCENT='#f7768e'` | Pick the repo's colour instead of deriving it |
 
-### A session per worktree ★
+### A folder of worktrees ★
 
-`tmux wt` is the same idea for parallel work: pick git worktrees, and get one
-session on each, with an agent running in every one.
+`tmux wt` works on the **folder holding a project's worktrees**, not from inside
+the repository. Point it at a checkout once and it remembers:
 
 ```
-┌──────────────────────────────────┬────────────────────────┐
-│ harness (claude)                 │ editor  (nvim)         │
-│                                  │                        │
-│                                  │                        │
-│                                  ├────────────────────────┤
-│                                  │ shell                  │
-└──────────────────────────────────┴────────────────────────┘
+~/Worktrees/oriv-conduit/
+├── .wt.conf          ← which checkout these belong to
+├── fix-login/
+├── feat-billing/
+└── chore-deps/
 ```
-
-The layout is `tmux dev` inverted, deliberately. There the editor leads and the
-harnesses sit in a narrow column, because you are the one typing. Here the
-agent has the work and you are reading it, so the harness takes 60% and the
-editor comes along for review.
 
 | Command | Result |
 | --- | --- |
-| `tmux wt` | Pick worktrees; one session opens on each |
-| `tmux wt ~/Worktrees/myrepo` | The same, for the repo at that path |
-| `tmux wt new feat/billing` | Branch off `origin/HEAD` into a new worktree, and open it |
-| `tmux wt new a b c` | The same for several at once |
-| `tmux wt setup` | Re-run the setup hook on a picked worktree |
-| `tmux wt rm` | Pick worktrees to remove |
+| `tmux wt init ~/Repository/oriv-conduit` | Adopt this folder as that repo's worktrees |
+| `tmux wt` | Ask which worktrees to open; a Claude session on each |
+| `tmux wt new feat/billing` | Add a worktree here, off `origin/HEAD`, and open it |
+| `tmux wt new a b c` | Several at once |
+| `tmux wt setup` | Re-run the setup hook on the ones you pick |
+| `tmux wt rm` | Remove the ones you pick |
 
-Run it from any of three places: the main checkout, **inside a worktree**, or
-the **folder holding a project's worktrees** — that last one is not a git
-repository itself, so it asks one of the worktrees inside it. Or point it at
-any of them by path from anywhere at all. So a fifth task that occurs to you
-while three agents are already running is one command away, and new worktrees
-always land beside their siblings under the repo's name rather than nested
-under whichever branch you happened to be in.
+A folder of worktrees is not a git repository, and nothing in it says which
+checkout they came from — git only knows the other way round. `.wt.conf` records
+that, which is what lets every command run from here instead of from inside the
+repo. It is written by `wt init`, and written for you the first time you run
+`wt` in a folder that plainly already holds worktrees ★. The file is read with
+`sed`, never sourced, since it sits in a working directory.
 
-The picker is fzf and opens with **every worktree already ticked** ★, so plain
-`Enter` opens all of them — `Tab` unticks the ones you do not want. The preview
-shows what each is carrying: commits ahead of `origin/HEAD` first, then
-anything uncommitted. Opening more than **four** asks before going ahead ★:
-past four agents at once, reviewing what they did turns into waving it through.
+Everything except `init` finds the folder by **walking up** ★, so the commands
+work from the folder itself and from inside any worktree in it — a fifth task
+that occurs to you while three agents are already running is one command away.
 
-`wt rm` uses the same picker but starts with **nothing** ticked, since there the
-same keypress would be destructive.
+The picker is fzf and opens with **nothing ticked**: which worktrees to work on
+is the question being asked. `Tab` ticks, `Enter` opens what is ticked, and the
+preview shows what each is carrying — commits ahead of `origin/HEAD` first, then
+anything uncommitted. Opening more than **four** asks first ★: past four agents
+at once, reviewing what they did turns into waving it through.
+
+### One pane, one agent ★
+
+A `wt` session is a **single pane running Claude** — no editor, no shell:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│ claude                                                    │
+│                                                           │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
+```
+
+`tmux dev` is the layout for working by hand, with the editor leading and the
+harnesses in a column beside it. This is the other job: you are watching an
+agent, not typing, so it gets the whole window. Split it yourself with `Alt` `=`
+or `Alt` `-` when you want an editor next to it.
 
 Sessions are named `<repo>-<branch>` ★, so they never collide with the plain
 repo name `tmux dev` claims, and each takes **its own colour** from the same
 palette — four running at once are told apart at a glance rather than by
 reading. A branch with a slash becomes a dash: `feat/billing` opens as
-`myrepo-feat-billing`, in a directory called `feat-billing`.
+`oriv-conduit-feat-billing`, in a directory called `feat-billing`.
 
 `wt rm` never passes `--force`, so git refuses any worktree still holding
 uncommitted or unmerged work ★ and names the one it kept. Removing a worktree
@@ -149,9 +159,8 @@ never removes its branch, which is what leaves the work mergeable afterwards —
 `/worktree-merge` in Claude Code folds those branches back into one, a branch at
 a time, running the tests after each.
 
-New worktrees land in `~/Worktrees/<repo>/<branch>`, or under
-`DEV_WORKTREE_ROOT` if it is set. `DEV_EDITOR_CMD` and `DEV_HARNESS_CMD` work
-exactly as they do for `tmux dev`.
+`DEV_HARNESS_CMD='claude -c'` resumes instead of starting fresh; empty leaves
+the pane at a plain shell.
 
 ### Making a worktree usable ★
 
