@@ -135,37 +135,39 @@ preview shows what each is carrying — commits ahead of `origin/HEAD` first, th
 anything uncommitted. Opening more than **four** asks first ★: past four agents
 at once, reviewing what they did turns into waving it through.
 
-### One pane, one agent ★
+### One pane per worktree ★
 
-A `wt` session is a **single pane running Claude** — no editor, no shell:
+The worktrees you tick open as **panes in one window**, each running Claude in
+its own checkout:
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│ claude                                                    │
-│                                                           │
-│                                                           │
-└───────────────────────────────────────────────────────────┘
+┌──────────────────────────┬──────────────────────────┐
+│ claude                   │ claude                   │
+│ fix-login                │ feat-billing             │
+└──────────────────────────┴──────────────────────────┘
 ```
 
-`tmux dev` is the layout for working by hand, with the editor leading and the
-harnesses in a column beside it. This is the other job: you are watching an
-agent, not typing, so it gets the whole window. Split it yourself with `Alt` `=`
-or `Alt` `-` when you want an editor next to it.
+One session for the project, not one per worktree, so every agent is on screen
+at once instead of behind a switch. `Alt` `←` `→` moves between them, and
+`Ctrl` `b` `z` zooms one to full window and back.
 
-Sessions are named `<repo>-<branch>` ★, so they never collide with the plain
-repo name `tmux dev` claims, and each takes **its own colour** from the same
-palette — four running at once are told apart at a glance rather than by
-reading. A branch with a slash becomes a dash: `feat/billing` opens as
-`oriv-conduit-feat-billing`, in a directory called `feat-billing`.
+Two panes sit side by side at full height; three or more **tile** ★, which
+keeps each wide enough to be worth reading rather than shaving columns off one.
+Each pane's **header names its branch** ★ — with several checkouts in one window
+that is the only thing saying which is which, and it is why the branch is no
+longer in the status bar: a `#()` against `#{pane_current_path}` would have
+followed the focused pane, but tmux does not expand a format inside `#()`.
 
-`wt rm` never passes `--force`, so git refuses any worktree still holding
-uncommitted or unmerged work ★ and names the one it kept. Removing a worktree
-never removes its branch, which is what leaves the work mergeable afterwards —
-`/worktree-merge` in Claude Code folds those branches back into one, a branch at
-a time, running the tests after each.
+Running `tmux wt` again **adds** to the same window ★ — worktrees already open
+are reported and skipped rather than opened a second time, so it is safe to
+re-run as more tasks appear. `wt rm` closes the pane looking at a worktree
+before removing it, since a shell in a deleted directory has nowhere to be.
+
+The session is named `<repo>-wt` ★ so it never collides with the plain repo name
+`tmux dev` claims, and takes its own colour from the same palette.
 
 `DEV_HARNESS_CMD='claude -c'` resumes instead of starting fresh; empty leaves
-the pane at a plain shell.
+the panes at plain shells.
 
 ### Making a worktree usable ★
 
