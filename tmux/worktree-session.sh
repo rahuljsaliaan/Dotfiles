@@ -129,13 +129,47 @@ main_of() {  # main_of <dir>
   dirname "$common"
 }
 
+# The checkout a directory belongs to, whether it is that checkout, a worktree
+# of it, or the folder holding several of them. The last case is the normal one
+# here: you stand in the worktree folder, and the repository is one of the
+# things inside it, so asking you to name it would be asking a question the
+# directory already answers.
+#
+# Every worktree of a repo reports the same main checkout, so a folder holding
+# a clone and four of its worktrees still collapses to one answer. Two genuinely
+# different repositories do not, and that is the one case worth refusing.
+discover_main() {  # discover_main <dir> -> echoes the main checkout
+  local dir="$1" child found seen=""
+
+  if found="$(main_of "$dir")"; then
+    printf '%s' "$found"
+    return 0
+  fi
+
+  for child in "$dir"/*/; do
+    [[ -d $child ]] || continue
+    found="$(main_of "$child")" || continue
+    [[ $seen == *"|$found|"* ]] && continue
+    seen+="|$found|"
+  done
+
+  case "$(grep -o '|' <<< "$seen" | wc -l)" in
+    0) return 1 ;;
+    2) printf '%s' "${seen//|/}"; return 0 ;;
+    *)
+      printf 'wt: more than one repository here:\n' >&2
+      sed 's/||/\n/g; s/|//g' <<< "$seen" | sed 's/^/wt:   /' >&2
+      printf 'wt: name the one you mean: wt init <path-to-repo>\n' >&2
+      return 2
+      ;;
+  esac
+}
+
 # POOL is the folder of worktrees; REPO the checkout they belong to. Resolved
 # from the config, or adopted on the spot when the folder plainly already holds
 # worktrees -- being asked to run `init` on a directory that is self-evidently
 # a worktree folder is a question with only one answer.
 require_pool() {
-  local child
-
   if POOL="$(conf_find)"; then
     REPO="$(conf_get "$POOL/$CONF_NAME" main)"
     [[ -n $REPO ]] || die "$POOL/$CONF_NAME has no 'main =' line"
@@ -143,18 +177,14 @@ require_pool() {
     return 0
   fi
 
-  for child in "$PWD"/*/; do
-    [[ -d $child ]] || continue
-    if REPO="$(main_of "$child")"; then
-      POOL="$PWD"
-      conf_write "$POOL" "$REPO"
-      printf 'wt: adopted this folder as worktrees of %s (%s)\n' \
-        "$(basename "$REPO")" "$CONF_NAME" >&2
-      return 0
-    fi
-  done
-
-  die "no $CONF_NAME here and nothing that looks like a worktree -- run: wt init <path-to-repo>"
+  REPO="$(discover_main "$PWD")" && found=0 || found=$?
+  (( found == 2 )) && exit 1
+  (( found == 0 )) \
+    || die "no repository in or under $PWD -- run: wt init <path-to-repo>"
+  POOL="$PWD"
+  conf_write "$POOL" "$REPO"
+  printf 'wt: adopted this folder as worktrees of %s (%s)\n' \
+    "$(basename "$REPO")" "$CONF_NAME" >&2
 }
 
 # ------------------------------------------------------------------- setup ---
@@ -326,11 +356,17 @@ open_picked() {  # open_picked <"branch<TAB>path" lines>
 # --------------------------------------------------------------- arguments ---
 case "${1:-open}" in
   init)
-    target="${2:-}"
-    [[ -n $target ]] || die 'usage: wt init <path-to-repo>'
+    # No argument means this folder, which is where you already are -- the
+    # repository is one of the things inside it, and naming it would be
+    # answering a question the directory has already answered.
+    target="${2:-.}"
     [[ -d $target ]] || die "no such directory: $target"
 
-    repo="$(main_of "$target")" || die "not a git repository: $target"
+    # 2 means it already said what was wrong -- more than one repository, and
+    # which ones -- so adding "no git repository" on top would contradict it.
+    repo="$(discover_main "$target")" && found=0 || found=$?
+    (( found == 2 )) && exit 1
+    (( found == 0 )) || die "no git repository in or under $target"
     conf_write "$PWD" "$repo"
     printf 'wt: %s now holds worktrees of %s\n' "$PWD" "$repo"
     printf 'wt: add one with: wt new <branch>\n'
