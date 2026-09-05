@@ -1,50 +1,44 @@
 #!/usr/bin/env bash
 #
-# Pick git worktrees, and open a tmux session on each one:
+# Worktrees for one project, driven from the folder that holds them rather than
+# from inside the repository:
 #
-#   ┌──────────────────────────────────┬────────────────────────┐
-#   │ harness (claude)                 │ editor  (nvim)         │
-#   │                                  │                        │
-#   │                                  │                        │
-#   │                                  ├────────────────────────┤
-#   │                                  │ shell                  │
-#   └──────────────────────────────────┴────────────────────────┘
+#   ~/Worktrees/oriv-conduit/
+#   ├── .wt.conf          written on first use -- which checkout these belong to
+#   ├── fix-login/
+#   ├── feat-billing/
+#   └── chore-deps/
 #
-#   wt                  # pick worktrees to open, one session each
-#   wt <path>           # the same, for the repo or worktree folder at <path>
-#   wt new <branch>...  # branch off origin/HEAD into new worktrees, and open them
-#   wt setup            # re-run the setup hook on a worktree
-#   wt rm               # pick worktrees to remove
+#   wt init <repo>      adopt this folder as <repo>'s worktree folder
+#   wt                  pick which worktrees to open -- one Claude session each
+#   wt new <branch>...  add worktrees here, and open them
+#   wt setup            re-run the setup hook on worktrees you pick
+#   wt rm               remove worktrees you pick
+#   wt switch           fuzzy-switch between open sessions (bound to prefix + S)
 #
-# The mirror image of `tmux dev`, and deliberately so. There the editor leads and
-# two harnesses sit in a narrow column, because you are the one typing. Here one
-# agent has the work and you are reading it, so the harness takes the room and
-# the editor is along for review.
+# Everything except `init` and `switch` locates the folder by walking up from
+# the current directory looking for .wt.conf, so each works from the folder
+# itself and from inside any worktree in it.
 #
-# One session per worktree, named <repo>-<branch>, each on its own colour -- so
-# four agents running at once are told apart at a glance rather than by reading
-# the branch out of the status bar.
+# A session is a single pane running the harness -- `tmux dev` is the layout for
+# working by hand, this one is for watching an agent. Split it yourself (Alt =,
+# Alt -) when you want an editor beside it. Sessions are named <repo>-<branch>
+# and coloured by hashing that name, so several open at once are told apart by
+# colour rather than by reading.
 #
 # Overrides:
-#   DEV_WORKTREE_ROOT=~/wt      where `new` puts worktrees (default: ~/Worktrees)
-#   DEV_WORKTREE_SETUP='npm ci' one-off setup, instead of the repo's hook
-#   DEV_EDITOR_CMD=helix        command for the editor pane (default: nvim .)
-#   DEV_HARNESS_CMD=            empty leaves the harness pane at a plain shell
 #   DEV_HARNESS_CMD='claude -c' resume instead of starting fresh
+#   DEV_HARNESS_CMD=            leave the pane at a plain shell
+#   DEV_WORKTREE_SETUP='npm ci' one-off setup, instead of the repo's hook
 
 set -euo pipefail
 
-# ---------------------------------------------------------------- geometry ---
-# Per cent of the window given to the editor column on the right. The harness
-# keeps the rest, which is the whole point of this layout.
-EDITOR_COLUMN_WIDTH=40
-# Per cent of the right column given to the shell beneath the editor.
-SHELL_ROW_HEIGHT=23
-
-# Past this many at once you stop reviewing what the agents did and start
-# waving it through, which costs more than the parallelism buys. Not a hard
-# limit -- it asks rather than refuses.
+# Past this many at once you stop reviewing what the agents did and start waving
+# it through, which costs more than the parallelism buys. Not a hard limit -- it
+# asks rather than refuses.
 MAX_SESSIONS=4
+
+CONF_NAME=".wt.conf"
 
 # ----------------------------------------------------------------- colours ---
 # Tokyo Night, the same values wezterm.lua, tmux.conf and dev-session.sh use.
@@ -54,20 +48,14 @@ STATUS_DARKEST="#1a1b26"
 
 REPO_ACCENTS=("#7aa2f7" "#bb9af7" "#e0af68" "#9ece6a" "#f7768e" "#7dcfff")
 
-WORKTREE_ROOT="${DEV_WORKTREE_ROOT:-$HOME/Worktrees}"
-
-EDITOR_CMD="${DEV_EDITOR_CMD:-nvim .}"
-# Assigned with :- rather than :=, so DEV_HARNESS_CMD= (set but empty) is
-# honoured as "no harness" instead of falling back to the default.
 HARNESS_CMD="${DEV_HARNESS_CMD-claude}"
 
 die() { printf 'wt: %s\n' "$1" >&2; exit 1; }
 
 # ------------------------------------------------------------------- badge ---
-# Kept byte-identical to dev-session.sh's, so a worktree session and a repo
-# session are the same object on screen. The branch is a #() shell call rather
-# than a value baked in at creation, so it follows a checkout instead of
-# freezing at whatever was current when the session opened.
+# Kept identical to dev-session.sh's, so a worktree session and a repo session
+# are the same object on screen. The branch is a #() shell call rather than a
+# value baked in at creation, so it follows a checkout instead of freezing.
 badge() {  # badge <session> <accent> <worktree-path>
   tmux set -t "$1" @accent "$2"
 
@@ -89,31 +77,95 @@ frame_accent() {
 }
 
 # ------------------------------------------------------------------- names ---
-# tmux reads "." and ":" in a target as address separators, so they cannot
+# tmux reads "." and ":" in a target as address separators, so neither can
 # survive into a session name. "/" is legal in one, but a branch like
 # feat/billing would then read as a path in the status bar -- and the worktree
 # directory flattens it the same way, so the two stay in step.
 slug() {
-  local s="${1//\//-}"   # feat/billing -> feat-billing
+  local s="${1//\//-}"
   s="${s//./_}"
   s="${s//:/_}"
   printf '%s' "$s"
 }
 
+# ------------------------------------------------------------------ config ---
+# A folder of worktrees is not a git repository, so nothing in it says which
+# checkout they belong to -- git only knows the other way round. The config
+# records that, which is what lets every command run from here rather than from
+# inside the repo.
+#
+# Read with sed rather than sourced: this file sits in a working directory and
+# sourcing it would execute whatever ended up there.
+conf_get() {  # conf_get <file> <key>
+  sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | head -1
+}
+
+conf_write() {  # conf_write <dir> <main-checkout>
+  cat > "$1/$CONF_NAME" <<EOF
+# Written by \`wt\`. This folder holds git worktrees of the checkout below;
+# every wt command run from here, or from inside one of them, reads this.
+main = $2
+EOF
+}
+
+# Walk up rather than looking only at the current directory, so the commands
+# work from inside a worktree too -- the folder is then exactly one level up.
+conf_find() {  # -> echoes the directory holding the config
+  local dir="$PWD"
+  while [[ $dir != / ]]; do
+    [[ -f "$dir/$CONF_NAME" ]] && { printf '%s' "$dir"; return 0; }
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+# The main checkout that owns a directory: --git-common-dir points at the one
+# .git every worktree of a repo shares, and its parent is the checkout itself.
+# --show-toplevel would answer with the worktree instead.
+main_of() {  # main_of <dir>
+  local common
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+    || return 1
+  dirname "$common"
+}
+
+# POOL is the folder of worktrees; REPO the checkout they belong to. Resolved
+# from the config, or adopted on the spot when the folder plainly already holds
+# worktrees -- being asked to run `init` on a directory that is self-evidently
+# a worktree folder is a question with only one answer.
+require_pool() {
+  local child
+
+  if POOL="$(conf_find)"; then
+    REPO="$(conf_get "$POOL/$CONF_NAME" main)"
+    [[ -n $REPO ]] || die "$POOL/$CONF_NAME has no 'main =' line"
+    [[ -d $REPO ]] || die "$REPO is gone -- fix 'main =' in $POOL/$CONF_NAME"
+    return 0
+  fi
+
+  for child in "$PWD"/*/; do
+    [[ -d $child ]] || continue
+    if REPO="$(main_of "$child")"; then
+      POOL="$PWD"
+      conf_write "$POOL" "$REPO"
+      printf 'wt: adopted this folder as worktrees of %s (%s)\n' \
+        "$(basename "$REPO")" "$CONF_NAME" >&2
+      return 0
+    fi
+  done
+
+  die "no $CONF_NAME here and nothing that looks like a worktree -- run: wt init <path-to-repo>"
+}
+
 # ------------------------------------------------------------------- setup ---
-# A worktree is a clean checkout: no node_modules, no .venv, and nothing that
-# is gitignored -- so the .env an app needs and the dependencies an agent needs
-# to build or test are all absent. An agent opened on a bare checkout fails in
-# ways that look like its own mistake, so this is where a project says how to
-# get from a checkout to a working tree.
+# A worktree is a clean checkout: no node_modules, no .venv, and nothing that is
+# gitignored -- so the .env an app needs and the dependencies an agent needs to
+# build or test are all absent. An agent opened on a bare checkout fails in ways
+# that look like its own mistake, so this is where a project says how to get
+# from a checkout to a working tree.
 #
-# A script in the repo root rather than a config format: what it has to do is a
-# shell command, every project's is different, and committing it means everyone
-# -- and every agent -- sets a worktree up the same way.
-#
-# The hook runs with the worktree as its working directory, and is handed
-# $WORKTREE_MAIN (the main checkout) because gitignored files can only be
-# copied from there -- by definition they are not in the branch.
+# The hook runs with the worktree as its working directory and is handed
+# $WORKTREE_MAIN, because gitignored files can only be copied from there.
 SETUP_HOOK=".worktree-setup"
 
 run_setup() {  # run_setup <worktree-path> <branch>
@@ -142,24 +194,20 @@ run_setup() {  # run_setup <worktree-path> <branch>
 }
 
 # --------------------------------------------------------------- discovery ---
-# git is the source of truth rather than a directory listing: it knows every
-# worktree wherever it lives, and it knows the ones whose directory has been
-# deleted out from under it, which a listing would silently miss.
-#
-# --porcelain emits a stanza per worktree, blank-line separated. The main
-# checkout is the first stanza and is skipped -- it is not a worktree you would
-# hand to an agent -- as is anything detached, which has no branch to merge.
+# git is the source of truth for what exists -- it knows the ones whose
+# directory has been deleted underneath it, which a listing would miss -- but
+# the answer is narrowed to this folder. Worktrees of the same repo living
+# somewhere else belong to whatever folder holds them, not to this one.
 worktrees() {  # -> "<branch>\t<path>" per line
-  git -C "$REPO" worktree list --porcelain | awk '
+  git -C "$REPO" worktree list --porcelain | awk -v pool="$POOL/" '
     /^worktree / { path = substr($0, 10); if (main == "") main = path; next }
-    /^branch /   { branch = substr($0, 8); sub(/^refs\/heads\//, "", branch)
-                   if (path != main) print branch "\t" path }
+    /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b)
+                   if (path != main && index(path, pool) == 1) print b "\t" path }
   '
 }
 
-# What each worktree is carrying, for the picker's preview pane. Commits first,
-# because that is what you are choosing between; uncommitted state second,
-# because it is the thing that would block a merge later.
+# Commits first, because that is what you are choosing between; uncommitted
+# state second, because it is what would block a merge later.
 preview_cmd() {
   cat <<'PREVIEW'
     p={2}
@@ -171,33 +219,33 @@ preview_cmd() {
 PREVIEW
 }
 
-# <all> ticks everything on open, so Enter takes the lot and Tab is for taking
-# less. That is the right default when opening -- the usual answer is "all of
-# them", and having to tick four things to say so is friction for nothing --
-# and the wrong one for removing, where the same keypress would be destructive.
-pick() {  # pick <prompt> <header> [all] ; worktrees on stdin, picks on stdout
-  # `load`, not `start`: start fires before the input stream has been read, so
-  # it selects an empty list and the ticks never appear. load fires once the
-  # list is complete, which is the only point at which "all" means anything.
-  local extra=()
-  [[ ${3:-} == all ]] && extra=(--bind 'load:select-all')
-
+# Nothing is ticked when this opens: which worktrees to work on is the question
+# being asked, and answering it for you defeats the point of asking. Tab ticks,
+# and the header says so -- multi-select is invisible otherwise.
+pick() {  # pick <prompt> <header> ; worktrees on stdin, picks on stdout
   fzf --multi \
     --height 40% --layout=reverse \
     --delimiter='\t' --with-nth=1 \
     --prompt="$1 " \
     --header="$2" \
-    ${extra[@]+"${extra[@]}"} \
     --preview "$(preview_cmd)" \
     --preview-window=right:60%
 }
 
+confirm_count() {  # confirm_count <n>
+  (( $1 > MAX_SESSIONS )) || return 0
+  printf 'wt: %d selected. Past %d agents at once, reviewing what they did\n' \
+    "$1" "$MAX_SESSIONS" >&2
+  printf 'wt: turns into waving it through.\n' >&2
+  read -r -p "wt: open all $1 anyway? [y/N] " reply
+  [[ $reply == [yY] ]]
+}
+
 # ----------------------------------------------------------------- session ---
-# Build the session detached and return. Opening several at once means no single
-# one can be attached to from in here, so attaching is the caller's last act.
+# Built detached and returned. Opening several at once means no single one can
+# be attached to from in here, so attaching is the caller's last act.
 open_session() {  # open_session <branch> <path> -> echoes the session name
-  local branch="$1" path="$2" session accent checksum
-  local harness editor shell_pane cols rows
+  local branch="$1" path="$2" session accent checksum pane cols rows
 
   session="$(slug "$(basename "$REPO")")-$(slug "$branch")"
 
@@ -206,49 +254,36 @@ open_session() {  # open_session <branch> <path> -> echoes the session name
     return 0
   fi
 
-  # Hashing the session name rather than the branch alone: it already carries
-  # both repo and branch, so two worktrees of one repo land on different
-  # colours, and the same worktree keeps its colour across machines.
+  # Hashing the session name rather than the branch alone: it carries both repo
+  # and branch, so two worktrees of one repo land on different colours and the
+  # same worktree keeps its colour across machines.
   checksum="$(printf '%s' "$session" | cksum | cut -d' ' -f1)"
   accent="${REPO_ACCENTS[$((checksum % ${#REPO_ACCENTS[@]}))]}"
 
-  # A detached session is 80x24 unless told otherwise and the splits below are
-  # percentages, so without this they divide up 80x24 rather than the terminal
-  # about to attach, and the small panes land on tmux's minimum size.
+  # A detached session is 80x24 unless told otherwise. Nothing is split here so
+  # no percentages depend on it, but the harness draws itself to the width it is
+  # given and would wrap at 80 until the first resize.
   if [[ -n ${TMUX:-} ]]; then
     cols="$(tmux display -p '#{client_width}' 2>/dev/null || true)"
     rows="$(tmux display -p '#{client_height}' 2>/dev/null || true)"
   fi
-  # Tested against 0 and not merely emptiness: #{client_width} resolves to 0,
-  # not to nothing, when the session has no client attached yet -- and -x 0 is
-  # silently clamped to tmux's 80x24, which is exactly what this avoids.
+  # Tested against 0 rather than emptiness: #{client_width} resolves to 0, not
+  # to nothing, when the session has no client attached yet.
   (( ${cols:-0} > 0 )) || cols="$(tput cols 2>/dev/null || echo 80)"
   (( ${rows:-0} > 0 )) || rows="$(tput lines 2>/dev/null || echo 24)"
 
-  # Named for the branch, not "dev": with several of these open the window list
-  # is the only place the branch appears while you are switching between them.
+  # Named for the branch: with several open the window list is the only place
+  # the branch appears while switching between them.
   tmux new-session -d -s "$session" -c "$path" -n "$(slug "$branch")" \
     -x "$cols" -y "$rows"
 
-  # Panes by id, never index -- every split renumbers the indices around it.
-  harness="$(tmux list-panes -t "$session:" -F '#{pane_id}' | head -1)"
-  editor="$(tmux split-window -h -l "${EDITOR_COLUMN_WIDTH}%" \
-    -t "$harness" -c "$path" -P -F '#{pane_id}')"
-  shell_pane="$(tmux split-window -v -l "${SHELL_ROW_HEIGHT}%" \
-    -t "$editor" -c "$path" -P -F '#{pane_id}')"
+  pane="$(tmux list-panes -t "$session:" -F '#{pane_id}' | head -1)"
+  tmux select-pane -t "$pane" -T harness
+  tmux set -p -t "$pane" @role harness
 
-  role() { tmux select-pane -t "$1" -T "$2"; tmux set -p -t "$1" @role "$2"; }
-  role "$harness"    "harness"
-  role "$editor"     "editor"
-  role "$shell_pane" "shell"
-
-  tmux send-keys -t "$editor" "$EDITOR_CMD" C-m
-  [[ -n $HARNESS_CMD ]] && tmux send-keys -t "$harness" "$HARNESS_CMD" C-m
+  [[ -n $HARNESS_CMD ]] && tmux send-keys -t "$pane" "$HARNESS_CMD" C-m
 
   badge "$session" "$accent" "$path"
-  # Focus the harness, not the editor: the agent is what you came to watch.
-  tmux select-pane -t "$harness"
-
   printf '%s' "$session"
 }
 
@@ -267,101 +302,64 @@ connect() {  # connect <session>
   frame_accent ""
 }
 
-# --------------------------------------------------------------- arguments ---
-# Find the MAIN checkout from a directory, which may be any of three things.
-#
-# The checkout itself, or a worktree of it: --git-common-dir points at the one
-# .git every worktree of a repo shares, and its parent is the checkout that
-# owns it. --show-toplevel would answer with the worktree instead, which would
-# nest a new pool under a branch name rather than the repo's.
-#
-# Or the pool folder holding a project's worktrees -- ~/Worktrees/<repo>. That
-# is not a repository itself, but it is the obvious place to run this from once
-# the worktrees exist, so fall back to asking one of them.
-resolve_repo() {  # resolve_repo <dir> -> echoes the main checkout
-  local dir="$1" common child
-
-  if common="$(git -C "$dir" rev-parse --path-format=absolute \
-      --git-common-dir 2>/dev/null)"; then
-    dirname "$common"
-    return 0
-  fi
-
-  for child in "$dir"/*/; do
-    [[ -d $child ]] || continue
-    if common="$(git -C "$child" rev-parse --path-format=absolute \
-        --git-common-dir 2>/dev/null)"; then
-      dirname "$common"
-      return 0
+# Takes the list as an argument rather than on stdin. A pipeline would put the
+# loop -- and connect with it -- on the read end of a pipe, and `tmux attach`
+# needs a terminal on stdin, not the list it was handed. The here-string
+# redirects only the loop, leaving connect on the real one.
+open_picked() {  # open_picked <"branch<TAB>path" lines>
+  local first="" branch path session
+  while IFS=$'\t' read -r branch path; do
+    [[ -n $path ]] || continue
+    if [[ ! -d $path ]]; then
+      printf 'wt: skipped %s -- directory is gone\n' "$branch" >&2
+      continue
     fi
-  done
+    session="$(open_session "$branch" "$path")"
+    printf 'wt: %s\n' "$session"
+    [[ -n $first ]] || first="$session"
+  done <<< "$1"
 
-  return 1
+  [[ -n $first ]] || die 'nothing opened'
+  connect "$first"
 }
 
-# Resolved only for the subcommands that act on a repo. `switch` lists tmux
-# sessions and nothing else, and it is bound to prefix + S -- which fires from
-# whatever pane you happen to be in, very often not a repository at all.
-require_repo() {
-  REPO="$(resolve_repo "$TARGET")" || die \
-    "no repository at $TARGET -- run this in a checkout, a worktree, or the folder holding them, or pass that path"
-}
+# --------------------------------------------------------------- arguments ---
+case "${1:-open}" in
+  init)
+    target="${2:-}"
+    [[ -n $target ]] || die 'usage: wt init <path-to-repo>'
+    [[ -d $target ]] || die "no such directory: $target"
 
-# Shared by `new` and the picker: both end up opening sessions, and the cost of
-# too many is the same either way.
-confirm_count() {  # confirm_count <n>
-  (( $1 > MAX_SESSIONS )) || return 0
-  printf 'wt: %d selected. Past %d agents at once, reviewing what they did\n' \
-    "$1" "$MAX_SESSIONS" >&2
-  printf 'wt: turns into waving it through.\n' >&2
-  read -r -p "wt: open all $1 anyway? [y/N] " reply
-  [[ $reply == [yY] ]]
-}
-
-# A bare path argument opens the picker for that repo, the way `tmux dev [path]`
-# takes one -- so this works pointed at a worktree folder from anywhere, not
-# only from inside the project.
-TARGET="."
-CMD="${1:-open}"
-case "$CMD" in
-  new|setup|rm|switch|open) ;;
-  "") CMD="open" ;;
-  *)
-    [[ -d $CMD ]] || die \
-      "unknown command: $CMD (try: wt, wt <path>, wt new <branch>..., wt setup, wt rm)"
-    TARGET="$CMD"
-    CMD="open"
+    repo="$(main_of "$target")" || die "not a git repository: $target"
+    conf_write "$PWD" "$repo"
+    printf 'wt: %s now holds worktrees of %s\n' "$PWD" "$repo"
+    printf 'wt: add one with: wt new <branch>\n'
     ;;
-esac
 
-case "$CMD" in
   new)
     shift
-    require_repo
     (( $# > 0 )) || die 'usage: wt new <branch> [branch...]'
+    require_pool
     confirm_count "$#" || exit 1
 
-    pool="$WORKTREE_ROOT/$(basename "$REPO")"
-    mkdir -p "$pool"
-
-    # Branch off the remote's default rather than whatever is checked out here:
-    # a worktree started from a half-finished local branch inherits work the
-    # agent never asked for, and every one of these is merged back separately.
-    # Fetched once for the whole batch rather than per branch.
+    # Branch off the remote's default rather than whatever the checkout happens
+    # to have out: a worktree started from a half-finished local branch inherits
+    # work the agent never asked for, and each of these is merged back
+    # separately. Fetched once for the batch rather than per branch.
     git -C "$REPO" fetch --quiet origin 2>/dev/null || true
     base="$(git -C "$REPO" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
     [[ -n $base ]] || base="$(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
 
-    first=""
+    created=""
     for branch in "$@"; do
-      dir="$pool/$(slug "$branch")"
+      dir="$POOL/$(slug "$branch")"
       if [[ -e $dir ]]; then
         printf 'wt: skipped %s -- %s already exists\n' "$branch" "$dir" >&2
         continue
       fi
 
       # An existing branch is checked out as-is; only a new one is cut from the
-      # base. git refuses either way if the branch is already in a worktree.
+      # base. git refuses either way if it is already in another worktree.
       if git -C "$REPO" show-ref --quiet --verify "refs/heads/$branch"; then
         git -C "$REPO" worktree add "$dir" "$branch" || continue
       else
@@ -369,21 +367,17 @@ case "$CMD" in
       fi
 
       run_setup "$dir" "$branch"
-      session="$(open_session "$branch" "$dir")"
-      printf 'wt: %s\n' "$session"
-      [[ -n $first ]] || first="$session"
+      created+="$branch"$'\t'"$dir"$'\n'
     done
 
-    [[ -n $first ]] || die 'nothing created'
-    connect "$first"
+    [[ -n $created ]] || die 'nothing created'
+    open_picked "$created"
     ;;
 
   setup)
-    require_repo
-    # For a worktree whose setup failed, or one made by hand with `git worktree
-    # add`, which never went through `wt new`.
+    require_pool
     picks="$(worktrees | pick 'setup>' \
-      'Tab toggles · Enter runs setup on the ticked worktrees')" || exit 0
+      'Tab ticks · Enter runs setup on the ticked worktrees')" || exit 0
     [[ -n $picks ]] || exit 0
 
     while IFS=$'\t' read -r branch path; do
@@ -393,9 +387,9 @@ case "$CMD" in
     ;;
 
   rm)
-    require_repo
+    require_pool
     picks="$(worktrees | pick 'remove>' \
-      'Tab toggles · Enter REMOVES the ticked worktrees · Ctrl-C cancels')" || exit 0
+      'Tab ticks · Enter REMOVES the ticked worktrees · Ctrl-C cancels')" || exit 0
     [[ -n $picks ]] || exit 0
 
     while IFS=$'\t' read -r branch path; do
@@ -415,20 +409,15 @@ case "$CMD" in
     ;;
 
   switch)
-    # Bound to prefix + S in tmux.conf, and run inside a popup. Every session,
-    # not just this repo's: `tmux dev` sessions are things to switch to as
-    # well, and with four worktrees open the list is long enough that typing a
-    # fragment of a branch beats reading down it.
-    #
-    # tmux's own prefix + s (choose-tree) stays exactly where it was. This is
-    # the fuzzy one, and it carries the branch and a dirty mark, which
-    # choose-tree has no way to show.
+    # Bound to prefix + S. No pool is resolved: this lists tmux sessions and
+    # nothing else, and the binding fires from whatever pane has focus, very
+    # often not a repository or a worktree folder at all.
     current="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
 
     # Session paths are fetched one at a time rather than in a single format:
-    # tmux emits "\t" in a format literally rather than as a tab, so there is
-    # no separator that is safe against a path, and the -f filter is the same
-    # trick dev-session.sh uses to read a path back reliably.
+    # tmux emits "\t" in a format literally rather than as a tab, so there is no
+    # separator safe against a path, and the -f filter is the same trick
+    # dev-session.sh uses to read a path back reliably.
     target="$(
       tmux list-sessions -F '#{session_name}' 2>/dev/null | while read -r name; do
         path="$(tmux list-sessions -f "#{==:#{session_name},$name}" \
@@ -450,33 +439,21 @@ case "$CMD" in
     [[ -n $target ]] && tmux switch-client -t "=$target"
     ;;
 
-  open)
-    require_repo
+  open|"")
+    require_pool
     available="$(worktrees)"
     [[ -n $available ]] \
-      || die "no worktrees for $(basename "$REPO") -- make one with: wt new <branch>"
+      || die "no worktrees in $POOL -- add one with: wt new <branch>"
 
     picks="$(printf '%s\n' "$available" | pick 'worktree>' \
-      'All ticked · Tab to untick the ones you do not want · Enter opens the rest' \
-      all)" || exit 0
+      'Tab ticks · Enter opens a Claude session on each ticked worktree')" || exit 0
     [[ -n $picks ]] || exit 0
 
     confirm_count "$(printf '%s\n' "$picks" | grep -c .)" || exit 1
-
-    first=""
-    while IFS=$'\t' read -r branch path; do
-      [[ -n $path ]] || continue
-      if [[ ! -d $path ]]; then
-        printf 'wt: skipped %s -- directory is gone\n' "$branch" >&2
-        continue
-      fi
-      session="$(open_session "$branch" "$path")"
-      printf 'wt: %s\n' "$session"
-      [[ -n $first ]] || first="$session"
-    done <<< "$picks"
-
-    [[ -n $first ]] || die 'nothing opened'
-    connect "$first"
+    open_picked "$picks"
     ;;
 
+  *)
+    die "unknown command: $1 (try: wt, wt init <repo>, wt new <branch>..., wt setup, wt rm)"
+    ;;
 esac
