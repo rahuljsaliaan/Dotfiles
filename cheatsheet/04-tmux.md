@@ -106,7 +106,8 @@ the repository. Point it at a checkout once and it remembers:
 
 | Command | Result |
 | --- | --- |
-| `tmux wt init ~/Repository/oriv-conduit` | Adopt this folder as that repo's worktrees |
+| `tmux wt init` | Adopt this folder, finding the repo inside it |
+| `tmux wt init ~/path/to/repo` | The same, naming the repo explicitly |
 | `tmux wt` | Ask which worktrees to open; a Claude session on each |
 | `tmux wt new feat/billing` | Add a worktree here, off `origin/HEAD`, and open it |
 | `tmux wt new a b c` | Several at once |
@@ -116,8 +117,12 @@ the repository. Point it at a checkout once and it remembers:
 A folder of worktrees is not a git repository, and nothing in it says which
 checkout they came from — git only knows the other way round. `.wt.conf` records
 that, which is what lets every command run from here instead of from inside the
-repo. It is written by `wt init`, and written for you the first time you run
-`wt` in a folder that plainly already holds worktrees ★. The file is read with
+repo. `wt init` with no argument looks inside the current folder and finds the
+repository itself ★ — every worktree of a repo reports the same checkout, so a
+folder holding a clone and four of its worktrees still collapses to one answer,
+and only two genuinely different repositories are refused (it lists them and
+asks which). It is also written for you the first time you run `wt` in a folder
+that plainly already holds worktrees ★. The file is read with
 `sed`, never sourced, since it sits in a working directory.
 
 Everything except `init` finds the folder by **walking up** ★, so the commands
