@@ -171,11 +171,23 @@ preview_cmd() {
 PREVIEW
 }
 
-pick() {  # pick <prompt> ; reads worktrees on stdin, writes picks on stdout
+# <all> ticks everything on open, so Enter takes the lot and Tab is for taking
+# less. That is the right default when opening -- the usual answer is "all of
+# them", and having to tick four things to say so is friction for nothing --
+# and the wrong one for removing, where the same keypress would be destructive.
+pick() {  # pick <prompt> <header> [all] ; worktrees on stdin, picks on stdout
+  # `load`, not `start`: start fires before the input stream has been read, so
+  # it selects an empty list and the ticks never appear. load fires once the
+  # list is complete, which is the only point at which "all" means anything.
+  local extra=()
+  [[ ${3:-} == all ]] && extra=(--bind 'load:select-all')
+
   fzf --multi \
     --height 40% --layout=reverse \
     --delimiter='\t' --with-nth=1 \
     --prompt="$1 " \
+    --header="$2" \
+    ${extra[@]+"${extra[@]}"} \
     --preview "$(preview_cmd)" \
     --preview-window=right:60%
 }
@@ -370,7 +382,8 @@ case "$CMD" in
     require_repo
     # For a worktree whose setup failed, or one made by hand with `git worktree
     # add`, which never went through `wt new`.
-    picks="$(worktrees | pick 'setup>')" || exit 0
+    picks="$(worktrees | pick 'setup>' \
+      'Tab toggles · Enter runs setup on the ticked worktrees')" || exit 0
     [[ -n $picks ]] || exit 0
 
     while IFS=$'\t' read -r branch path; do
@@ -381,7 +394,8 @@ case "$CMD" in
 
   rm)
     require_repo
-    picks="$(worktrees | pick 'remove>')" || exit 0
+    picks="$(worktrees | pick 'remove>' \
+      'Tab toggles · Enter REMOVES the ticked worktrees · Ctrl-C cancels')" || exit 0
     [[ -n $picks ]] || exit 0
 
     while IFS=$'\t' read -r branch path; do
@@ -442,7 +456,9 @@ case "$CMD" in
     [[ -n $available ]] \
       || die "no worktrees for $(basename "$REPO") -- make one with: wt new <branch>"
 
-    picks="$(printf '%s\n' "$available" | pick 'worktree>')" || exit 0
+    picks="$(printf '%s\n' "$available" | pick 'worktree>' \
+      'All ticked · Tab to untick the ones you do not want · Enter opens the rest' \
+      all)" || exit 0
     [[ -n $picks ]] || exit 0
 
     confirm_count "$(printf '%s\n' "$picks" | grep -c .)" || exit 1
