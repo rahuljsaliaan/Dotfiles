@@ -128,10 +128,14 @@ while three agents are already running is one command away, and new worktrees
 always land beside their siblings under the repo's name rather than nested
 under whichever branch you happened to be in.
 
-The picker is fzf, multi-select with `Tab`, and its preview shows what each
-worktree is carrying — commits ahead of `origin/HEAD` first, then anything
-uncommitted. Pick more than **four** and it asks before going ahead ★: past
-four agents at once, reviewing what they did turns into waving it through.
+The picker is fzf and opens with **every worktree already ticked** ★, so plain
+`Enter` opens all of them — `Tab` unticks the ones you do not want. The preview
+shows what each is carrying: commits ahead of `origin/HEAD` first, then
+anything uncommitted. Opening more than **four** asks before going ahead ★:
+past four agents at once, reviewing what they did turns into waving it through.
+
+`wt rm` uses the same picker but starts with **nothing** ticked, since there the
+same keypress would be destructive.
 
 Sessions are named `<repo>-<branch>` ★, so they never collide with the plain
 repo name `tmux dev` claims, and each takes **its own colour** from the same
