@@ -74,8 +74,9 @@ alias bat=batcat
 # -------- TMUX ----------------
 # ==============================
 # `tmux dev [path]` opens the per-repo session template (tmux-dev, linked from
-# this repo's tmux/dev-session.sh); everything else reaches the real tmux
-# untouched.
+# this repo's tmux/dev-session.sh) and `tmux wt` the per-worktree one
+# (tmux-worktree, from tmux/worktree-session.sh); everything else reaches the
+# real tmux untouched.
 #
 # This is a shell wrapper rather than tmux's own command-alias because an alias
 # is defined in tmux.conf, and tmux.conf is only read once a server is running
@@ -83,12 +84,11 @@ alias bat=batcat
 # So `tmux dev` with nothing running yet, which is exactly when it would be
 # typed, fails with "no server running". Intercepting here works cold.
 tmux() {
-  if [[ $1 == dev ]]; then
-    shift
-    tmux-dev "$@"
-  else
-    command tmux "$@"
-  fi
+  case "$1" in
+    dev) shift; tmux-dev "$@" ;;
+    wt)  shift; tmux-worktree "$@" ;;
+    *)   command tmux "$@" ;;
+  esac
 }
 
 # ==============================
