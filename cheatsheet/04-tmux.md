@@ -70,8 +70,10 @@ The **repo's own colour** sits behind its name in the status bar, picked by
 hashing the name, and WezTerm draws a **frame around the whole window** in that
 same colour ★ — so two of these side by side are told apart without reading
 either. tmux has no outer border of its own, only dividers between panes, so
-the frame is the terminal's doing: `dev` hands the colour over as it attaches
-and clears it when the session ends.
+the frame is the terminal's doing, and tmux has to hand the colour over rather
+than draw it. That happens on every session change ★, however you switch —
+`prefix` `s`, `prefix` `S`, or a fresh `tmux a` — so the frame always matches
+whatever is in front, and a session with no badge clears it.
 
 The status bar also carries the **current branch** ★ beside the repo name,
 re-read every few seconds, so it follows a checkout rather than freezing at
