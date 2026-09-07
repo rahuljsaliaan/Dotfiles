@@ -102,6 +102,36 @@ if [[ ${1:-} == --recolor ]]; then
   exit 0
 fi
 
+# ------------------------------------------------------------- frame sync ---
+# `--frame` repaints the wezterm window frame in the current session's colour.
+# Bound to client-session-changed and client-attached in tmux.conf.
+#
+# The frame is the one piece of the badge that lives outside tmux, so tmux
+# cannot repaint it on its own the way it does the status bar and the borders.
+# Until this existed the colour was only ever sent by connect(), which runs when
+# this script attaches -- so switching by any other route (prefix + s, prefix +
+# S, choose-tree, switch-client) left the frame on whichever session opened
+# first while everything inside the terminal had already changed.
+#
+# @accent resolves up the pane -> window -> session -> global chain, so a plain
+# session with no badge yields an empty string, which is exactly the payload
+# that clears the frame.
+if [[ ${1:-} == --frame ]]; then
+  accent="$(tmux display-message -p '#{@accent}' 2>/dev/null || true)"
+
+  # Straight to the client's terminal rather than printed: run-shell captures
+  # stdout, so an OSC sent the normal way is swallowed and never reaches
+  # wezterm. Going to client_tty side-steps tmux, which also means no
+  # passthrough wrapper is needed -- tmux is not in the path at all.
+  tty="$(tmux display-message -p '#{client_tty}' 2>/dev/null || true)"
+  if [[ -n $tty ]]; then
+    printf '\033]1337;SetUserVar=tmux_dev_accent=%s\007' \
+      "$(printf '%s' "$accent" | base64 | tr -d '\n')" > "$tty"
+  fi
+
+  exit 0
+fi
+
 # --------------------------------------------------------------- arguments ---
 target="${1:-.}"
 if [[ ! -d $target ]]; then
