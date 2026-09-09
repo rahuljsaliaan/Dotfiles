@@ -75,6 +75,12 @@ than draw it. That happens on every session change ★, however you switch —
 `prefix` `s`, `prefix` `S`, or a fresh `tmux a` — so the frame always matches
 whatever is in front, and a session with no badge clears it.
 
+**Detaching clears it too** ★, so `Ctrl` `b` `d` leaves an unframed window
+rather than one still wearing the colour of a session you have left. That one
+cannot be a tmux hook: by the time tmux fires `client-detached` the client is
+gone, and writing to it reaches nothing. The shell does it instead, on its next
+prompt, which is the moment it gets the terminal back.
+
 The status bar also carries the **current branch** ★ beside the repo name,
 re-read every few seconds, so it follows a checkout rather than freezing at
 whatever was current when the session opened. The window is named `dev`, not
