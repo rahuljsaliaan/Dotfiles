@@ -230,6 +230,13 @@ Changing that colour from inside the session:
 
 Both repaint the status badge and the window frame together.
 
+The palette holds **thirteen** colours, all Tokyo Night so none of them can
+clash with the rest of the theme. They were picked on two measurements rather
+than by eye: each clears 6.5:1 against the near-black the badge prints on it, so
+the session name stays readable; and each sits at least 18 CIE Lab units from
+every other, which is where two accents stop being "that bluish one" and start
+being telling apart at a glance.
+
 ---
 
 [← Shell — zsh](03-zsh.md) · [Index](../CHEATSHEET.md) · [Neovim — the basics →](05-neovim-basics.md)
