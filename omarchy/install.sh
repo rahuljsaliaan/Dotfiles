@@ -116,9 +116,9 @@ for plugin in lock bar dock idle notifications notification-bell island-gap net-
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
 done
 
-# Frosted windows; a clear top bar, so its glass islands float on the wallpaper.
+# Frosted windows and top bar.
 omarchy hyprland window transparency glassy >/dev/null && printf '  glassy   windows\n'
-omarchy bar background none >/dev/null && printf '  clear    top bar (islands float on it)\n'
+omarchy bar background glassy >/dev/null && printf '  glassy   top bar\n'
 
 # GTK/libadwaita apps: no buttons in their own header bars (Hyprland draws them).
 gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:' && printf '  gtk      header-bar buttons off\n'

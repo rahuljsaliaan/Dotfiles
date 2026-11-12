@@ -46,11 +46,11 @@ together for different monitors.
 | `hypr/bindings.lua` | `~/.config/hypr/` | Super+E opens the window overview (NittyGriddy); Esc closes it while open and passes through otherwise; Super+Tab / Super+Shift+Tab page its workspace strip while open and otherwise switch workspace exactly as Omarchy's do. The plugin's Super+W/Q and Super+Shift+number overrides are deliberately left out |
 | `hypr/gestures.lua` | `~/.config/hypr/` | Three-finger swipes (loaded from `hyprland.lua`): up opens the window overview, down closes it, left/right page its strip while open and otherwise switch to the previous/next workspace |
 | `hypr/monitors.lua` | `~/.config/hypr/` | Fixed monitor positions (laptop, middle BenQ, right BenQ), matched by model and serial, so a monitor that reconnects after sleep returns to its place |
-| `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout in glass islands (launcher and workspaces, system load · weather, clock and time zones · tools and AI usage, network, controls, tray and bell), clear bar background, dock pins (Chromium, Outlook, Teams for Linux, foot), idle timings (screensaver 2½ min, lock 5 min) |
+| `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout in glass islands (launcher and workspaces, system load · weather, clock and time zones · tools and AI usage, network, controls, tray and bell) on a frosted bar, dock pins (Chromium, Outlook, Teams for Linux, foot), idle timings (screensaver 2½ min, lock 5 min) |
 | *(installed from git)* | `~/.config/omarchy/plugins/` | Community bar widgets: [Pulse](https://github.com/SanchoKusika/omarchy-pulse) (CPU, memory, disk and network in one widget), [AI Usage](https://github.com/whitecliffs/omarchy-aiusage) (Claude subscription session and weekly limits, tracking `claude`), [Quick Reference Guide](https://github.com/jcmarinn/Omarchy-QRG) (searchable cheat sheets for Neovim, git, Docker and zsh; add your own in `~/.config/qrg/guides/`) and [NittyGriddy](https://github.com/timsonner/nitty-griddy) (a window overview with live thumbnails and search). `install.sh` adds them with `omarchy plugin add`; their place in the bar is in `shell.json` |
 | `omarchy/extensions/omarchy-menu.jsonc` | `~/.config/omarchy/extensions/` | Menu → Screensaver runs the main-screen-only launcher; System → AI Usage, Learn → Quick Reference and Trigger → Window Overview open those plugins, so menu search finds them |
 | `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: clock, date and password box on the main screen only, a frosted rounded field with the window-border gradient; re-blanks a monitor that reconnects while the screens are asleep |
-| `omarchy/plugins/rahulj.bar` | `~/.config/omarchy/plugins/` | Top bar on the main screen only; draws each group of widgets as a rounded glass island |
+| `omarchy/plugins/rahulj.bar` | `~/.config/omarchy/plugins/` | Top bar on the main screen only; draws each group of widgets as a rounded glass island in the theme's colours (the dock's glass: tinted background, faint outline, top sheen), spaced from each other and from the screen edges |
 | `omarchy/plugins/rahulj.net-speed` | `~/.config/omarchy/plugins/` | Live up/down speed beside the network icon: a copy of [Net Speed Colour](https://github.com/brightwalker25/omarchy-net-speed) (MIT) with the arrows in the theme's blue and cyan instead of fixed colours |
 | `omarchy/plugins/rahulj.island-gap` | `~/.config/omarchy/plugins/` | An empty bar widget that ends one island and starts the next; place it between widgets in `shell.json` (it can be used many times) |
 | `omarchy/plugins/rahulj.dock` | `~/.config/omarchy/plugins/` | Dock on the main screen only; auto-hides on tiled workspaces; frosted rounded glass plate; accent dot under running apps; lifted off the edge |
@@ -80,7 +80,7 @@ together for different monitors.
 - `omarchy pkg aur add teams-for-linux-bin`, and removal of the Teams web app: Teams runs as a desktop app that stays in the tray when closed, so its notifications keep arriving
 
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
-- `omarchy bar background none`: clear top bar, so the glass islands float
+- `omarchy bar background glassy`: frosted top bar
 - `gsettings … button-layout 'appmenu:'`: no close buttons in GTK apps' own header bars
 - `omarchy theme bg set …code-brackets.png`: the wallpaper
 
