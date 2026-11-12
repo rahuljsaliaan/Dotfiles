@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "rahulj.notification-bell",
+  "name": "Notification Bell",
+  "version": "1.0.0",
+  "author": "rahulj",
+  "description": "A bell in the bar with an unread dot; click opens notification history.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Notification Bell",
+    "description": "Unread dot for notifications; click opens the history",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

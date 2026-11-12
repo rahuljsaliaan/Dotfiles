@@ -1,0 +1,3 @@
+#!/bin/bash
+# Keep the screensaver art matched to the new theme's wallpaper.
+"$HOME/.local/bin/screensaver-art-from-wallpaper"

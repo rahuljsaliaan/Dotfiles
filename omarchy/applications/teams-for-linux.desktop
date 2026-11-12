@@ -1,0 +1,13 @@
+[Desktop Entry]
+# Personal override of /usr/share/applications/teams-for-linux.desktop: run natively
+# on Wayland instead of the package's forced --ozone-platform=x11 (XWayland),
+# so it is sharp on the scaled laptop screen and screen sharing uses PipeWire.
+Name=Teams for Linux
+Exec=/opt/teams-for-linux/teams-for-linux --ozone-platform=wayland --enable-features=WaylandWindowDecorations %U
+Terminal=false
+Type=Application
+Icon=teams-for-linux
+StartupWMClass=teams-for-linux
+Comment=Unofficial Microsoft Teams client for Linux using Electron. It uses the Web App and wraps it as a standalone application using Electron.
+MimeType=x-scheme-handler/msteams;
+Categories=Chat;Network;Office;

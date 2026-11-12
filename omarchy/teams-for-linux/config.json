@@ -1,0 +1,9 @@
+{
+  "notificationMethod": "electron",
+  "notifications": {
+    "timeoutType": "default",
+    "electron": {
+      "clickAction": "restore"
+    }
+  }
+}

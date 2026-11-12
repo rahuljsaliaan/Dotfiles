@@ -1,0 +1,50 @@
+diff --git c/barDeco.cpp w/barDeco.cpp
+index 40b0271..92c5d21 100644
+--- c/barDeco.cpp
++++ w/barDeco.cpp
+@@ -438,6 +438,12 @@ void COmarchyFloatingHyprBar::renderBarButtons(CBox *barBox, const float scale,
+         button.iconTex = nullptr;
+     }
+ 
++    // Faint at rest; full colour while any button is hovered (the same moment
++    // icon_on_hover reveals the icons), so the face never changes size.
++    const auto RESTOPACITY = std::clamp(g_pOmarchyFloatingGlobalState->config.buttonRestOpacity->value(), 0L, 100L);
++    if (RESTOPACITY < 100 && m_iButtonHoverState == 0)
++      color.a *= RESTOPACITY / 100.0;
++
+     color.a *= a;
+ 
+     CBox buttonBox = {barBox->x + (BUTTONSRIGHT ? barBox->w - offset - scaledButtonSize : offset), barBox->y + (barBox->h - scaledButtonSize) / 2.0,
+diff --git c/globals.hpp w/globals.hpp
+index 97e1dd5..c6d97c2 100644
+--- c/globals.hpp
++++ w/globals.hpp
+@@ -38,6 +38,7 @@ struct SOmarchyFloatingGlobalState {
+     SP<Config::Values::CIntValue> barButtonPadding;
+     SP<Config::Values::CIntValue> buttonRounding;
+     SP<Config::Values::CIntValue> buttonBorderSize;
++    SP<Config::Values::CIntValue> buttonRestOpacity;
+     SP<Config::Values::CBoolValue> barBlur, barTitleEnabled, barPartOfWindow, barPrecedenceOverBorder, enabled, iconOnHover;
+     SP<Config::Values::CStringValue> barTextFont, barTextAlign, barButtonsAlignment, onDoubleClick, workspaceTag;
+   } config;
+diff --git c/main.cpp w/main.cpp
+index d79e364..a1a907c 100644
+--- c/main.cpp
++++ w/main.cpp
+@@ -244,6 +244,8 @@ static PLUGIN_DESCRIPTION_INFO initializeOmarchyFloating(HANDLE handle) {
+   g_pOmarchyFloatingGlobalState->config.buttonBorderColor =
+       makeShared<Config::Values::CColorValue>("plugin:hyprbars:button_border_color", "Color of the button border", 0x00000000);
+   g_pOmarchyFloatingGlobalState->config.enabled = makeShared<Config::Values::CBoolValue>("plugin:hyprbars:enabled", "Whether bars are enabled", false);
++  g_pOmarchyFloatingGlobalState->config.buttonRestOpacity = makeShared<Config::Values::CIntValue>(
++      "plugin:hyprbars:button_rest_opacity", "Button background opacity in percent while no button is hovered (100 = unchanged)", 100);
+   g_pOmarchyFloatingGlobalState->config.iconOnHover =
+       makeShared<Config::Values::CBoolValue>("plugin:hyprbars:icon_on_hover", "Whether to use an icon on hover of the buttons", false);
+   g_pOmarchyFloatingGlobalState->config.onDoubleClick =
+@@ -273,6 +275,7 @@ static PLUGIN_DESCRIPTION_INFO initializeOmarchyFloating(HANDLE handle) {
+   HyprlandAPI::addConfigValueV2(OMARCHY_FLOATING_PHANDLE, g_pOmarchyFloatingGlobalState->config.enabled);
+   HyprlandAPI::addConfigValueV2(OMARCHY_FLOATING_PHANDLE, g_pOmarchyFloatingGlobalState->config.workspaceTag);
+   HyprlandAPI::addConfigValueV2(OMARCHY_FLOATING_PHANDLE, g_pOmarchyFloatingGlobalState->config.iconOnHover);
++  HyprlandAPI::addConfigValueV2(OMARCHY_FLOATING_PHANDLE, g_pOmarchyFloatingGlobalState->config.buttonRestOpacity);
+   HyprlandAPI::addConfigValueV2(OMARCHY_FLOATING_PHANDLE, g_pOmarchyFloatingGlobalState->config.onDoubleClick);
+ 
+   if (Config::mgr()->type() == Config::CONFIG_LEGACY)
