@@ -1,0 +1,186 @@
+{
+  "bar": {
+    "background": "glassy",
+    "id": "rahulj.bar",
+    "layout": {
+      "center": [
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "id": "omarchy.clock",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "cities": [
+            {
+              "name": "Kolkata",
+              "zone": "Asia/Kolkata"
+            },
+            {
+              "name": "Tokyo",
+              "zone": "Asia/Tokyo"
+            },
+            {
+              "name": "Los Angeles",
+              "zone": "America/Los_Angeles"
+            },
+            {
+              "name": "New York",
+              "zone": "America/New_York"
+            },
+            {
+              "name": "London",
+              "zone": "Europe/London"
+            },
+            {
+              "lat": 52.52437,
+              "lon": 13.41053,
+              "name": "Berlin",
+              "region": "State of Berlin, DE",
+              "zone": "Europe/Berlin"
+            }
+          ],
+          "id": "omarchy.elsewhen"
+        }
+      ],
+      "centerBegin": [
+        {
+          "id": "omarchy.indicators"
+        }
+      ],
+      "centerEnd": [
+        {
+          "id": "omarchy.system-update"
+        }
+      ],
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        },
+        {
+          "id": "rahulj.divider"
+        },
+        {
+          "id": "io.github.sanchokusika.pulse",
+          "metric": "cpu",
+          "metricOrder": [
+            "cpu",
+            "mem",
+            "gpu",
+            "temp"
+          ],
+          "metrics": [
+            "cpu"
+          ],
+          "style": "bars"
+        }
+      ],
+      "right": [
+        {
+          "id": "jcmarin.qrg"
+        },
+        {
+          "id": "omarchy.agents"
+        },
+        {
+          "barLabel": "Worst",
+          "id": "jim.aiusage",
+          "providers": [
+            "claude"
+          ]
+        },
+        {
+          "id": "rahulj.divider"
+        },
+        {
+          "id": "rahulj.net-speed"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "rahulj.divider"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.power"
+        },
+        {
+          "id": "rahulj.divider"
+        },
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "rahulj.notification-bell"
+        }
+      ],
+      "tray": [
+        {
+          "id": "superwhisper.panel"
+        }
+      ]
+    },
+    "position": "top"
+  },
+  "cloneSourceRestores": [
+    "rahulj.lock",
+    "rahulj.dock",
+    "rahulj.idle",
+    "rahulj.notifications"
+  ],
+  "disabledPlugins": [
+    "omarchy.lock",
+    "omarchy.dock",
+    "omarchy.idle",
+    "omarchy.notifications"
+  ],
+  "dock": {
+    "pinned": [
+      "chromium",
+      "Microsoft Outlook",
+      "teams-for-linux",
+      "foot"
+    ],
+    "position": "bottom"
+  },
+  "idle": {
+    "lock": 300,
+    "screensaver": 150
+  },
+  "plugins": [
+    {
+      "id": "rahulj.lock"
+    },
+    {
+      "id": "rahulj.dock"
+    },
+    {
+      "id": "rahulj.idle"
+    },
+    {
+      "id": "timsonner.nitty-griddy"
+    },
+    {
+      "id": "rahulj.notifications"
+    }
+  ],
+  "version": 1
+}

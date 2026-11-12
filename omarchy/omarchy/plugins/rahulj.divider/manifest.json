@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "rahulj.divider",
+  "name": "Divider",
+  "version": "1.0.0",
+  "author": "rahulj",
+  "description": "A thin vertical line between two groups of bar widgets.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Divider",
+    "description": "Thin line between groups of widgets",
+    "category": "Layout",
+    "allowMultiple": true,
+    "defaultSection": "right"
+  }
+}
