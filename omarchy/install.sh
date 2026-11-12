@@ -57,8 +57,9 @@ for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensa
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 
-# Prompt and editor.
+# Prompt, terminal multiplexer and editor.
 copy starship/starship.toml "$HOME/.config/starship.toml"
+copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy nvim                   "$HOME/.config/nvim"
 
 # Claude Code (file by file; never the whole ~/.claude).
