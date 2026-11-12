@@ -48,3 +48,27 @@ end
 
 o.bind_commands[dismiss_nitty_griddy] = "omarchy-shell shell hide timsonner.nitty-griddy"
 o.bind("ESCAPE", "Close window overview", dismiss_nitty_griddy, { auto_consuming = true })
+
+-- Super+Tab / Super+Shift+Tab page the overview's workspace strip (All, 1, 2,
+-- 3, ...) while it is open, and otherwise do exactly what Omarchy's do: next /
+-- previous workspace on this monitor (m+1 / m-1).
+local function overview_or_next_workspace()
+  if nitty_griddy_mapped() then
+    hl.dispatch(hl.dsp.event("timsonner.nitty-griddy:workspace-next"))
+    return
+  end
+  hl.dispatch(hl.dsp.focus({ workspace = "m+1" }))
+end
+
+local function overview_or_previous_workspace()
+  if nitty_griddy_mapped() then
+    hl.dispatch(hl.dsp.event("timsonner.nitty-griddy:workspace-prev"))
+    return
+  end
+  hl.dispatch(hl.dsp.focus({ workspace = "m-1" }))
+end
+
+o.bind_commands[overview_or_next_workspace] = 'hl.dsp.focus({ workspace = "m+1" })'
+o.bind_commands[overview_or_previous_workspace] = 'hl.dsp.focus({ workspace = "m-1" })'
+o.rebind("SUPER + TAB", "Next workspace", overview_or_next_workspace)
+o.rebind("SUPER + SHIFT + TAB", "Previous workspace", overview_or_previous_workspace)
