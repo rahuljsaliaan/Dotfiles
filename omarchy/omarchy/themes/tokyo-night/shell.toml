@@ -143,15 +143,16 @@ border           = "hyprland.active-border-foreground"
 border-alpha     = 1.0
 
 [notifications]
-background       = "#1a1b26"
-background-alpha = 1.0
-text             = "#a9b1d6"
-# Conventionally matches the Hyprland active-window border. Border accepts
-# either a solid color or the full active-border gradient.
-border           = "hyprland.active-border"
-border-alpha     = 1.0
-# border-width     = 2
-countdown        = "#7aa2f7"
+# Personal: notifications look like notifications, not like another window.
+# A raised, lighter surface than the windows, and a purple accent stripe down
+# the left edge (border-width is "top right bottom left") with a thin outline.
+background       = "#24283b"
+background-alpha = 0.95
+text             = "#c0caf5"
+border           = "#bb9af7"
+border-alpha     = 0.9
+border-width     = "1 1 1 4"
+countdown        = "#bb9af7"
 
 [launcher]
 # Same six tokens as [menu], applied to the launcher overlay. Alpha
