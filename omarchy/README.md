@@ -62,7 +62,7 @@ together for different monitors.
 | `bin/screensaver-art-from-wallpaper` | `~/.local/bin/` | Traces the wallpaper (or its clean source) into braille art |
 | `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
 | `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt; the Python segment only appears inside an active virtualenv |
-| `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with the bar at the bottom, so the command line opens there like Neovim's, and a styled command bar (`❯` prompt, labelled rename prompts) instead of plain text over the session name |
+| `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with a styled command bar (`❯` prompt, labelled rename prompts, raised background) so the command line reads as a command bar rather than plain text over the session name; the status bar stays at the top, in line with the Omarchy bar |
 | `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono ExtraBold (regular text is SemiBold) so the prompt's bold text stands out |
 | `applications/teams-for-linux.desktop` | `~/.local/share/applications/` | Launcher override for Teams for Linux that runs it natively on Wayland, not through the package's forced XWayland, so it is sharp on the scaled laptop screen |
 | `teams-for-linux/config.json` | `~/.config/teams-for-linux/` | Teams notifications made by the app rather than the web page, so clicking one brings the window back from the tray, focuses it and opens the conversation |
