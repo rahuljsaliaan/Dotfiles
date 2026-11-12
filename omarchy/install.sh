@@ -39,6 +39,8 @@ printf 'Restoring Omarchy setup from %s\n' "$REPO"
 copy hypr/hyprland.lua   "$HOME/.config/hypr/hyprland.lua"
 copy hypr/looknfeel.lua  "$HOME/.config/hypr/looknfeel.lua"
 copy hypr/monitors.lua   "$HOME/.config/hypr/monitors.lua"
+copy hypr/bindings.lua   "$HOME/.config/hypr/bindings.lua"
+copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
@@ -83,10 +85,12 @@ printf '\nApplying settings that are not files\n'
 #   Pulse: CPU, memory, disk and network activity in one widget
 #   AI Usage: Claude subscription session and weekly limits
 #   Quick Reference Guide: searchable cheat sheets (Neovim, git, Docker, zsh)
+#   NittyGriddy: window overview grid (Super+E, three-finger swipe up/down)
 for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git \
              io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
              jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git \
-             jcmarin.qrg=https://github.com/jcmarinn/Omarchy-QRG.git; do
+             jcmarin.qrg=https://github.com/jcmarinn/Omarchy-QRG.git \
+             timsonner.nitty-griddy=https://github.com/timsonner/nitty-griddy.git; do
   id="${entry%%=*}" url="${entry#*=}"
   if [[ -d $HOME/.config/omarchy/plugins/$id ]]; then
     printf '  ok       %s\n' "$id"

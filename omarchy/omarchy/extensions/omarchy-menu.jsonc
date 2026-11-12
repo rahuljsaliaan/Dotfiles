@@ -37,4 +37,5 @@
   // them (the menu only searches its own entries and apps, not bar widgets).
   "system.ai-usage": {"icon":"󰚩","label":"AI Usage","description":"Claude session and weekly limits","aliases":["ai","usage","claude usage","limits"],"action":"omarchy-shell jim.aiusage open"},
   "learn.quick-reference": {"icon":"󰘥","label":"Quick Reference","description":"Searchable shortcut cheat sheets: Neovim, git, Docker, zsh","aliases":["guide","cheatsheet","shortcuts","qrg"],"action":"omarchy-shell qrg open"},
+  "trigger.window-overview": {"icon":"󰕰","label":"Window Overview","description":"Grid of every window on this screen (Super+E, or swipe up with three fingers)","aliases":["overview","windows","expose","mission control"],"action":"omarchy-shell shell summon timsonner.nitty-griddy"},
 }
