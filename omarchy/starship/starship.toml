@@ -1,14 +1,15 @@
 add_newline = false
 
-# Plain style, matching the Claude Code status line (~/.claude/statusline.sh):
-# a coloured icon, the text, and a dim │ between segments, on the terminal's
-# own background instead of powerline blocks. Tokyo Night colours.
+# Tokyo Night, in the plain style of the Claude Code status line
+# (~/.claude/statusline.sh), with the folder on one rounded accent-blue pill
+# (like the active workspace in the bar) so it is the first thing you see:
 #
-#   󰉋 ~/Work/omarchy │  main !1 ?2 │  .venv               󱎫 1.2s │ 󰥔 17:05
+#   󰉋 omarchy  main !? │  .venv                          󱎫 1s234ms
 #   ❯
 #
-# Each segment after the folder starts with its own divider, so a divider only
-# shows when the segment does.
+# Everything after the folder is a coloured icon and text on the terminal's
+# own background. Segments after git start with their own dim divider, so a
+# divider only shows when its segment does. No clock: the top bar has one.
 
 format = """
 $directory\
@@ -16,7 +17,7 @@ $git_branch$git_status\
 $python$nodejs$rust$golang\
 $docker_context$kubernetes\
 $fill\
-$cmd_duration$time\
+$cmd_duration\
 $line_break\
 $character"""
 
@@ -24,15 +25,15 @@ $character"""
 symbol = " "
 
 # ========================
-# DIRECTORY
+# DIRECTORY (the accent pill)
 # ========================
 [directory]
-style = "fg:#c0caf5 bold"
+style = "fg:#1a1b26 bg:#7aa2f7 bold"
 truncation_length = 2
 truncate_to_repo = true
 read_only = " 󰌾"
 read_only_style = "fg:#f7768e"
-format = "[󰉋 ](fg:#7aa2f7)[$path]($style)[$read_only]($read_only_style)"
+format = "[](fg:#7aa2f7)[󰉋 $path]($style)[](fg:#7aa2f7)[$read_only]($read_only_style)"
 
 # ========================
 # GIT
@@ -40,7 +41,7 @@ format = "[󰉋 ](fg:#7aa2f7)[$path]($style)[$read_only]($read_only_style)"
 [git_branch]
 symbol = " "
 style = "fg:#c0caf5"
-format = "[ │ ](fg:#565f89)[$symbol](fg:#bb9af7)[$branch]($style)"
+format = " [$symbol](fg:#bb9af7)[$branch]($style)"
 
 [git_status]
 style = "fg:#e0af68"
@@ -95,16 +96,7 @@ format = "[ │ ](fg:#565f89)[$symbol](fg:#7dcfff)[$context]($style)"
 min_time = 100
 show_milliseconds = true
 style = "fg:#e0af68"
-format = "[󱎫 ](fg:#565f89)[$duration]($style)[ │ ](fg:#565f89)"
-
-# ========================
-# TIME
-# ========================
-[time]
-disabled = false
-time_format = "%H:%M"
-style = "fg:#c0caf5"
-format = "[󰥔 ](fg:#565f89)[$time]($style)"
+format = "[󱎫 ](fg:#565f89)[$duration]($style)"
 
 # ========================
 # CHARACTER
