@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+#
+# Restore the Omarchy setup onto a fresh Omarchy install.
+#
+# Unlike zorin/install.sh this COPIES rather than symlinks: Omarchy's own tools
+# write into these folders (`omarchy plugin clone`, `omarchy refresh`, theme
+# switches, the shell saving shell.json), and a symlink would carry those writes
+# straight into the repo. Re-run it after pulling, and copy changes made on the
+# machine back by hand.
+#
+# Anything already at a destination is kept as <file>.bak.<timestamp>.
+#
+#   omarchy/install.sh             # configs + settings
+#   omarchy/install.sh --titlebars # also build the patched titlebar plugin
+#
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+
+copy() {
+  local src="$REPO/$1" dest="$2"
+  if [[ -e $dest || -L $dest ]]; then
+    if diff -rq "$src" "$dest" >/dev/null 2>&1; then
+      printf '  ok       %s\n' "$dest"
+      return
+    fi
+    mv "$dest" "$dest.bak.$STAMP"
+    printf '  backup   %s -> %s.bak.%s\n' "$dest" "$dest" "$STAMP"
+  fi
+  mkdir -p "$(dirname "$dest")"
+  cp -a "$src" "$dest"
+  printf '  copied   %s\n' "$dest"
+}
+
+printf 'Restoring Omarchy setup from %s\n' "$REPO"
+
+# Hyprland: only the two files that differ from Omarchy's defaults.
+copy hypr/hyprland.lua   "$HOME/.config/hypr/hyprland.lua"
+copy hypr/looknfeel.lua  "$HOME/.config/hypr/looknfeel.lua"
+
+# Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
+copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
+copy omarchy/extensions/omarchy-menu.jsonc       "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+for plugin in lock bar dock idle; do
+  copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
+done
+copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
+copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
+copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
+copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
+copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
+
+# Screensaver scripts.
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper; do
+  copy "bin/$script" "$HOME/.local/bin/$script"
+done
+
+# Prompt and editor.
+copy starship/starship.toml "$HOME/.config/starship.toml"
+copy nvim                   "$HOME/.config/nvim"
+
+# Claude Code (file by file; never the whole ~/.claude).
+copy claude/CLAUDE.md               "$HOME/.claude/CLAUDE.md"
+copy claude/skills/lavish/SKILL.md  "$HOME/.claude/skills/lavish/SKILL.md"
+if [[ -f $HOME/.claude/settings.json ]] && command -v jq >/dev/null; then
+  # Merge the tracked keys instead of replacing a file Claude Code keeps writing.
+  tmp="$(mktemp)"
+  jq -s '.[0] * .[1]' "$HOME/.claude/settings.json" "$REPO/claude/settings.json" > "$tmp" && mv "$tmp" "$HOME/.claude/settings.json"
+  printf '  merged   %s\n' "$HOME/.claude/settings.json"
+else
+  copy claude/settings.json "$HOME/.claude/settings.json"
+fi
+
+printf '\nApplying settings that are not files\n'
+
+# Use the cloned plugins in place of Omarchy's own.
+for plugin in lock bar dock idle; do
+  omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
+done
+
+# Frosted windows and top bar.
+omarchy hyprland window transparency glassy >/dev/null && printf '  glassy   windows\n'
+omarchy bar background glassy >/dev/null && printf '  glassy   top bar\n'
+
+# GTK/libadwaita apps: no buttons in their own header bars (Hyprland draws them).
+gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:' && printf '  gtk      header-bar buttons off\n'
+
+# Wallpaper (also regenerates the screensaver art through the theme hook's script).
+omarchy theme bg set "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png" >/dev/null && printf '  wallpaper code-brackets\n'
+"$HOME/.local/bin/screensaver-art-from-wallpaper" && printf '  screensaver art regenerated\n'
+
+if [[ ${1:-} == "--titlebars" ]]; then
+  printf '\nBuilding the patched titlebar plugin\n'
+  "$REPO/titlebars/build.sh"
+fi
+
+printf '\nDone. Run `omarchy restart shell`, or log out and back in.\n'
+printf 'Chromium and its web apps: right-click the tab bar and tick "Use system title bar and borders".\n'

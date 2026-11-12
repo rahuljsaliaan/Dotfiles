@@ -1,0 +1,92 @@
+# Dotfiles — Omarchy
+
+The setup for the Omarchy (Arch + Hyprland) machine: a Tokyo Night "frosted
+glass" desktop with rounded windows, three monitors with one main screen, and
+the developer tools on top. The Zorin OS setup lives in [`../zorin`](../zorin).
+
+## Restore
+
+```sh
+git clone https://github.com/rahuljsaliaan/Dotfiles.git
+cd Dotfiles/omarchy
+./install.sh --titlebars    # configs, settings, and the patched titlebar plugin
+omarchy restart shell       # or log out and back in
+```
+
+`install.sh` **copies** rather than symlinks, because Omarchy's own tools write
+into these folders (plugin clones, `omarchy refresh`, theme switches, the shell
+saving `shell.json`). Anything it replaces is kept as `<file>.bak.<timestamp>`.
+Changes made on the machine have to be copied back here by hand.
+
+Two things it cannot do, because the apps own those settings:
+
+- **Chromium and its web apps** (Teams, Outlook, WhatsApp, …): right-click the
+  tab bar and tick *Use system title bar and borders*, so Hyprland draws the
+  title bar instead of Chromium's own buttons.
+- **Brave / Obsidian**: Brave's *Use system title bar and borders*, and
+  Obsidian's *Settings → Appearance → Window frame style → Native frame*.
+
+## Main screen
+
+Three monitors: the laptop (`eDP-1`), the middle BenQ on HDMI (`HDMI-A-1`) and
+the right BenQ on DisplayPort (`DP-2`). The middle one is the **main screen**,
+falling back to the laptop when undocked. Only the main screen gets the top
+bar, the dock, the lock-screen password box and the screensaver. The names
+live in `mainScreenNames` / `lockInputScreens` in the plugins and in the jq
+filter in `bin/omarchy-launch-screensaver-main`. Change them all together for
+different monitors.
+
+## What is here
+
+| Path | Goes to | What it does |
+|---|---|---|
+| `hypr/hyprland.lua` | `~/.config/hypr/` | Title-bar buttons: round, Linux order (minimize, maximize, close) top-right, faint at rest and full colour on hover |
+| `hypr/looknfeel.lua` | `~/.config/hypr/` | 10px rounded windows; soft translucent blue→purple focused border; Tokyo Night title-bar button colours and bold symbols; loads the patched titlebar plugin; blurs the dock |
+| `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout, glassy bar, dock pins (Chromium, Outlook, Teams, foot), idle timings (screensaver 2½ min, lock 5 min) |
+| `omarchy/extensions/omarchy-menu.jsonc` | `~/.config/omarchy/extensions/` | Menu → Screensaver runs the main-screen-only launcher |
+| `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: password box only on the main screen; re-blanks a monitor that reconnects while the screens are asleep |
+| `omarchy/plugins/rahulj.bar` | `~/.config/omarchy/plugins/` | Top bar on the main screen only |
+| `omarchy/plugins/rahulj.dock` | `~/.config/omarchy/plugins/` | Dock on the main screen only; auto-hides on tiled workspaces; frosted rounded glass plate; accent dot under running apps; lifted off the edge |
+| `omarchy/plugins/rahulj.idle` | `~/.config/omarchy/plugins/` | Idle timer that starts the main-screen-only screensaver |
+| `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, notifications and prompts use the soft gradient border |
+| `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The `</>` wallpaper |
+| `omarchy/branding/` | `~/.config/omarchy/branding/` | Screensaver art, and the clean (glow-free) `</>` it is traced from |
+| `omarchy/hooks/theme-set.d/screensaver-art` | `~/.config/omarchy/hooks/theme-set.d/` | Re-traces the screensaver art from the wallpaper on every theme switch |
+| `bin/omarchy-launch-screensaver-main` | `~/.local/bin/` | Omarchy's screensaver launcher, limited to the main screen |
+| `bin/omarchy-screensaver-tokyo` | `~/.local/bin/` | The screensaver: navy background, 14 calm text effects, theme blue→purple finish |
+| `bin/screensaver-art-from-wallpaper` | `~/.local/bin/` | Traces the wallpaper (or its clean source) into braille art |
+| `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
+| `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt; the Python segment only appears inside an active virtualenv |
+| `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
+| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, and the tracked `settings.json` keys (attribution off, dark theme) |
+
+### Plain settings `install.sh` applies
+
+- `omarchy hyprland window transparency glassy`: frosted terminal and windows
+- `omarchy bar background glassy`: frosted top bar
+- `gsettings … button-layout 'appmenu:'`: no close buttons in GTK apps' own header bars
+- `omarchy theme bg set …code-brackets.png`: the wallpaper
+
+## The patched titlebar plugin
+
+Omarchy's titlebar plugin can reveal a button's icon on hover, but not change
+its background. `titlebars/button-rest-opacity.patch` adds one option,
+`plugin:hyprbars:button_rest_opacity`, so the buttons draw faint at rest and in
+full colour on hover. `hypr/looknfeel.lua` loads
+`~/.local/lib/omarchy-hyprland-titlebars/titlebars.so` instead of Omarchy's copy
+whenever it exists.
+
+**After every Hyprland update, run `titlebars/build.sh`.** A plugin built
+against older headers fails to load. To go back to Omarchy's plugin, delete
+that `.so` and run `hyprctl reload`; the buttons then stay full colour at rest.
+
+## Not tracked here
+
+- **tmux**: Omarchy's default `~/.config/tmux/tmux.conf`, unchanged. The
+  `tdl` dev layout is an Omarchy built-in (run it inside tmux).
+- **Hyprland `bindings.lua`, `monitors.lua`, `input.lua`, `autostart.lua`**:
+  Omarchy's defaults, unchanged.
+- **Claude Code's full `settings.json`**: Claude Code rewrites it at runtime;
+  only the keys above are tracked, and merged in rather than replaced.
+- **Omarchy, Superwhisper and diagnose-crash skills**: links to files those
+  packages install.
