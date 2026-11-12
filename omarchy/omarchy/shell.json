@@ -3,39 +3,6 @@
     "background": "glassy",
     "id": "rahulj.bar",
     "layout": {
-      "left": [
-        {
-          "id": "omarchy.menu"
-        },
-        {
-          "id": "omarchy.workspaces"
-        },
-        {
-          "id": "rahulj.island-gap"
-        },
-        {
-          "id": "io.github.sanchokusika.pulse",
-          "style": "bars",
-          "metrics": [
-            "cpu",
-            "mem",
-            "gpu",
-            "temp"
-          ],
-          "metricOrder": [
-            "cpu",
-            "mem",
-            "gpu",
-            "temp"
-          ],
-          "metric": "cpu"
-        }
-      ],
-      "centerBegin": [
-        {
-          "id": "omarchy.indicators"
-        }
-      ],
       "center": [
         {
           "id": "omarchy.weather"
@@ -67,14 +34,51 @@
             {
               "name": "London",
               "zone": "Europe/London"
+            },
+            {
+              "lat": 52.52437,
+              "lon": 13.41053,
+              "name": "Berlin",
+              "region": "State of Berlin, DE",
+              "zone": "Europe/Berlin"
             }
           ],
           "id": "omarchy.elsewhen"
         }
       ],
+      "centerBegin": [
+        {
+          "id": "omarchy.indicators"
+        }
+      ],
       "centerEnd": [
         {
           "id": "omarchy.system-update"
+        }
+      ],
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        },
+        {
+          "id": "rahulj.island-gap"
+        },
+        {
+          "id": "io.github.sanchokusika.pulse",
+          "metric": "cpu",
+          "metricOrder": [
+            "cpu",
+            "mem",
+            "gpu",
+            "temp"
+          ],
+          "metrics": [
+            "cpu"
+          ],
+          "style": "pulse"
         }
       ],
       "right": [
@@ -85,11 +89,11 @@
           "id": "omarchy.agents"
         },
         {
+          "barLabel": "Worst",
           "id": "jim.aiusage",
           "providers": [
             "claude"
-          ],
-          "barLabel": "Worst"
+          ]
         },
         {
           "id": "rahulj.island-gap"
