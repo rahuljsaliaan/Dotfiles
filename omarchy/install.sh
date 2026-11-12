@@ -54,8 +54,8 @@ copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarc
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
 
-# Screensaver scripts, and the floating tmux prompt.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt; do
+# Screensaver scripts, the floating tmux prompt, and browser-here.
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 
