@@ -59,6 +59,9 @@ for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensa
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 
+# Teams for Linux launcher, run natively on Wayland (see the file's comment).
+copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
+
 # Prompt, terminal multiplexer and editor.
 copy starship/starship.toml "$HOME/.config/starship.toml"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
@@ -79,6 +82,16 @@ else
 fi
 
 printf '\nApplying settings that are not files\n'
+
+# Microsoft Teams as a desktop app (teams-for-linux, prebuilt from the
+# project's GitHub releases) instead of the Chromium web app: it keeps running
+# in the tray when its window is closed, so notifications still arrive.
+if omarchy pkg aur add teams-for-linux-bin >/dev/null; then
+  printf '  ok       teams-for-linux-bin\n'
+fi
+if [[ -f "$HOME/.local/share/applications/Microsoft Teams.desktop" ]]; then
+  omarchy-webapp-remove "Microsoft Teams" >/dev/null && printf '  removed  Microsoft Teams web app\n'
+fi
 
 # Community bar widgets, from their own repos (reviewed before adding):
 #   Net Speed Colour: live up/down speed beside the network icon
