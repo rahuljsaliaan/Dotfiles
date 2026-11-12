@@ -75,6 +75,19 @@ fi
 
 printf '\nApplying settings that are not files\n'
 
+# Community bar widgets, from their own repos (reviewed before adding):
+#   Net Speed Colour: live up/down speed beside the network icon
+#   Pulse: CPU, memory, disk and network activity in one widget
+for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git \
+             io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git; do
+  id="${entry%%=*}" url="${entry#*=}"
+  if [[ -d $HOME/.config/omarchy/plugins/$id ]]; then
+    printf '  ok       %s\n' "$id"
+  else
+    omarchy plugin add "$url" --enable --yes >/dev/null && printf '  added    %s\n' "$id"
+  fi
+done
+
 # Use the cloned plugins in place of Omarchy's own.
 for plugin in lock bar dock idle; do
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
