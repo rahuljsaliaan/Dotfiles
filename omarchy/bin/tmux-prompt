@@ -3,40 +3,76 @@
 # Floating input for tmux, shown in a display-popup (see ~/.config/tmux/tmux.conf)
 # instead of tmux's command prompt. tmux's prompt takes over the whole status
 # line while you type, hiding the session name; a popup leaves the status line
-# alone. fzf is the input box: Enter accepts, Esc cancels.
+# alone. fzf is the input box. Esc cancels everywhere.
 #
 #   tmux-prompt window    rename the current window   (prefix , / prefix r)
 #   tmux-prompt session   rename the current session  (prefix $ / prefix R)
-#   tmux-prompt command   run a tmux command          (prefix :)
+#   tmux-prompt command   command palette             (prefix :)
+#
+# The command palette lists every tmux command (name, alias, usage) and
+# filters it by name or alias as you type:
+#   Tab    put the highlighted command in the input, to add options to it
+#   Enter  run what was typed if it is a whole command (or has options),
+#          otherwise run the highlighted command
 #
 set -uo pipefail
 
-mode="${1:-command}"
-case $mode in
-  window)  initial="$(tmux display-message -p '#W')" ;;
-  session) initial="$(tmux display-message -p '#S')" ;;
-  command) initial="" ;;
+# Colours are palette names, so they follow the terminal theme.
+COLORS='bg:-1,bg+:black,gutter:-1,fg:white,fg+:bright-white,hl:magenta,hl+:magenta,prompt:blue,pointer:blue,query:bright-white:bold,disabled:bright-white,header:bright-black,info:bright-black'
+
+run_tmux_command() {
+  # Parsed exactly as tmux parses a command line; any error is shown briefly.
+  local err
+  err="$(printf '%s\n' "$1" | tmux source-file - 2>&1)"
+  [[ -n $err ]] && tmux display-message -- "$err"
+}
+
+rename() { # rename <window|session>
+  local initial out value
+  if [[ $1 == window ]]; then initial="$(tmux display-message -p '#W')"; else initial="$(tmux display-message -p '#S')"; fi
+  # An input line, not a picker: no items, so fzf shows only the query.
+  out="$(fzf --print-query --query "$initial" --prompt '❯ ' \
+    --layout reverse --height 100% --no-info --no-separator --no-scrollbar \
+    --pointer '' --marker '' --border none --color "$COLORS" < /dev/null)"
+  [[ $? -eq 130 ]] && return 0
+  value="$(printf '%s\n' "$out" | head -n 1)"
+  [[ -z ${value//[[:space:]]/} ]] && return 0
+  if [[ $1 == window ]]; then tmux rename-window -- "$value"; else tmux rename-session -- "$value"; fi
+}
+
+palette() {
+  local commands out rc query selected first
+  commands="$(tmux list-commands -F '#{command_list_name}|#{command_list_alias}|#{command_list_usage}')"
+
+  out="$(printf '%s\n' "$commands" \
+    | awk -F'|' '{ printf "%-22s\t%-12s\t%s\n", $1, $2, $3 }' \
+    | fzf --print-query --prompt '❯ ' --layout reverse --height 100% \
+        --delimiter '\t' --nth 1,2 --tabstop 1 --no-separator --no-scrollbar \
+        --info inline-right --pointer '▌' --marker '' --border none \
+        --header 'Tab: complete · Enter: run · Esc: cancel' --header-first \
+        --color "$COLORS" \
+        --bind 'tab:transform-query(printf "%s " $(printf "%s" {1}))')"
+  rc=$?
+  [[ $rc -eq 130 ]] && return 0
+
+  query="$(printf '%s\n' "$out" | sed -n 1p)"
+  selected="$(printf '%s\n' "$out" | sed -n 2p | cut -f1 | tr -d '[:space:]')"
+  first="${query%% *}"
+
+  # A whole command name or alias, or anything with options, runs as typed.
+  if [[ -n $query && ( $query == *" "* ) ]] \
+     || { [[ -n $first ]] && printf '%s\n' "$commands" | awk -F'|' -v w="$first" '$1 == w || $2 == w { f = 1 } END { exit !f }'; }; then
+    run_tmux_command "$query"
+  elif [[ -n $selected ]]; then
+    run_tmux_command "$selected"
+  elif [[ -n ${query//[[:space:]]/} ]]; then
+    run_tmux_command "$query"   # unknown: let tmux report it
+  fi
+}
+
+case "${1:-command}" in
+  window)  rename window ;;
+  session) rename session ;;
+  command) palette ;;
   *) echo "usage: tmux-prompt window|session|command" >&2; exit 2 ;;
-esac
-
-# An input line, not a picker: no items, so fzf shows only the query. Colours
-# are palette names, so they follow the terminal theme.
-out="$(fzf --print-query --query "$initial" --prompt '❯ ' \
-  --layout reverse --height 100% --no-info --no-separator --no-scrollbar \
-  --pointer '' --marker '' --border none \
-  --color 'bg:-1,bg+:-1,gutter:-1,prompt:blue,query:bright-white:bold,disabled:bright-white' \
-  < /dev/null)"
-[[ $? -eq 130 ]] && exit 0   # Esc / Ctrl-C: cancelled, change nothing
-value="$(printf '%s\n' "$out" | head -n 1)"
-[[ -z ${value//[[:space:]]/} ]] && exit 0
-
-case $mode in
-  window)  tmux rename-window -- "$value" ;;
-  session) tmux rename-session -- "$value" ;;
-  command)
-    # Parsed exactly as tmux parses a command line; any error is shown briefly.
-    if ! err="$(printf '%s\n' "$value" | tmux source-file - 2>&1)" || [[ -n $err ]]; then
-      [[ -n $err ]] && tmux display-message -- "$err"
-    fi
-    ;;
 esac
