@@ -57,12 +57,19 @@
           "id": "omarchy.workspaces"
         },
         {
-          "id": "io.github.sanchokusika.pulse"
+          "id": "io.github.sanchokusika.pulse",
+          "style": "bars"
         }
       ],
       "right": [
         {
           "id": "omarchy.tray"
+        },
+        {
+          "id": "jim.aiusage",
+          "providers": [
+            "claude"
+          ]
         },
         {
           "id": "omarchy.keyboard-layout"

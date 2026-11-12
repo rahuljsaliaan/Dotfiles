@@ -81,8 +81,10 @@ printf '\nApplying settings that are not files\n'
 # Community bar widgets, from their own repos (reviewed before adding):
 #   Net Speed Colour: live up/down speed beside the network icon
 #   Pulse: CPU, memory, disk and network activity in one widget
+#   AI Usage: Claude subscription session and weekly limits
 for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git \
-             io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git; do
+             io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
+             jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git; do
   id="${entry%%=*}" url="${entry#*=}"
   if [[ -d $HOME/.config/omarchy/plugins/$id ]]; then
     printf '  ok       %s\n' "$id"
