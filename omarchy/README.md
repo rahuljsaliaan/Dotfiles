@@ -47,11 +47,11 @@ together for different monitors.
 | `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout, glassy bar, dock pins (Chromium, Outlook, Teams, foot), idle timings (screensaver 2½ min, lock 5 min) |
 | *(installed from git)* | `~/.config/omarchy/plugins/` | Community bar widgets: [Net Speed Colour](https://github.com/brightwalker25/omarchy-net-speed) (live up/down speed beside the network icon) and [Pulse](https://github.com/SanchoKusika/omarchy-pulse) (CPU, memory, disk and network in one widget). `install.sh` adds them with `omarchy plugin add`; their place in the bar is in `shell.json` |
 | `omarchy/extensions/omarchy-menu.jsonc` | `~/.config/omarchy/extensions/` | Menu → Screensaver runs the main-screen-only launcher |
-| `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: password box only on the main screen; re-blanks a monitor that reconnects while the screens are asleep |
+| `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: clock, date and password box on the main screen only, a frosted rounded field with the window-border gradient; re-blanks a monitor that reconnects while the screens are asleep |
 | `omarchy/plugins/rahulj.bar` | `~/.config/omarchy/plugins/` | Top bar on the main screen only |
 | `omarchy/plugins/rahulj.dock` | `~/.config/omarchy/plugins/` | Dock on the main screen only; auto-hides on tiled workspaces; frosted rounded glass plate; accent dot under running apps; lifted off the edge |
 | `omarchy/plugins/rahulj.idle` | `~/.config/omarchy/plugins/` | Idle timer that starts the main-screen-only screensaver |
-| `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, notifications and prompts use the soft gradient border |
+| `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, notifications, prompts and the lock field use the soft gradient border; the lock field is frosted glass |
 | `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The `</>` wallpaper |
 | `omarchy/branding/` | `~/.config/omarchy/branding/` | Screensaver art, and the clean (glow-free) `</>` it is traced from |
 | `omarchy/hooks/theme-set.d/screensaver-art` | `~/.config/omarchy/hooks/theme-set.d/` | Re-traces the screensaver art from the wallpaper on every theme switch |

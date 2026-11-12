@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import Quickshell
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
@@ -135,6 +136,48 @@ Item {
       contrast: -0.08
     }
 
+    // A gentle dim over the blurred wallpaper, so the glass field and the clock
+    // read clearly against the wallpaper's glow.
+    Rectangle {
+      anchors.fill: parent
+      color: Commons.Color.background
+      opacity: 0.35
+    }
+
+    SystemClock {
+      id: clock
+      precision: SystemClock.Minutes
+    }
+
+    // Time and date above the field, on the screen that shows the field.
+    Column {
+      visible: root.showInput
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.bottom: inputField.top
+      anchors.bottomMargin: Math.round(root.fieldHeight * 0.75)
+      spacing: Math.round(Style.font.heading * 0.4)
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        textFormat: Text.PlainText
+        text: Qt.formatTime(clock.date, "HH:mm")
+        color: Commons.Color.lock.text
+        font.family: Style.font.family
+        font.pixelSize: Math.round(Style.font.heading * 6)
+        font.weight: Font.ExtraBold
+      }
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        textFormat: Text.PlainText
+        text: Qt.formatDate(clock.date, "dddd, d MMMM")
+        color: Commons.Color.lock.placeholder
+        font.family: Style.font.family
+        font.pixelSize: Math.round(Style.font.heading * 1.25)
+        font.weight: Font.DemiBold
+      }
+    }
+
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true
@@ -150,7 +193,9 @@ Item {
       opacity: root.showInput ? 1 : 0
       color: Commons.Color.lock.background
       borderSpec: root.inputBorderSpec
-      radius: Style.cornerRadius
+      // Rounded like the windows and the dock rather than the shell's square
+      // default, so the field matches the rest of the desktop.
+      radius: 14
       clip: true
 
       TextInput {
