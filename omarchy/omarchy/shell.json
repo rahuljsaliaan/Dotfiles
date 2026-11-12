@@ -96,6 +96,9 @@
           "id": "omarchy.monitor"
         },
         {
+          "id": "rahulj.notification-bell"
+        },
+        {
           "id": "omarchy.power"
         }
       ],
@@ -110,12 +113,14 @@
   "cloneSourceRestores": [
     "rahulj.lock",
     "rahulj.dock",
-    "rahulj.idle"
+    "rahulj.idle",
+    "rahulj.notifications"
   ],
   "disabledPlugins": [
     "omarchy.lock",
     "omarchy.dock",
-    "omarchy.idle"
+    "omarchy.idle",
+    "omarchy.notifications"
   ],
   "dock": {
     "pinned": [
@@ -142,6 +147,9 @@
     },
     {
       "id": "timsonner.nitty-griddy"
+    },
+    {
+      "id": "rahulj.notifications"
     }
   ],
   "version": 1

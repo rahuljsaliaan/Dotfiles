@@ -52,8 +52,10 @@ together for different monitors.
 | `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: clock, date and password box on the main screen only, a frosted rounded field with the window-border gradient; re-blanks a monitor that reconnects while the screens are asleep |
 | `omarchy/plugins/rahulj.bar` | `~/.config/omarchy/plugins/` | Top bar on the main screen only |
 | `omarchy/plugins/rahulj.dock` | `~/.config/omarchy/plugins/` | Dock on the main screen only; auto-hides on tiled workspaces; frosted rounded glass plate; accent dot under running apps; lifted off the edge |
+| `omarchy/plugins/rahulj.notifications` | `~/.config/omarchy/plugins/` | Notifications as "elevated glass" cards: lighter than any window, a fine rim, 14px corners and a deep shadow, with the app name beside the time and a small pointer up to the bar's bell. Shown on the main screen, for 12s (8s for low priority). Counts unread notifications, including ones silenced by Do Not Disturb |
+| `omarchy/plugins/rahulj.notification-bell` | `~/.config/omarchy/plugins/` | A bell in the bar with a purple unread dot; click opens the notification history |
 | `omarchy/plugins/rahulj.idle` | `~/.config/omarchy/plugins/` | Idle timer that starts the main-screen-only screensaver |
-| `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, prompts and the lock field use the soft gradient border, and the lock field is frosted glass; notifications are set apart as a raised lighter card with a purple accent stripe down the left edge |
+| `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, prompts and the lock field use the soft gradient border, and the lock field is frosted glass; notifications use a lighter glass surface with a fine light rim |
 | `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The `</>` wallpaper |
 | `omarchy/branding/` | `~/.config/omarchy/branding/` | Screensaver art, and the clean (glow-free) `</>` it is traced from |
 | `omarchy/hooks/theme-set.d/screensaver-art` | `~/.config/omarchy/hooks/theme-set.d/` | Re-traces the screensaver art from the wallpaper on every theme switch |
