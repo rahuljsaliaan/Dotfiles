@@ -66,9 +66,9 @@ together for different monitors.
 | `bin/tmux-prompt` | `~/.local/bin/` | The floating tmux input box (fzf in a tmux popup): renames pre-fill the old name; `:` is a command palette listing every tmux command, filtered as you type (Tab completes, Enter runs, Esc cancels) |
 | `bin/screensaver-art-from-wallpaper` | `~/.local/bin/` | Traces the wallpaper (or its clean source) into braille art |
 | `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
-| `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt in semi-bold (no segment asks for bold, so foot uses its SemiBold regular font); the Python segment only appears inside an active virtualenv |
+| `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt in bold (drawn in JetBrains Mono Bold, see `foot.ini`); the Python segment only appears inside an active virtualenv |
 | `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with the status bar at the top, in line with the Omarchy bar. Renaming a window or session and the `:` command line open in a floating rounded box (`bin/tmux-prompt`) instead of tmux's prompt, which took over the status line and hid the session name while typing |
-| `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono ExtraBold (regular text is SemiBold) so the prompt's bold text stands out |
+| `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono Bold, one step heavier than the SemiBold regular text, so the prompt's bold text stands out |
 | `applications/teams-for-linux.desktop` | `~/.local/share/applications/` | Launcher override for Teams for Linux that runs it natively on Wayland, not through the package's forced XWayland, so it is sharp on the scaled laptop screen |
 | `teams-for-linux/config.json` | `~/.config/teams-for-linux/` | Teams notifications made by the app rather than the web page, so clicking one brings the window back from the tray, focuses it and opens the conversation |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
