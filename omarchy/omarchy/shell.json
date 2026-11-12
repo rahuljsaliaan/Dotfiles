@@ -57,6 +57,9 @@
           "id": "omarchy.workspaces"
         },
         {
+          "id": "jcmarin.qrg"
+        },
+        {
           "id": "io.github.sanchokusika.pulse",
           "style": "bars"
         }
