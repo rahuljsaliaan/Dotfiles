@@ -73,6 +73,7 @@ copy starship/starship.toml "$HOME/.config/starship.toml"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy bash/.bashrc           "$HOME/.bashrc"
 copy foot/foot.ini          "$HOME/.config/foot/foot.ini"
+copy mise/config.toml       "$HOME/.config/mise/config.toml"
 copy nvim                   "$HOME/.config/nvim"
 
 # Claude Code (file by file; never the whole ~/.claude).
@@ -92,6 +93,9 @@ printf '\nApplying settings that are not files\n'
 
 # Restart the portal service so the Nautilus file chooser takes effect.
 systemctl --user daemon-reload && systemctl --user restart xdg-desktop-portal && printf '  restarted xdg-desktop-portal (Nautilus file chooser)\n'
+
+# Tools from mise/config.toml (pnpm), next to Omarchy's own mise tools.
+mise install >/dev/null 2>&1 && printf '  ok       mise tools (pnpm)\n'
 
 # Microsoft Teams as a desktop app (teams-for-linux, prebuilt from the
 # project's GitHub releases) instead of the Chromium web app: it keeps running
