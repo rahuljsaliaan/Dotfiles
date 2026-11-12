@@ -86,6 +86,8 @@ Item {
   property color barForeground: useTransparentForeground ? transparentForeground : themeForeground
   property bool foregroundAnimationEnabled: true
   property color background: Commons.Color.bar.background
+  // Fill of the personal glass islands (see ModuleSlot's islandPiece).
+  readonly property color islandFill: Qt.tint(Commons.Color.background, Qt.rgba(Commons.Color.bar.text.r, Commons.Color.bar.text.g, Commons.Color.bar.text.b, 0.09))
   readonly property color glassBackground: Qt.rgba(background.r, background.g, background.b, Math.min(background.a, 0.35))
   property color urgent: Commons.Color.bar.active
 
@@ -1961,7 +1963,8 @@ Item {
           window: barWindow
           pool: horizontalPool
           anchors.left: parent.left
-          anchors.leftMargin: Style.space(8)
+          // Room for the end island's pill, which reaches past its widgets.
+          anchors.leftMargin: Style.space(14)
           anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -1970,7 +1973,8 @@ Item {
           pool: horizontalPool
           id: rightModules
           anchors.right: parent.right
-          anchors.rightMargin: Style.space(8)
+          // Room for the end island's pill, which reaches past its widgets.
+          anchors.rightMargin: Style.space(14)
           anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -2324,7 +2328,12 @@ Item {
     property bool active: true
     property bool besideRight: false
 
-    implicitWidth: root.vertical ? root.barSize : beginList.width + centerBox.width + endList.width
+    // Personal glass islands: room between the center box and a section beside
+    // it, the same as an island gap, so their pills don't run into each other.
+    readonly property real beginGap: !root.vertical && beginList.width >= 1 && centerBox.width >= 1 ? Style.space(20) : 0
+    readonly property real endGap: !root.vertical && endList.width >= 1 && centerBox.width >= 1 ? Style.space(20) : 0
+
+    implicitWidth: root.vertical ? root.barSize : beginList.width + beginGap + centerBox.width + endGap + endList.width
     implicitHeight: root.vertical ? beginList.height + centerBox.height + endList.height : root.barSize
 
     // Both placements sit at the bar surface's origin or anchor off its edge,
@@ -2351,7 +2360,7 @@ Item {
       pool: sections.pool
       region: "centerBegin"
       fixedEdge: "end"
-      x: root.vertical ? Math.round((sections.width - width) / 2) : centerBox.x - width
+      x: root.vertical ? Math.round((sections.width - width) / 2) : centerBox.x - width - sections.beginGap
       y: root.vertical ? centerBox.y - height : Math.round((sections.height - height) / 2)
     }
 
@@ -2362,7 +2371,7 @@ Item {
       pool: sections.pool
       region: "centerEnd"
       fixedEdge: sections.besideRight ? "end" : "start"
-      x: root.vertical ? Math.round((sections.width - width) / 2) : centerBox.x + centerBox.width
+      x: root.vertical ? Math.round((sections.width - width) / 2) : centerBox.x + centerBox.width + sections.endGap
       y: root.vertical ? centerBox.y + centerBox.height : Math.round((sections.height - height) / 2)
     }
 
@@ -2373,7 +2382,7 @@ Item {
       active: sections.active
       fixedEdge: sections.besideRight ? "end" : "center"
       crossSize: root.vertical ? sections.width : sections.height
-      x: root.vertical ? 0 : (sections.besideRight ? beginList.width : Math.round((sections.width - width) / 2))
+      x: root.vertical ? 0 : (sections.besideRight ? beginList.width + sections.beginGap : Math.round((sections.width - width) / 2))
       y: root.vertical ? Math.round((sections.height - height) / 2) : 0
     }
   }
@@ -3036,9 +3045,22 @@ Item {
         y: Math.round((islandPiece.height - height) / 2)
         x: islandPiece.opensIsland ? 0 : -r
         width: islandPiece.width + (islandPiece.opensIsland ? 0 : r) + (islandPiece.closesIsland ? 0 : r)
-        color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.07)
+        // The glass of the dock's plate and the notification cards: the theme
+        // background lifted a little toward the text, partly see-through over
+        // the frosted bar, a faint outline and a soft sheen along the top.
+        color: Qt.rgba(root.islandFill.r, root.islandFill.g, root.islandFill.b, 0.72)
         border.width: 1
-        border.color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.09)
+        border.color: Qt.rgba(Commons.Color.bar.text.r, Commons.Color.bar.text.g, Commons.Color.bar.text.b, 0.13)
+
+        Rectangle {
+          anchors.fill: parent
+          anchors.margins: 1
+          radius: parent.radius - 1
+          gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.06) }
+            GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, 0.0) }
+          }
+        }
       }
     }
 
