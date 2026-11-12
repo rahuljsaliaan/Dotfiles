@@ -35,9 +35,10 @@ copy() {
 
 printf 'Restoring Omarchy setup from %s\n' "$REPO"
 
-# Hyprland: only the two files that differ from Omarchy's defaults.
+# Hyprland: only the files that differ from Omarchy's defaults.
 copy hypr/hyprland.lua   "$HOME/.config/hypr/hyprland.lua"
 copy hypr/looknfeel.lua  "$HOME/.config/hypr/looknfeel.lua"
+copy hypr/monitors.lua   "$HOME/.config/hypr/monitors.lua"
 
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
