@@ -86,7 +86,7 @@ format = "[$symbol$context ]($style)"
 min_time = 100
 show_milliseconds = true
 format = "[ $duration ]($style)"
-style = "fg:#c0caf5 bg:none"
+style = "fg:#c0caf5 bg:none bold"
 
 # ========================
 # TIME
@@ -95,7 +95,7 @@ style = "fg:#c0caf5 bg:none"
 disabled = false
 time_format = "%H:%M"
 format = "[ $time ]($style)"
-style = "fg:#c0caf5 bg:none"
+style = "fg:#c0caf5 bg:none bold"
 
 # ========================
 # CHARACTER

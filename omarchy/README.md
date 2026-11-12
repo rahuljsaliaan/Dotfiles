@@ -61,6 +61,7 @@ together for different monitors.
 | `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
 | `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt; the Python segment only appears inside an active virtualenv |
 | `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with the bar at the bottom, so the command line opens there like Neovim's, and a styled command bar (`❯` prompt, labelled rename prompts) instead of plain text over the session name |
+| `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono ExtraBold (regular text is SemiBold) so the prompt's bold text stands out |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
 | `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
 | `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, and the tracked `settings.json` keys (attribution off, dark theme) |
