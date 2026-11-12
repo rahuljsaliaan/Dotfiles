@@ -73,7 +73,7 @@ together for different monitors.
 | `teams-for-linux/config.json` | `~/.config/teams-for-linux/` | Teams notifications made by the app rather than the web page, so clicking one brings the window back from the tray, focuses it and opens the conversation |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
 | `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
-| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, and the tracked `settings.json` keys (attribution off, dark theme) |
+| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, the tracked `settings.json` keys (attribution off, dark theme, status line), and `statusline.sh`: two rows under the prompt in Tokyo Night colours, with the model and effort, context tokens, session cost and time, folder and branch, lines changed, then the 5-hour and weekly plan usage with when each resets, and the prompt-cache hit rate |
 
 ### Plain settings `install.sh` applies
 
