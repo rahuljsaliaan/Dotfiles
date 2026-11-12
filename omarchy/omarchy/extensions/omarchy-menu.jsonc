@@ -33,4 +33,8 @@
   // shows the raw id ("system.screensaver") instead of the label.
   "system.screensaver": {"icon":"󱄄","label":"Screensaver","action":"~/.local/bin/omarchy-launch-screensaver-main force"},
 
+  // Open the community bar widgets' panels from the menu, so searching finds
+  // them (the menu only searches its own entries and apps, not bar widgets).
+  "system.ai-usage": {"icon":"󰚩","label":"AI Usage","description":"Claude session and weekly limits","aliases":["ai","usage","claude usage","limits"],"action":"omarchy-shell jim.aiusage open"},
+  "learn.quick-reference": {"icon":"󰘥","label":"Quick Reference","description":"Searchable shortcut cheat sheets: Neovim, git, Docker, zsh","aliases":["guide","cheatsheet","shortcuts","qrg"],"action":"omarchy-shell qrg open"},
 }
