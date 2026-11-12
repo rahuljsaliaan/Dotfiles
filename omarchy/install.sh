@@ -73,6 +73,7 @@ copy nvim                   "$HOME/.config/nvim"
 # Claude Code (file by file; never the whole ~/.claude).
 copy claude/CLAUDE.md               "$HOME/.claude/CLAUDE.md"
 copy claude/skills/lavish/SKILL.md  "$HOME/.claude/skills/lavish/SKILL.md"
+copy claude/statusline.sh           "$HOME/.claude/statusline.sh"
 if [[ -f $HOME/.claude/settings.json ]] && command -v jq >/dev/null; then
   # Merge the tracked keys instead of replacing a file Claude Code keeps writing.
   tmp="$(mktemp)"
