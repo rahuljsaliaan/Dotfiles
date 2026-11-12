@@ -60,6 +60,7 @@ done
 # Prompt, terminal multiplexer and editor.
 copy starship/starship.toml "$HOME/.config/starship.toml"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
+copy bash/.bashrc           "$HOME/.bashrc"
 copy nvim                   "$HOME/.config/nvim"
 
 # Claude Code (file by file; never the whole ~/.claude).
