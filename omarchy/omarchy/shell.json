@@ -55,6 +55,9 @@
         },
         {
           "id": "omarchy.workspaces"
+        },
+        {
+          "id": "io.github.sanchokusika.pulse"
         }
       ],
       "right": [
@@ -69,6 +72,9 @@
         },
         {
           "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "brightwalker25.net-speed"
         },
         {
           "id": "omarchy.network"
