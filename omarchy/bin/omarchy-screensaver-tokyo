@@ -1,0 +1,50 @@
+#!/bin/bash
+# Omarchy's screensaver (omarchy-screensaver), refined to suit the Tokyo Night glass desktop:
+#   * Tokyo Night navy background instead of black;
+#   * only calm effects, picked at random each round;
+#   * every effect finishes in the theme's blue -> purple gradient.
+# Launched by ~/.local/bin/omarchy-launch-screensaver-main.
+
+EFFECTS=(beams sweep expand slide decrypt matrix middleout wipe highlight laseretch spotlights waves print scattered)
+
+theme_hex() {
+  sed -nE "s/^\s*$1\s*=\s*\"#([0-9a-fA-F]{6})\".*/\1/p" ~/.local/state/omarchy/current/theme/colors.toml 2>/dev/null | head -1
+}
+BG=$(theme_hex background); BG=${BG:-1a1b26}
+FROM=$(theme_hex blue); FROM=${FROM:-7aa2f7}
+TO=$(theme_hex magenta); TO=${TO:-ad8ee6}
+
+screensaver_in_focus() {
+  hyprctl activewindow -j | jq -e '.class == "org.omarchy.screensaver"' >/dev/null 2>&1
+}
+
+exit_screensaver() {
+  hyprctl eval 'hl.config({ cursor = { invisible = false } })' &>/dev/null || hyprctl keyword cursor:invisible false &>/dev/null || true
+  pkill -x ttfx 2>/dev/null
+  pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null
+  exit 0
+}
+
+trap exit_screensaver SIGINT SIGTERM SIGHUP SIGQUIT
+
+printf '\033]11;#%s\007' "$BG"
+stty -echo 2>/dev/null
+hyprctl eval 'hl.config({ cursor = { invisible = true } })' &>/dev/null || hyprctl keyword cursor:invisible true &>/dev/null
+
+tty=$(tty 2>/dev/null)
+deadline=$((SECONDS + 2))
+while ((SECONDS < deadline)) && [[ $(stty size 2>/dev/null) == "24 80" ]]; do sleep 0.02; done
+
+while true; do
+  effect=${EFFECTS[RANDOM % ${#EFFECTS[@]}]}
+  ttfx -i ~/.config/omarchy/branding/screensaver.txt \
+    --frame-rate 120 --canvas-width 0 --canvas-height 0 --reuse-canvas --anchor-canvas c --anchor-text c \
+    --no-eol --no-restore-cursor --terminal-background-color "$BG" \
+    "$effect" --final-gradient-stops "$FROM" "$TO" --final-gradient-direction diagonal &
+
+  while pgrep -t "${tty#/dev/}" -x ttfx >/dev/null; do
+    if read -n1 -t 1 || ! screensaver_in_focus; then
+      exit_screensaver
+    fi
+  done
+done

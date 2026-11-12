@@ -1,0 +1,17 @@
+#!/bin/bash
+# Turn the current wallpaper into the screensaver's ASCII art, in fine braille
+# dots. A clean source image (no glow) for a wallpaper can be kept at
+# ~/.config/omarchy/branding/screensaver-sources/<wallpaper name>.png; otherwise
+# the wallpaper itself is cropped to its subject and traced.
+set -euo pipefail
+bg=$(readlink -f ~/.local/state/omarchy/current/background)
+out=~/.config/omarchy/branding/screensaver.txt
+name=$(basename "${bg%.*}")
+source=~/.config/omarchy/branding/screensaver-sources/$name.png
+tmp=$(mktemp --suffix=.png); trap 'rm -f "$tmp"' EXIT
+if [[ -f $source ]]; then
+  magick "$source" -trim +repage "$tmp"
+else
+  magick "$bg" -fuzz 25% -trim +repage "$tmp"
+fi
+omarchy-transcode-ascii "$tmp" "$out" --invert --mode braille --width 70 --height 22 >/dev/null
