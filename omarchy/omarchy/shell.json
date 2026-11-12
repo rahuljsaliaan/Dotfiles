@@ -159,7 +159,8 @@
       "teams-for-linux",
       "foot"
     ],
-    "position": "bottom"
+    "position": "bottom",
+    "autohide": true
   },
   "idle": {
     "lock": 300,
