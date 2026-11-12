@@ -121,7 +121,7 @@
     "pinned": [
       "chromium",
       "Microsoft Outlook",
-      "Microsoft Teams",
+      "teams-for-linux",
       "foot"
     ],
     "position": "bottom"
@@ -139,6 +139,9 @@
     },
     {
       "id": "rahulj.idle"
+    },
+    {
+      "id": "timsonner.nitty-griddy"
     }
   ],
   "version": 1

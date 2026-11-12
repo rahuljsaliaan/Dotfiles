@@ -46,7 +46,7 @@ together for different monitors.
 | `hypr/bindings.lua` | `~/.config/hypr/` | Super+E opens the window overview (NittyGriddy); Esc closes it while open and passes through otherwise; Super+Tab / Super+Shift+Tab page its workspace strip while open and otherwise switch workspace exactly as Omarchy's do. The plugin's Super+W/Q and Super+Shift+number overrides are deliberately left out |
 | `hypr/gestures.lua` | `~/.config/hypr/` | Three-finger swipes (loaded from `hyprland.lua`): up opens the window overview, down closes it, left/right page its strip while open and otherwise switch to the previous/next workspace |
 | `hypr/monitors.lua` | `~/.config/hypr/` | Fixed monitor positions (laptop, middle BenQ, right BenQ), matched by model and serial, so a monitor that reconnects after sleep returns to its place |
-| `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout, glassy bar, dock pins (Chromium, Outlook, Teams, foot), idle timings (screensaver 2½ min, lock 5 min) |
+| `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout, glassy bar, dock pins (Chromium, Outlook, Teams for Linux, foot), idle timings (screensaver 2½ min, lock 5 min) |
 | *(installed from git)* | `~/.config/omarchy/plugins/` | Community bar widgets: [Net Speed Colour](https://github.com/brightwalker25/omarchy-net-speed) (live up/down speed beside the network icon), [Pulse](https://github.com/SanchoKusika/omarchy-pulse) (CPU, memory, disk and network in one widget), [AI Usage](https://github.com/whitecliffs/omarchy-aiusage) (Claude subscription session and weekly limits, tracking `claude`), [Quick Reference Guide](https://github.com/jcmarinn/Omarchy-QRG) (searchable cheat sheets for Neovim, git, Docker and zsh; add your own in `~/.config/qrg/guides/`) and [NittyGriddy](https://github.com/timsonner/nitty-griddy) (a window overview with live thumbnails and search). `install.sh` adds them with `omarchy plugin add`; their place in the bar is in `shell.json` |
 | `omarchy/extensions/omarchy-menu.jsonc` | `~/.config/omarchy/extensions/` | Menu → Screensaver runs the main-screen-only launcher; System → AI Usage, Learn → Quick Reference and Trigger → Window Overview open those plugins, so menu search finds them |
 | `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: clock, date and password box on the main screen only, a frosted rounded field with the window-border gradient; re-blanks a monitor that reconnects while the screens are asleep |
@@ -64,11 +64,14 @@ together for different monitors.
 | `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt; the Python segment only appears inside an active virtualenv |
 | `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with the bar at the bottom, so the command line opens there like Neovim's, and a styled command bar (`❯` prompt, labelled rename prompts) instead of plain text over the session name |
 | `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono ExtraBold (regular text is SemiBold) so the prompt's bold text stands out |
+| `applications/teams-for-linux.desktop` | `~/.local/share/applications/` | Launcher override for Teams for Linux that runs it natively on Wayland, not through the package's forced XWayland, so it is sharp on the scaled laptop screen |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
 | `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
 | `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, and the tracked `settings.json` keys (attribution off, dark theme) |
 
 ### Plain settings `install.sh` applies
+
+- `omarchy pkg aur add teams-for-linux-bin`, and removal of the Teams web app: Teams runs as a desktop app that stays in the tray when closed, so its notifications keep arriving
 
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
 - `omarchy bar background glassy`: frosted top bar
