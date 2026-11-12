@@ -64,16 +64,17 @@ together for different monitors.
 | `bin/omarchy-launch-screensaver-main` | `~/.local/bin/` | Omarchy's screensaver launcher, limited to the main screen |
 | `bin/omarchy-screensaver-tokyo` | `~/.local/bin/` | The screensaver: navy background, 14 calm text effects, theme blue→purple finish |
 | `bin/tmux-prompt` | `~/.local/bin/` | The floating tmux input box (fzf in a tmux popup): renames pre-fill the old name; `:` is a command palette listing every tmux command, filtered as you type (Tab completes, Enter runs, Esc cancels) |
+| `bin/browser-here` | `~/.local/bin/` | Opens a URL in the default browser on the same Hyprland workspace as the terminal it runs in: as a new tab in the browser window already there, or in a new window moved there. Claude Code uses it to open Lavish pages (see `claude/CLAUDE.md`) |
 | `bin/screensaver-art-from-wallpaper` | `~/.local/bin/` | Traces the wallpaper (or its clean source) into braille art |
 | `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
-| `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt in bold (drawn in JetBrains Mono Bold, see `foot.ini`); the Python segment only appears inside an active virtualenv |
+| `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night prompt: the folder on a rounded accent-blue pill (like the active workspace in the bar), then git, virtualenv, language versions and containers as coloured icons and text with dim │ dividers, in the plain style of the Claude Code status line; the last command's time on the right, no clock (the bar has one). The Python segment only appears inside an active virtualenv |
 | `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with the status bar at the top, in line with the Omarchy bar. Renaming a window or session and the `:` command line open in a floating rounded box (`bin/tmux-prompt`) instead of tmux's prompt, which took over the status line and hid the session name while typing |
 | `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono Bold, one step heavier than the SemiBold regular text, so the prompt's bold text stands out |
 | `applications/teams-for-linux.desktop` | `~/.local/share/applications/` | Launcher override for Teams for Linux that runs it natively on Wayland, not through the package's forced XWayland, so it is sharp on the scaled laptop screen |
 | `teams-for-linux/config.json` | `~/.config/teams-for-linux/` | Teams notifications made by the app rather than the web page, so clicking one brings the window back from the tray, focuses it and opens the conversation |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
 | `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
-| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, and the tracked `settings.json` keys (attribution off, dark theme) |
+| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md` (including: open Lavish pages with `browser-here` on Claude's own workspace), the Lavish skill, the tracked `settings.json` keys (attribution off, dark theme, status line), and `statusline.sh`: one short row under the prompt in Tokyo Night colours with the model and effort, context tokens and how full the window is, the session cost, and the 5-hour (with time to reset) and weekly plan usage; it trims itself to fit a narrow window |
 
 ### Plain settings `install.sh` applies
 

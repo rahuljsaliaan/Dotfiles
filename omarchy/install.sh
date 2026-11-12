@@ -54,8 +54,8 @@ copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarc
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
 
-# Screensaver scripts, and the floating tmux prompt.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt; do
+# Screensaver scripts, the floating tmux prompt, and browser-here.
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 
@@ -73,6 +73,7 @@ copy nvim                   "$HOME/.config/nvim"
 # Claude Code (file by file; never the whole ~/.claude).
 copy claude/CLAUDE.md               "$HOME/.claude/CLAUDE.md"
 copy claude/skills/lavish/SKILL.md  "$HOME/.claude/skills/lavish/SKILL.md"
+copy claude/statusline.sh           "$HOME/.claude/statusline.sh"
 if [[ -f $HOME/.claude/settings.json ]] && command -v jq >/dev/null; then
   # Merge the tracked keys instead of replacing a file Claude Code keeps writing.
   tmp="$(mktemp)"
