@@ -2600,6 +2600,38 @@ Item {
     property var rowMemo: ({})
     readonly property var listRows: BarModel.sectionRows(keys, root.sectionSpacers(region, window), rowMemo)
 
+    // Personal "glass islands": runs of widgets between island gaps
+    // (rahulj.island-gap) sit on one rounded glass pill, drawn by their slots.
+    // Each slot reports its length so hidden widgets (an empty indicators
+    // area, a hidden keyboard layout) are skipped when finding a run's ends.
+    readonly property bool islands: !root.vertical && region !== "tray"
+    property var slotLengths: ({})
+    function reportLength(key, length) {
+      var visible = length >= 1
+      if (!!slotLengths[key] === visible) return
+      var next = {}
+      for (var k in slotLengths) next[k] = slotLengths[k]
+      next[key] = visible
+      slotLengths = next
+    }
+    function isGap(key) {
+      var entry = root.layoutWidgets.entries[key]
+      return !!entry && root.entryId(entry) === "rahulj.island-gap"
+    }
+    function islandPos(key) {
+      if (!islands || isGap(key) || !slotLengths[key]) return "none"
+      var i = keys.indexOf(key)
+      function neighbour(step) {
+        for (var j = i + step; j >= 0 && j < keys.length; j += step) {
+          if (isGap(keys[j])) return false
+          if (slotLengths[keys[j]]) return true
+        }
+        return false
+      }
+      var before = neighbour(-1), after = neighbour(1)
+      return before && after ? "middle" : before ? "last" : after ? "first" : "solo"
+    }
+
     visible: listRows.length > 0
     flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
     rowSpacing: 0
@@ -2632,6 +2664,7 @@ Item {
           ModuleSlot {
             required property var modelData
             widgetKey: modelData.key
+            list: moduleListRoot
             region: moduleListRoot.region
             fixedEdge: BarModel.slotEdge(moduleListRoot.keys.length, moduleListRoot.keys.indexOf(modelData.key), moduleListRoot.fixedEdge, moduleListRoot.firstEdge, moduleListRoot.lastEdge)
             pool: moduleListRoot.pool
@@ -2863,6 +2896,10 @@ Item {
     id: slot
 
     property string widgetKey: ""
+    // The ModuleList the slot sits in (for its island place).
+    property var list: null
+    readonly property string islandPos: list ? list.islandPos(widgetKey) : "none"
+    onAlongLengthChanged: if (list) list.reportLength(widgetKey, alongLength)
     property string region: ""
     property string fixedEdge: "center"
     property var pool: null
@@ -2952,7 +2989,9 @@ Item {
     // Handed to it as preferred sizes, since a layout left to read a size
     // that drops from a fraction of a pixel to nothing keeps the old size,
     // leaving a hole where a widget hid itself.
-    implicitWidth: root.vertical ? widgetWidth : alongLength
+    // Whole pixels along the bar, so neighbouring island pieces meet on a
+    // pixel edge instead of leaving a faint seam between them.
+    implicitWidth: root.vertical ? widgetWidth : Math.ceil(alongLength)
     implicitHeight: root.vertical ? alongLength : widgetHeight
     Layout.preferredWidth: implicitWidth
     Layout.preferredHeight: implicitHeight
@@ -2962,6 +3001,7 @@ Item {
     Component.onCompleted: {
       if (pool) pool.claim(slot)
       root.registerModuleSlot(slot)
+      if (list) list.reportLength(widgetKey, alongLength)
     }
     Component.onDestruction: {
       // Later, since a slot goes while its section's model is being changed,
@@ -2972,6 +3012,35 @@ Item {
     }
 
     HoverHandler { id: moduleHover }
+
+    // This slot's piece of its island's glass pill: rounded at the island's
+    // outer ends (and padded past them), square where it meets a neighbour, so
+    // the pieces join into one pill.
+    Item {
+      id: islandPiece
+      readonly property bool opensIsland: slot.islandPos === "first" || slot.islandPos === "solo"
+      readonly property bool closesIsland: slot.islandPos === "last" || slot.islandPos === "solo"
+      readonly property real pad: Style.space(7)
+      readonly property real pillHeight: Math.max(Style.space(14), slot.height - Style.space(6))
+      visible: slot.islandPos !== "none" && !slot.dragSource
+      z: -1
+      clip: true
+      x: opensIsland ? -pad : 0
+      width: slot.width + (opensIsland ? pad : 0) + (closesIsland ? pad : 0)
+      height: slot.height
+
+      Rectangle {
+        readonly property real r: height / 2
+        height: islandPiece.pillHeight
+        radius: r
+        y: Math.round((islandPiece.height - height) / 2)
+        x: islandPiece.opensIsland ? 0 : -r
+        width: islandPiece.width + (islandPiece.opensIsland ? 0 : r) + (islandPiece.closesIsland ? 0 : r)
+        color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.07)
+        border.width: 1
+        border.color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.09)
+      }
+    }
 
     // The widget at its own size. Lifted out by a drag, it folds away with
     // its room.

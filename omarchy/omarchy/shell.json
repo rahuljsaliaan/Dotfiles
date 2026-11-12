@@ -1,14 +1,34 @@
 {
   "bar": {
-    "background": "glassy",
+    "background": "none",
     "id": "rahulj.bar",
     "layout": {
-      "center": [
+      "left": [
         {
-          "format": "dddd HH:mm",
-          "formatAlt": "d MMMM 'W'ww yyyy",
-          "id": "omarchy.clock",
-          "verticalFormat": "HH\n—\nmm"
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        },
+        {
+          "id": "rahulj.island-gap"
+        },
+        {
+          "id": "io.github.sanchokusika.pulse",
+          "style": "bars",
+          "metrics": [
+            "cpu",
+            "mem",
+            "gpu",
+            "temp"
+          ],
+          "metricOrder": [
+            "cpu",
+            "mem",
+            "gpu",
+            "temp"
+          ],
+          "metric": "cpu"
         }
       ],
       "centerBegin": [
@@ -16,7 +36,16 @@
           "id": "omarchy.indicators"
         }
       ],
-      "centerEnd": [
+      "center": [
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "id": "omarchy.clock",
+          "verticalFormat": "HH\n—\nmm"
+        },
         {
           "cities": [
             {
@@ -41,47 +70,29 @@
             }
           ],
           "id": "omarchy.elsewhen"
-        },
-        {
-          "id": "omarchy.weather"
-        },
+        }
+      ],
+      "centerEnd": [
         {
           "id": "omarchy.system-update"
         }
       ],
-      "left": [
-        {
-          "id": "omarchy.menu"
-        },
-        {
-          "id": "omarchy.workspaces"
-        },
-        {
-          "id": "jcmarin.qrg"
-        },
-        {
-          "id": "io.github.sanchokusika.pulse",
-          "style": "bars"
-        }
-      ],
       "right": [
         {
-          "id": "omarchy.tray"
-        },
-        {
-          "id": "jim.aiusage",
-          "providers": [
-            "claude"
-          ]
-        },
-        {
-          "id": "omarchy.keyboard-layout"
+          "id": "jcmarin.qrg"
         },
         {
           "id": "omarchy.agents"
         },
         {
-          "id": "omarchy.bluetooth"
+          "id": "jim.aiusage",
+          "providers": [
+            "claude"
+          ],
+          "barLabel": "Worst"
+        },
+        {
+          "id": "rahulj.island-gap"
         },
         {
           "id": "brightwalker25.net-speed"
@@ -90,16 +101,31 @@
           "id": "omarchy.network"
         },
         {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "rahulj.island-gap"
+        },
+        {
           "id": "omarchy.audio"
         },
         {
           "id": "omarchy.monitor"
         },
         {
-          "id": "rahulj.notification-bell"
+          "id": "omarchy.keyboard-layout"
         },
         {
           "id": "omarchy.power"
+        },
+        {
+          "id": "rahulj.island-gap"
+        },
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "rahulj.notification-bell"
         }
       ],
       "tray": [

@@ -45,7 +45,7 @@ copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
 copy omarchy/extensions/omarchy-menu.jsonc       "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
-for plugin in lock bar dock idle notifications notification-bell; do
+for plugin in lock bar dock idle notifications notification-bell island-gap; do
   copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
@@ -114,13 +114,13 @@ for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-
 done
 
 # Use the cloned plugins in place of Omarchy's own.
-for plugin in lock bar dock idle notifications notification-bell; do
+for plugin in lock bar dock idle notifications notification-bell island-gap; do
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
 done
 
-# Frosted windows and top bar.
+# Frosted windows; a clear top bar, so its glass islands float on the wallpaper.
 omarchy hyprland window transparency glassy >/dev/null && printf '  glassy   windows\n'
-omarchy bar background glassy >/dev/null && printf '  glassy   top bar\n'
+omarchy bar background none >/dev/null && printf '  clear    top bar (islands float on it)\n'
 
 # GTK/libadwaita apps: no buttons in their own header bars (Hyprland draws them).
 gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:' && printf '  gtk      header-bar buttons off\n'
