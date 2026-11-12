@@ -1,4 +1,7 @@
-# Dotfiles
+# Dotfiles — Zorin OS
+
+The setup for the Zorin OS machine (WezTerm, zsh, tmux, Neovim). The Omarchy
+machine's setup lives in [`../omarchy`](../omarchy).
 
 Personal configuration, one folder per application. Each folder holds the real
 file; `install.sh` symlinks it into wherever that application expects to find
@@ -16,7 +19,7 @@ config rather than written from memory.
 
 ```sh
 git clone https://github.com/rahuljsaliaan/Dotfiles.git
-cd Dotfiles
+cd Dotfiles/zorin
 ./install.sh          # create every symlink
 mise install          # install the pinned tool versions
 ```
