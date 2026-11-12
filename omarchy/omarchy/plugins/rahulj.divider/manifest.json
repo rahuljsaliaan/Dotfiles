@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "id": "rahulj.island-gap",
-  "name": "Island Gap",
+  "id": "rahulj.divider",
+  "name": "Divider",
   "version": "1.0.0",
   "author": "rahulj",
-  "description": "Ends one glass island in the bar and starts the next (see rahulj.bar).",
+  "description": "A thin vertical line between two groups of bar widgets.",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "BarWidget.qml" },
   "barWidget": {
-    "displayName": "Island Gap",
-    "description": "Space between two groups of widgets",
+    "displayName": "Divider",
+    "description": "Thin line between groups of widgets",
     "category": "Layout",
     "allowMultiple": true,
     "defaultSection": "right"
