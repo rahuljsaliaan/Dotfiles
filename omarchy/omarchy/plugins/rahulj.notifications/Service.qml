@@ -1474,7 +1474,18 @@ Item {
       service.saveSoon("history")
       return "ok"
     }
-    function clearHistory(): string {
+    // Several at once: keys separated by commas (the panel's "Clear" on a
+    // search or filter).
+    function removeHistoryKeys(keys: string): string {
+      var drop = ({})
+      String(keys || "").split(",").forEach(function(k) { if (k) drop[k] = true })
+      var before = service.historyEntries.length
+      service.historyEntries = service.historyEntries.filter(function(e) { return e && !drop[e.key] })
+      if (service.historyEntries.length === before) return "none"
+      service.saveSoon("history")
+      return "ok"
+    }
+        function clearHistory(): string {
       service.historyEntries = []
       service.saveSoon("history")
       service.clearAll("dismissed", true)
