@@ -64,6 +64,7 @@ together for different monitors.
 | `bin/omarchy-launch-screensaver-main` | `~/.local/bin/` | Omarchy's screensaver launcher, limited to the main screen |
 | `bin/omarchy-screensaver-tokyo` | `~/.local/bin/` | The screensaver: navy background, 14 calm text effects, theme blue→purple finish |
 | `bin/tmux-prompt` | `~/.local/bin/` | The floating tmux input box (fzf in a tmux popup): renames pre-fill the old name; `:` is a command palette listing every tmux command, filtered as you type (Tab completes, Enter runs, Esc cancels) |
+| `bin/browser-here` | `~/.local/bin/` | Opens a URL in the default browser on the same Hyprland workspace as the terminal it runs in: as a new tab in the browser window already there, or in a new window moved there. Claude Code uses it to open Lavish pages (see `claude/CLAUDE.md`) |
 | `bin/screensaver-art-from-wallpaper` | `~/.local/bin/` | Traces the wallpaper (or its clean source) into braille art |
 | `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
 | `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night prompt in the same plain style as the Claude Code status line: a coloured icon, the text and a dim │ between segments (folder, git branch and status, virtualenv, language versions, containers), with the last command's time and the clock on the right; the Python segment only appears inside an active virtualenv |
@@ -73,7 +74,7 @@ together for different monitors.
 | `teams-for-linux/config.json` | `~/.config/teams-for-linux/` | Teams notifications made by the app rather than the web page, so clicking one brings the window back from the tray, focuses it and opens the conversation |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
 | `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
-| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, the tracked `settings.json` keys (attribution off, dark theme, status line), and `statusline.sh`: one short row under the prompt in Tokyo Night colours with the model and effort, context tokens and how full the window is, the session cost, and the 5-hour (with time to reset) and weekly plan usage; it trims itself to fit a narrow window |
+| `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md` (including: open Lavish pages with `browser-here` on Claude's own workspace), the Lavish skill, the tracked `settings.json` keys (attribution off, dark theme, status line), and `statusline.sh`: one short row under the prompt in Tokyo Night colours with the model and effort, context tokens and how full the window is, the session cost, and the 5-hour (with time to reset) and weekly plan usage; it trims itself to fit a narrow window |
 
 ### Plain settings `install.sh` applies
 
