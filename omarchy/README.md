@@ -33,8 +33,9 @@ the right BenQ on DisplayPort (`DP-2`). The middle one is the **main screen**,
 falling back to the laptop when undocked. Only the main screen gets the top
 bar, the dock, the lock-screen password box and the screensaver. The names
 live in `mainScreenNames` / `lockInputScreens` in the plugins and in the jq
-filter in `bin/omarchy-launch-screensaver-main`. Change them all together for
-different monitors.
+filter in `bin/omarchy-launch-screensaver-main`, and the positions in
+`hypr/monitors.lua` match each monitor by model and serial. Change them all
+together for different monitors.
 
 ## What is here
 
@@ -42,6 +43,7 @@ different monitors.
 |---|---|---|
 | `hypr/hyprland.lua` | `~/.config/hypr/` | Title-bar buttons: round, Linux order (minimize, maximize, close) top-right, faint at rest and full colour on hover |
 | `hypr/looknfeel.lua` | `~/.config/hypr/` | 10px rounded windows; soft translucent blue→purple focused border; Tokyo Night title-bar button colours and bold symbols; loads the patched titlebar plugin; blurs the dock |
+| `hypr/monitors.lua` | `~/.config/hypr/` | Fixed monitor positions (laptop, middle BenQ, right BenQ), matched by model and serial, so a monitor that reconnects after sleep returns to its place |
 | `omarchy/shell.json` | `~/.config/omarchy/` | Bar layout, glassy bar, dock pins (Chromium, Outlook, Teams, foot), idle timings (screensaver 2½ min, lock 5 min) |
 | `omarchy/extensions/omarchy-menu.jsonc` | `~/.config/omarchy/extensions/` | Menu → Screensaver runs the main-screen-only launcher |
 | `omarchy/plugins/rahulj.lock` | `~/.config/omarchy/plugins/` | Lock screen: password box only on the main screen; re-blanks a monitor that reconnects while the screens are asleep |
@@ -84,7 +86,7 @@ that `.so` and run `hyprctl reload`; the buttons then stay full colour at rest.
 
 - **tmux**: Omarchy's default `~/.config/tmux/tmux.conf`, unchanged. The
   `tdl` dev layout is an Omarchy built-in (run it inside tmux).
-- **Hyprland `bindings.lua`, `monitors.lua`, `input.lua`, `autostart.lua`**:
+- **Hyprland `bindings.lua`, `input.lua`, `autostart.lua`**:
   Omarchy's defaults, unchanged.
 - **Claude Code's full `settings.json`**: Claude Code rewrites it at runtime;
   only the keys above are tracked, and merged in rather than replaced.
