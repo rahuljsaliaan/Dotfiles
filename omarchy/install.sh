@@ -45,7 +45,7 @@ copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
 copy omarchy/extensions/omarchy-menu.jsonc       "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
-for plugin in lock bar dock idle notifications notification-bell island-gap; do
+for plugin in lock bar dock idle notifications notification-bell island-gap net-speed; do
   copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
@@ -95,13 +95,11 @@ if [[ -f "$HOME/.local/share/applications/Microsoft Teams.desktop" ]]; then
 fi
 
 # Community bar widgets, from their own repos (reviewed before adding):
-#   Net Speed Colour: live up/down speed beside the network icon
 #   Pulse: CPU, memory, disk and network activity in one widget
 #   AI Usage: Claude subscription session and weekly limits
 #   Quick Reference Guide: searchable cheat sheets (Neovim, git, Docker, zsh)
 #   NittyGriddy: window overview grid (Super+E, three-finger swipes)
-for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git \
-             io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
+for entry in io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
              jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git \
              jcmarin.qrg=https://github.com/jcmarinn/Omarchy-QRG.git \
              timsonner.nitty-griddy=https://github.com/timsonner/nitty-griddy.git; do
@@ -114,7 +112,7 @@ for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-
 done
 
 # Use the cloned plugins in place of Omarchy's own.
-for plugin in lock bar dock idle notifications notification-bell island-gap; do
+for plugin in lock bar dock idle notifications notification-bell island-gap net-speed; do
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
 done
 
