@@ -207,12 +207,17 @@ scrim-alpha      = 0.5
 accent           = "#7aa2f7"
 
 [lock]
-text             = "#a9b1d6"
-placeholder      = "#a9b1d6"
-text-error       = "#a9b1d6"
-border           = "#a9b1d6"
-border-active    = "#a9b1d6"
-border-error     = "#a9b1d6"
+# Personal: the lock field matches the rest of the desktop: frosted glass
+# (theme background, partly see-through) with the same soft blue -> purple
+# border as focused windows and panels, red only on a wrong password.
+background       = "#1a1b26"
+background-alpha = 0.55
+text             = "#c0caf5"
+placeholder      = "#565f89"
+text-error       = "#f7768e"
+border           = "hyprland.active-border"
+border-active    = "hyprland.active-border"
+border-error     = "#f7768e"
 [image-picker]
 # Carousel-style picker shown directly over the desktop, with no card
 # surface or backdrop wash. Per-slice dim overlays and text outlines
