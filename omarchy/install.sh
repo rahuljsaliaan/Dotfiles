@@ -61,6 +61,7 @@ done
 
 # Teams for Linux launcher, run natively on Wayland (see the file's comment).
 copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
+copy teams-for-linux/config.json         "$HOME/.config/teams-for-linux/config.json"
 
 # Prompt, terminal multiplexer and editor.
 copy starship/starship.toml "$HOME/.config/starship.toml"
