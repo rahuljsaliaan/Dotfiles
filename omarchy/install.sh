@@ -63,6 +63,11 @@ done
 copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
 copy teams-for-linux/config.json         "$HOME/.config/teams-for-linux/config.json"
 
+# Open/Save dialogs in Nautilus instead of the plain GTK chooser.
+copy xdg-desktop-portal/hyprland-portals.conf  "$HOME/.config/xdg-desktop-portal/hyprland-portals.conf"
+copy xdg-desktop-portal/portals/nautilus.portal "$HOME/.local/share/xdg-desktop-portal/portals/nautilus.portal"
+copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.config/systemd/user/xdg-desktop-portal.service.d/nautilus-filechooser.conf"
+
 # Prompt, terminal multiplexer and editor.
 copy starship/starship.toml "$HOME/.config/starship.toml"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
@@ -84,6 +89,9 @@ else
 fi
 
 printf '\nApplying settings that are not files\n'
+
+# Restart the portal service so the Nautilus file chooser takes effect.
+systemctl --user daemon-reload && systemctl --user restart xdg-desktop-portal && printf '  restarted xdg-desktop-portal (Nautilus file chooser)\n'
 
 # Microsoft Teams as a desktop app (teams-for-linux, prebuilt from the
 # project's GitHub releases) instead of the Chromium web app: it keeps running
