@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "rahulj.island-gap",
+  "name": "Island Gap",
+  "version": "1.0.0",
+  "author": "rahulj",
+  "description": "Ends one glass island in the bar and starts the next (see rahulj.bar).",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Island Gap",
+    "description": "Space between two groups of widgets",
+    "category": "Layout",
+    "allowMultiple": true,
+    "defaultSection": "right"
+  }
+}
