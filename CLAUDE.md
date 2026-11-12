@@ -37,6 +37,10 @@ In `zorin/`, every folder holds the real file; `zorin/install.sh` symlinks it in
 repo is the single source of truth and edits take effect where they are. Add a
 new config to the `LINKS` array there rather than linking it by hand.
 
+`omarchy/` is the exception: `omarchy/install.sh` copies instead of
+symlinking, because Omarchy's own tools rewrite those folders. Changes made on
+that machine are copied back into `omarchy/` by hand.
+
 `zorin/nvim/` is linked as a whole directory, so `lazy-lock.json` lands in the repo
 and plugin versions stay reproducible — plugin updates show up as changes here,
 and that is intended.
