@@ -61,6 +61,7 @@ done
 copy starship/starship.toml "$HOME/.config/starship.toml"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy bash/.bashrc           "$HOME/.bashrc"
+copy foot/foot.ini          "$HOME/.config/foot/foot.ini"
 copy nvim                   "$HOME/.config/nvim"
 
 # Claude Code (file by file; never the whole ~/.claude).
