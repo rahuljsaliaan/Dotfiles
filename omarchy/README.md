@@ -65,6 +65,7 @@ together for different monitors.
 | `tmux/tmux.conf` | `~/.config/tmux/` | Omarchy's tmux config with the bar at the bottom, so the command line opens there like Neovim's, and a styled command bar (`❯` prompt, labelled rename prompts) instead of plain text over the session name |
 | `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono ExtraBold (regular text is SemiBold) so the prompt's bold text stands out |
 | `applications/teams-for-linux.desktop` | `~/.local/share/applications/` | Launcher override for Teams for Linux that runs it natively on Wayland, not through the package's forced XWayland, so it is sharp on the scaled laptop screen |
+| `teams-for-linux/config.json` | `~/.config/teams-for-linux/` | Teams notifications made by the app rather than the web page, so clicking one brings the window back from the tray, focuses it and opens the conversation |
 | `bash/.bashrc` | `~/.bashrc` | Omarchy's bashrc plus a tuned `tdl` (tmux dev layout): terminal 20% of the height, AI pane 40% of the width, and focus left on the editor |
 | `nvim/` | `~/.config/nvim` | Omarchy's LazyVim plus the Zorin keymaps, wrapping, explorer, LSP and markdown settings; Omarchy's theme hot-reload and clipboard kept |
 | `claude/` | `~/.claude/` *(file by file)* | Global `CLAUDE.md`, the Lavish skill, and the tracked `settings.json` keys (attribution off, dark theme) |
