@@ -82,9 +82,11 @@ printf '\nApplying settings that are not files\n'
 #   Net Speed Colour: live up/down speed beside the network icon
 #   Pulse: CPU, memory, disk and network activity in one widget
 #   AI Usage: Claude subscription session and weekly limits
+#   Quick Reference Guide: searchable cheat sheets (Neovim, git, Docker, zsh)
 for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git \
              io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
-             jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git; do
+             jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git \
+             jcmarin.qrg=https://github.com/jcmarinn/Omarchy-QRG.git; do
   id="${entry%%=*}" url="${entry#*=}"
   if [[ -d $HOME/.config/omarchy/plugins/$id ]]; then
     printf '  ok       %s\n' "$id"
