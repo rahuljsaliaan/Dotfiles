@@ -14,7 +14,7 @@ source "$OMARCHY_PATH/default/bash/rc"
 # alias p='python'
 
 # tdl: Omarchy's tmux dev layout (editor | AI, terminal below), with pane sizes
-# tuned by hand: terminal 22% of the height (Omarchy: 15%), AI 40% of the
+# tuned by hand: terminal 20% of the height (Omarchy: 15%), AI 40% of the
 # width (Omarchy: 30%). Also focuses the editor at the end; Omarchy's version
 # selects an unset variable ($opencode_pane), so focus stayed where it was.
 # Usage: tdl <ai> [<second_ai>]    e.g. tdl claude
@@ -27,7 +27,7 @@ tdl() {
   local ai="$1" ai2="$2"
 
   tmux rename-window -t "$editor_pane" "$(basename "$current_dir")"
-  tmux split-window -v -p 22 -t "$editor_pane" -c "$current_dir"
+  tmux split-window -v -p 20 -t "$editor_pane" -c "$current_dir"
   ai_pane=$(tmux split-window -h -p 40 -t "$editor_pane" -c "$current_dir" -P -F '#{pane_id}')
 
   if [[ -n $ai2 ]]; then
