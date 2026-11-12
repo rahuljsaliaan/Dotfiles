@@ -59,7 +59,7 @@ together for different monitors.
 | `omarchy/hooks/theme-set.d/screensaver-art` | `~/.config/omarchy/hooks/theme-set.d/` | Re-traces the screensaver art from the wallpaper on every theme switch |
 | `bin/omarchy-launch-screensaver-main` | `~/.local/bin/` | Omarchy's screensaver launcher, limited to the main screen |
 | `bin/omarchy-screensaver-tokyo` | `~/.local/bin/` | The screensaver: navy background, 14 calm text effects, theme blue→purple finish |
-| `bin/tmux-prompt` | `~/.local/bin/` | The floating tmux input box (fzf in a tmux popup): Enter accepts, Esc cancels |
+| `bin/tmux-prompt` | `~/.local/bin/` | The floating tmux input box (fzf in a tmux popup): renames pre-fill the old name; `:` is a command palette listing every tmux command, filtered as you type (Tab completes, Enter runs, Esc cancels) |
 | `bin/screensaver-art-from-wallpaper` | `~/.local/bin/` | Traces the wallpaper (or its clean source) into braille art |
 | `titlebars/` | built into `~/.local/lib/omarchy-hyprland-titlebars/` | Patch adding `button_rest_opacity` to Omarchy's titlebar plugin, and `build.sh` |
 | `starship/starship.toml` | `~/.config/starship.toml` | Tokyo Night powerline prompt; the Python segment only appears inside an active virtualenv |
