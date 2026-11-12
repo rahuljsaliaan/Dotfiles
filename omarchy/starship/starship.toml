@@ -1,5 +1,8 @@
 add_newline = false
 
+# No segment asks for bold: foot draws bold in JetBrains Mono ExtraBold, while
+# its regular font is SemiBold, so plain styles give a semi-bold prompt.
+
 format = """
 [](fg:#7aa2f7)$directory\
 [](fg:#7aa2f7 bg:#bb9af7)$git_branch$git_status\
@@ -20,7 +23,7 @@ style = "bg:none"
 # DIRECTORY
 # ========================
 [directory]
-style = "fg:#1a1b26 bg:#7aa2f7 bold"
+style = "fg:#1a1b26 bg:#7aa2f7"
 truncation_length = 2
 truncate_to_repo = true
 format = "[ $path ]($style)"
@@ -30,11 +33,11 @@ format = "[ $path ]($style)"
 # ========================
 [git_branch]
 symbol = " "
-style = "fg:#1a1b26 bg:#bb9af7 bold"
+style = "fg:#1a1b26 bg:#bb9af7"
 format = "[$symbol$branch ]($style)"
 
 [git_status]
-style = "fg:#1a1b26 bg:#bb9af7 bold"
+style = "fg:#1a1b26 bg:#bb9af7"
 format = "[$all_status$ahead_behind ]($style)"
 
 # ========================
@@ -42,7 +45,7 @@ format = "[$all_status$ahead_behind ]($style)"
 # ========================
 [python]
 symbol = " "
-style = "fg:#1a1b26 bg:#9ece6a bold"
+style = "fg:#1a1b26 bg:#9ece6a"
 format = "[$symbol$virtualenv ]($style)"
 # Only when a virtualenv is active: with no files to detect, the module shows
 # solely because $VIRTUAL_ENV is set, and stays hidden otherwise.
@@ -52,17 +55,17 @@ detect_folders = []
 
 [nodejs]
 symbol = " "
-style = "fg:#1a1b26 bg:#9ece6a bold"
+style = "fg:#1a1b26 bg:#9ece6a"
 format = "[$symbol$version ]($style)"
 
 [rust]
 symbol = " "
-style = "fg:#1a1b26 bg:#9ece6a bold"
+style = "fg:#1a1b26 bg:#9ece6a"
 format = "[$symbol$version ]($style)"
 
 [golang]
 symbol = " "
-style = "fg:#1a1b26 bg:#9ece6a bold"
+style = "fg:#1a1b26 bg:#9ece6a"
 format = "[$symbol$version ]($style)"
 
 # ========================
@@ -70,13 +73,13 @@ format = "[$symbol$version ]($style)"
 # ========================
 [docker_context]
 symbol = " "
-style = "fg:#1a1b26 bg:#7dcfff bold"
+style = "fg:#1a1b26 bg:#7dcfff"
 format = "[$symbol$context ]($style)"
 only_with_files = true
 
 [kubernetes]
 symbol = "󱃾 "
-style = "fg:#1a1b26 bg:#7dcfff bold"
+style = "fg:#1a1b26 bg:#7dcfff"
 format = "[$symbol$context ]($style)"
 
 # ========================
@@ -86,7 +89,7 @@ format = "[$symbol$context ]($style)"
 min_time = 100
 show_milliseconds = true
 format = "[ $duration ]($style)"
-style = "fg:#c0caf5 bg:none bold"
+style = "fg:#c0caf5 bg:none"
 
 # ========================
 # TIME
@@ -95,11 +98,11 @@ style = "fg:#c0caf5 bg:none bold"
 disabled = false
 time_format = "%H:%M"
 format = "[ $time ]($style)"
-style = "fg:#c0caf5 bg:none bold"
+style = "fg:#c0caf5 bg:none"
 
 # ========================
 # CHARACTER
 # ========================
 [character]
-success_symbol = "[❯](bold #7aa2f7)"
-error_symbol = "[❯](bold #f7768e)"
+success_symbol = "[❯](#7aa2f7)"
+error_symbol = "[❯](#f7768e)"
