@@ -1463,6 +1463,25 @@ Item {
     // Every card, every stack.
     function dismissAll(): string { service.clearAll("dismissed", true); return "ok" }
 
+    // Personal: used by the bar's Notification Center (rahulj.notification-bell).
+    // The panel reads history.json and live.json directly and calls these to
+    // change them; the history file is rewritten within a quarter second.
+    function markSeen(): string { service.clearUnseen(); return "ok" }
+    function removeHistory(key: string): string {
+      var before = service.historyEntries.length
+      service.historyEntries = service.historyEntries.filter(function(e) { return e && e.key !== key })
+      if (service.historyEntries.length === before) return "none"
+      service.saveSoon("history")
+      return "ok"
+    }
+    function clearHistory(): string {
+      service.historyEntries = []
+      service.saveSoon("history")
+      service.clearAll("dismissed", true)
+      service.clearUnseen()
+      return "ok"
+    }
+
     // Click the newest card, as the pointer would.
     function invokeLast(): string {
       var key = service.newestLive()
