@@ -85,7 +85,7 @@ printf '\nApplying settings that are not files\n'
 #   Pulse: CPU, memory, disk and network activity in one widget
 #   AI Usage: Claude subscription session and weekly limits
 #   Quick Reference Guide: searchable cheat sheets (Neovim, git, Docker, zsh)
-#   NittyGriddy: window overview grid (Super+E, three-finger swipe up/down)
+#   NittyGriddy: window overview grid (Super+E, three-finger swipes)
 for entry in brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git \
              io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
              jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git \
