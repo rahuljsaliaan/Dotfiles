@@ -184,6 +184,15 @@ hl.config({
   },
 })
 
+-- Nautilus stays glassy everywhere. Glassy windows fade it to 0.75 (GTK draws
+-- it solid), but on a floating workspace Omarchy forces windows to 1.0, and the
+-- two rules took turns: every folder change flipped it between glass and solid.
+-- One overriding value settles it, added once the rest of the config has loaded
+-- so it comes after both of those rules.
+hl.timer(function()
+  o.window("org\\.gnome\\.Nautilus", { opacity = "0.75 override 0.75 override" })
+end, { timeout = 1, type = "oneshot" })
+
 -- Frosted dock: blur what is behind the dock's see-through glass plate
 -- (drawn in ~/.config/omarchy/plugins/rahulj.dock/DockWindow.qml). ignore_alpha
 -- keeps the blur to the plate itself, not the dock's invisible surroundings.
