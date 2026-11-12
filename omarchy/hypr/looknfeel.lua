@@ -193,6 +193,40 @@ hl.timer(function()
   o.window("org\\.gnome\\.Nautilus", { opacity = "0.75 override 0.75 override" })
 end, { timeout = 1, type = "oneshot" })
 
+-- Floating workspaces: a window opening onto an empty one sits exactly in the
+-- middle. Omarchy steps each new window up to 48px off-centre so a run of them
+-- does not stack exactly; with nothing else on the workspace there is nothing
+-- to step away from. Only windows the floating mode placed are moved (not
+-- dialogs or apps that float on their own), once Omarchy has placed them.
+local function placed_by_floating_mode(window)
+  for _, tag in ipairs(window.tags or {}) do
+    local name = tag:gsub("%*$", "")
+    if name == "omarchy-mode-opened" or name == "omarchy-mode-floated" then
+      return true
+    end
+  end
+  return false
+end
+
+hl.on("window.open", function(opened)
+  local address = opened.address
+  hl.timer(function()
+    local window
+    for _, w in ipairs(hl.get_windows()) do
+      if w.address == address then window = w break end
+    end
+    if not window or not window.floating or not window.workspace or not placed_by_floating_mode(window) then
+      return
+    end
+    for _, other in ipairs(hl.get_workspace_windows(window.workspace.id) or {}) do
+      if other.address ~= address and other.mapped and not other.hidden then
+        return
+      end
+    end
+    hl.dispatch(hl.dsp.window.center({ window = window }))
+  end, { timeout = 80, type = "oneshot" })
+end)
+
 -- Frosted dock: blur what is behind the dock's see-through glass plate
 -- (drawn in ~/.config/omarchy/plugins/rahulj.dock/DockWindow.qml). ignore_alpha
 -- keeps the blur to the plate itself, not the dock's invisible surroundings.
