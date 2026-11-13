@@ -411,7 +411,7 @@ Item {
     width: body.width + spill * 2
     height: body.height + card.notchRoom + spill * 2
     // Only cards you can see glow; one behind the front of a deck does not.
-    opacity: card.place.front || card.expanded ? 0.9 * card.contentOpacity : 0
+    opacity: card.place.front || card.expanded ? 0.55 * card.contentOpacity : 0
     visible: opacity > 0.01
     layer.enabled: true
     layer.effect: MultiEffect {
@@ -436,7 +436,7 @@ Item {
           GradientStop { position: card.rimAt(2); color: card.rimStop(2) }
         }
         fillRule: ShapePath.OddEvenFill
-        PathSvg { path: card.outline(-Style.space(9), 0, body.width, body.height) + " "
+        PathSvg { path: card.outline(-Style.space(6), 0, body.width, body.height) + " "
                         + card.outline(Style.space(1), 0, body.width, body.height) }
       }
     }
