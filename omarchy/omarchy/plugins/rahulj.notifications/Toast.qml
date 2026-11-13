@@ -287,6 +287,39 @@ Item {
     return p
   }
 
+  // The contact shadow: tight and a little darker right under the card, the
+  // way a real object darkens the surface it nearly touches.
+  Item {
+    id: contactShadow
+    readonly property real spill: Style.space(14)
+    x: -spill
+    y: -card.notchRoom - spill + Style.space(3)
+    width: body.width + spill * 2
+    height: body.height + card.notchRoom + spill * 2
+    opacity: card.place.front || card.expanded ? 0.45 * card.contentOpacity : 0
+    visible: opacity > 0.01
+    layer.enabled: true
+    layer.effect: MultiEffect {
+      autoPaddingEnabled: true
+      blurEnabled: true
+      blur: 1.0
+      blurMax: 10
+    }
+    Shape {
+      x: contactShadow.spill
+      y: contactShadow.spill
+      width: body.width
+      height: body.height + card.notchRoom
+      preferredRendererType: Shape.CurveRenderer
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillColor: "#05060e"
+        PathSvg { path: card.outline(Style.space(2), 0, body.width, body.height) }
+      }
+    }
+  }
+
   Item {
     id: cardShape
     readonly property real room: card.notchRoom
@@ -304,15 +337,20 @@ Item {
     width: body.width
     height: body.height + room
     layer.enabled: true
+    // The ambient shadow: wide, soft and faint, in a deep navy rather than
+    // black (shadows on a blue-dark desktop read blue), a little smaller than
+    // the card so no hard edge shows, and falling slightly down-left, away
+    // from the bar. The contact shadow below does the close-in darkening.
     layer.effect: MultiEffect {
       autoPaddingEnabled: true
       shadowEnabled: true
-      shadowColor: "#000000"
-      shadowOpacity: 0.8
+      shadowColor: "#05060e"
+      shadowOpacity: 0.42
       shadowBlur: 1.0
-      // S6: the long shadow falls down and to the left, away from the bar.
-      shadowVerticalOffset: Style.space(16)
-      shadowHorizontalOffset: -Style.space(8)
+      blurMax: 64
+      shadowScale: 0.97
+      shadowVerticalOffset: Style.space(14)
+      shadowHorizontalOffset: -Style.space(4)
     }
 
     // S6 · Floating slab: two edges under the bottom of the card give it
