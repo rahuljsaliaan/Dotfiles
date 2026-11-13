@@ -1619,15 +1619,20 @@ Item {
         // Personal: wide enough for the cards' deep shadow (Toast.qml), and a
         // strip at the top for the pointer towards the bar's bell.
         readonly property int motionInset: Style.space(26)
+        // Personal: extra room on the left for the pop-out entrance (Toast.qml),
+        // where a card arrives larger and swings past its place before it
+        // settles; without it the card's left side is cut off mid-bounce. The
+        // input mask is the deck only, so the extra width takes no clicks.
+        readonly property int popRoom: Style.space(64)
         readonly property int pointerSize: Style.space(8)
         readonly property int pointerRoom: pointerSize + Style.space(2)
-        width: service.notificationWidth + motionInset + surface.margins.right
+        width: service.notificationWidth + motionInset + popRoom + surface.margins.right
         height: deck.y + deck.height + motionInset
         clip: true
 
         Item {
           id: deck
-          x: clipper.motionInset
+          x: clipper.motionInset + clipper.popRoom
           y: clipper.pointerRoom + clipper.glowRoom
           width: service.notificationWidth
           height: service.deckHeight
