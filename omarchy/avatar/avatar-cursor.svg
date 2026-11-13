@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="36%" r="72%"><stop offset="0" stop-color="#2a2f45"/><stop offset="0.6" stop-color="#1a1b26"/><stop offset="1" stop-color="#121219"/></radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="16"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g>
+    <rect x="258.8" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="127.9" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="171.5" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="215.2" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="127.9" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="171.5" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="215.2" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="258.8" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="127.9" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="215.2" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="258.8" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="127.9" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="171.5" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="258.8" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="127.9" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="171.5" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="215.2" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#c0caf5" fill-opacity="0.05"/>
+  </g>
+  <g filter="url(#glow)" opacity="0.4">
+    <rect x="84.2" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="127.9" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="171.5" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="215.2" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="84.2" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#7dc0fb"/>
+    <rect x="258.8" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#7dc0fb"/>
+    <rect x="84.2" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="258.8" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="84.2" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="127.9" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="171.5" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="215.2" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="84.2" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#8f9ff7"/>
+    <rect x="171.5" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#8f9ff7"/>
+    <rect x="84.2" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#a49df7"/>
+    <rect x="215.2" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#a49df7"/>
+    <rect x="84.2" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#bb9af7"/>
+    <rect x="258.8" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#bb9af7"/>
+  </g>
+  <g>
+    <rect x="84.2" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="127.9" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="171.5" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="215.2" y="106.1" width="38.0" height="38.0" rx="6.8" fill="#7dcfff"/>
+    <rect x="84.2" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#7dc0fb"/>
+    <rect x="258.8" y="149.7" width="38.0" height="38.0" rx="6.8" fill="#7dc0fb"/>
+    <rect x="84.2" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="258.8" y="193.4" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="84.2" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="127.9" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="171.5" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="215.2" y="237.0" width="38.0" height="38.0" rx="6.8" fill="#7aa2f7"/>
+    <rect x="84.2" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#8f9ff7"/>
+    <rect x="171.5" y="280.7" width="38.0" height="38.0" rx="6.8" fill="#8f9ff7"/>
+    <rect x="84.2" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#a49df7"/>
+    <rect x="215.2" y="324.3" width="38.0" height="38.0" rx="6.8" fill="#a49df7"/>
+    <rect x="84.2" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#bb9af7"/>
+    <rect x="258.8" y="368.0" width="38.0" height="38.0" rx="6.8" fill="#bb9af7"/>
+  </g>
+  <g>
+      <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="1.06s" repeatCount="indefinite"/>
+    <g filter="url(#glow)" opacity="0.5"><rect x="346.2" y="368.0" width="81.6" height="38.0" rx="6.8" fill="#7aa2f7"/></g>
+    <rect x="346.2" y="368.0" width="81.6" height="38.0" rx="6.8" fill="#7aa2f7"/>
+  </g>
+</svg>
