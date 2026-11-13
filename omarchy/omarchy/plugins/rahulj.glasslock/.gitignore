@@ -1,0 +1,3 @@
+media/*.xcf
+*.bak
+.DS_Store
