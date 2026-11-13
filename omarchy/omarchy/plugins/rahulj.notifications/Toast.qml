@@ -243,50 +243,63 @@ Item {
                                      Math.max(1, Style.space(2)))
   }
 
-  // Personal "Night Glass" card: the theme's navy, see-through and blurred by
-  // Hyprland, with the focused-window gradient as its rim (theme overlay
-  // [notifications]; red for critical), rounder corners than windows, and a
-  // deep soft shadow. Drawn as one outline, so the top card's notch towards
-  // the bell is the same surface and rim as the card, not a separate piece.
+  // Personal "Night Glass" card: a lifted Tokyo Night surface (a shade lighter
+  // than any window, a little see-through so Hyprland's blur still frosts it),
+  // with the focused-window gradient as its rim (theme overlay
+  // [notifications]; red for critical). To stand apart from windows it also
+  // has a soft halo in the rim's colours, a slab edge underneath that gives it
+  // thickness, and a long shadow falling down-left, as if lit from the bar.
+  // Drawn as one outline, so the top card's notch towards the bell is the
+  // same surface and rim as the card.
+  readonly property real notchRoom: Style.space(8)
+  // The notch grows out of the top edge only once the card has settled, and
+  // goes back in before it leaves, so it never swings or zooms with the card.
+  property bool settled: true
+  property real notchGrow: pointerShown && settled && !leavingNow ? 1 : 0
+  Behavior on notchGrow { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
+  readonly property real notchSize: notchRoom * notchGrow
+  readonly property real tipX: Math.max(plate.radius + notchRoom, Math.min(width - plate.radius - notchRoom, pointerX))
+  readonly property var rimSpec: plate.borderSpec
+  readonly property var rimColors: rimSpec && rimSpec.gradient && rimSpec.gradient.enabled
+                                   ? rimSpec.gradient.colors : [Border.color(rimSpec), Border.color(rimSpec)]
+  readonly property real rimAngle: rimSpec && rimSpec.gradient && rimSpec.gradient.enabled ? (rimSpec.gradient.angle || 0) : 0
+  function rimStop(i) { return i < rimColors.length ? rimColors[i] : rimColors[rimColors.length - 1] }
+  function rimAt(i) { return rimColors.length <= 1 ? (i === 0 ? 0 : 1) : (i >= rimColors.length ? 1 : i / (rimColors.length - 1)) }
+
+  // The card's outline inset by k and moved down by dy: a rounded rectangle
+  // whose top edge rises into a 45° notch. Inset, the notch's sides move in
+  // parallel, so the rim keeps one width all the way round.
+  function outline(k, dy, w, h) {
+    var room = notchRoom, r = plate.radius, notch = notchSize
+    var tip = tipX
+    var top = room + k + dy, left = k, right = w - k, bottom = room + h - k + dy
+    var rr = Math.max(0, r - k)
+    var p = "M " + (left + rr) + " " + top
+    if (notch > 0) {
+      var d = k * (Math.SQRT2 - 1)
+      p += " L " + (tip - notch + d) + " " + top
+         + " L " + tip + " " + (room - notch + k * Math.SQRT2 + dy)
+         + " L " + (tip + notch - d) + " " + top
+    }
+    p += " L " + (right - rr) + " " + top + " A " + rr + " " + rr + " 0 0 1 " + right + " " + (top + rr)
+       + " L " + right + " " + (bottom - rr) + " A " + rr + " " + rr + " 0 0 1 " + (right - rr) + " " + bottom
+       + " L " + (left + rr) + " " + bottom + " A " + rr + " " + rr + " 0 0 1 " + left + " " + (bottom - rr)
+       + " L " + left + " " + (top + rr) + " A " + rr + " " + rr + " 0 0 1 " + (left + rr) + " " + top + " Z"
+    return p
+  }
+
   Item {
     id: cardShape
-    readonly property real room: Style.space(8)                  // space kept above for the notch
-    readonly property real notch: card.pointerShown ? room : 0
-    readonly property real r: plate.radius
+    readonly property real room: card.notchRoom
     readonly property real rim: plate.borderTop
-    readonly property var spec: plate.borderSpec
-    readonly property var colors: spec && spec.gradient && spec.gradient.enabled
-                                  ? spec.gradient.colors : [Border.color(spec), Border.color(spec)]
-    readonly property real angle: spec && spec.gradient && spec.gradient.enabled ? (spec.gradient.angle || 0) : 0
-    readonly property real tipX: Math.max(r + notch, Math.min(width - r - notch, card.pointerX))
-
-    // The card's outline inset by k: a rounded rectangle whose top edge rises
-    // into a 45° notch. Inset, the notch's sides move in parallel, so the rim
-    // keeps one width all the way round.
-    function outline(k) {
-      var top = room + k, left = k, right = width - k, bottom = room + body.height - k
-      var rr = Math.max(0, r - k)
-      var p = "M " + (left + rr) + " " + top
-      if (notch > 0) {
-        var d = k * (Math.SQRT2 - 1)
-        p += " L " + (tipX - notch + d) + " " + top
-           + " L " + tipX + " " + (room - notch + k * Math.SQRT2)
-           + " L " + (tipX + notch - d) + " " + top
-      }
-      p += " L " + (right - rr) + " " + top + " A " + rr + " " + rr + " 0 0 1 " + right + " " + (top + rr)
-         + " L " + right + " " + (bottom - rr) + " A " + rr + " " + rr + " 0 0 1 " + (right - rr) + " " + bottom
-         + " L " + (left + rr) + " " + bottom + " A " + rr + " " + rr + " 0 0 1 " + left + " " + (bottom - rr)
-         + " L " + left + " " + (top + rr) + " A " + rr + " " + rr + " 0 0 1 " + (left + rr) + " " + top + " Z"
-      return p
-    }
-    readonly property string outer: outline(0)
-    readonly property string inner: outline(rim)
-
-    function stop(i) { return i < colors.length ? colors[i] : colors[colors.length - 1] }
-    function at(i) { return colors.length <= 1 ? (i === 0 ? 0 : 1) : (i >= colors.length ? 1 : i / (colors.length - 1)) }
-    readonly property real gdx: Math.cos(angle * Math.PI / 180)
-    readonly property real gdy: Math.sin(angle * Math.PI / 180)
+    readonly property real gdx: Math.cos(card.rimAngle * Math.PI / 180)
+    readonly property real gdy: Math.sin(card.rimAngle * Math.PI / 180)
     readonly property real glen: (Math.abs(width * gdx) + Math.abs(height * gdy)) / 2
+    readonly property string outer: card.outline(0, 0, width, body.height)
+    readonly property string inner: card.outline(rim, 0, width, body.height)
+    // S1 · Lifted surface: a shade lighter at the top, like a lit sheet.
+    readonly property color base: Commons.Color.notifications.background
+    readonly property color lit: Qt.rgba(Math.min(1, base.r * 1.13), Math.min(1, base.g * 1.13), Math.min(1, base.b * 1.12), base.a)
 
     y: -room
     width: body.width
@@ -296,9 +309,40 @@ Item {
       autoPaddingEnabled: true
       shadowEnabled: true
       shadowColor: "#000000"
-      shadowOpacity: 0.6
+      shadowOpacity: 0.8
       shadowBlur: 1.0
-      shadowVerticalOffset: Style.space(10)
+      // S6: the long shadow falls down and to the left, away from the bar.
+      shadowVerticalOffset: Style.space(16)
+      shadowHorizontalOffset: -Style.space(8)
+    }
+
+    // S6 · Floating slab: two edges under the bottom of the card give it
+    // thickness. Only the part below the card is drawn, so the see-through
+    // surface does not show them through it.
+    Item {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      y: cardShape.room + body.height - plate.radius
+      height: plate.radius + Style.space(6)
+      clip: true
+      Shape {
+        y: -parent.y
+        width: cardShape.width
+        height: cardShape.height + Style.space(6)
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+          strokeWidth: -1
+          strokeColor: "transparent"
+          fillColor: "#262b40"
+          PathSvg { path: card.outline(0, Style.space(4), cardShape.width, body.height) }
+        }
+        ShapePath {
+          strokeWidth: -1
+          strokeColor: "transparent"
+          fillColor: "#3b4261"
+          PathSvg { path: card.outline(0, Style.space(2), cardShape.width, body.height) }
+        }
+      }
     }
 
     Shape {
@@ -308,7 +352,11 @@ Item {
       ShapePath {
         strokeWidth: -1
         strokeColor: "transparent"
-        fillColor: Commons.Color.notifications.background
+        fillGradient: LinearGradient {
+          x1: 0; y1: cardShape.room; x2: 0; y2: cardShape.height
+          GradientStop { position: 0; color: cardShape.lit }
+          GradientStop { position: 1; color: cardShape.base }
+        }
         PathSvg { path: cardShape.outer }
       }
 
@@ -321,12 +369,75 @@ Item {
           y1: cardShape.height / 2 - cardShape.gdy * cardShape.glen
           x2: cardShape.width / 2 + cardShape.gdx * cardShape.glen
           y2: cardShape.height / 2 + cardShape.gdy * cardShape.glen
-          GradientStop { position: cardShape.at(0); color: cardShape.stop(0) }
-          GradientStop { position: cardShape.at(1); color: cardShape.stop(1) }
-          GradientStop { position: cardShape.at(2); color: cardShape.stop(2) }
-          GradientStop { position: cardShape.at(3); color: cardShape.stop(3) }
+          GradientStop { position: card.rimAt(0); color: card.rimStop(0) }
+          GradientStop { position: card.rimAt(1); color: card.rimStop(1) }
+          GradientStop { position: card.rimAt(2); color: card.rimStop(2) }
+          GradientStop { position: card.rimAt(3); color: card.rimStop(3) }
         }
         PathSvg { path: cardShape.outer + " " + cardShape.inner }
+      }
+    }
+
+    // S1: a faint light line just inside the top edge, like light on glass.
+    // It stops either side of the notch, so the notch has no line across it.
+    readonly property real gapLeft: card.notchSize > 0 ? card.tipX - card.notchRoom - Style.space(3) : cardShape.width / 2
+    readonly property real gapRight: card.notchSize > 0 ? card.tipX + card.notchRoom + Style.space(3) : cardShape.width / 2
+    Rectangle {
+      x: plate.radius
+      y: cardShape.room + cardShape.rim + 1
+      width: Math.max(0, cardShape.gapLeft - plate.radius)
+      height: 1
+      color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
+    }
+    Rectangle {
+      x: cardShape.gapRight
+      y: cardShape.room + cardShape.rim + 1
+      width: Math.max(0, cardShape.width - plate.radius - cardShape.gapRight)
+      height: 1
+      color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
+    }
+  }
+
+  // S2 · Halo: a ring round the card's edge in the rim's colours, blurred into
+  // a soft glow. Drawn over the card's shadow, which would otherwise swallow
+  // it; the ring leaves the card's face alone, so only its edge is lit.
+  Item {
+    id: halo
+    // The layer only captures its own rectangle, so it reaches past the card
+    // by `spill` on every side for the ring that sits outside the card.
+    readonly property real spill: Style.space(18)
+    x: -spill
+    y: -card.notchRoom - spill
+    width: body.width + spill * 2
+    height: body.height + card.notchRoom + spill * 2
+    // Only cards you can see glow; one behind the front of a deck does not.
+    opacity: card.place.front || card.expanded ? 0.9 * card.contentOpacity : 0
+    visible: opacity > 0.01
+    layer.enabled: true
+    layer.effect: MultiEffect {
+      autoPaddingEnabled: true
+      blurEnabled: true
+      blur: 1.0
+      blurMax: 28
+    }
+    Shape {
+      x: halo.spill
+      y: halo.spill
+      width: body.width
+      height: body.height + card.notchRoom
+      preferredRendererType: Shape.CurveRenderer
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillGradient: LinearGradient {
+          x1: 0; y1: 0; x2: body.width; y2: body.height + card.notchRoom
+          GradientStop { position: card.rimAt(0); color: card.rimStop(0) }
+          GradientStop { position: card.rimAt(1); color: card.rimStop(1) }
+          GradientStop { position: card.rimAt(2); color: card.rimStop(2) }
+        }
+        fillRule: ShapePath.OddEvenFill
+        PathSvg { path: card.outline(-Style.space(9), 0, body.width, body.height) + " "
+                        + card.outline(Style.space(1), 0, body.width, body.height) }
       }
     }
   }
@@ -363,24 +474,50 @@ Item {
     }
   }
 
-  // Personal: a new card slides in from the screen edge with a small spring
-  // overshoot, and slides back out as it leaves. Only fresh arrivals slide:
-  // a reload or an opening deck keeps its cards where they are.
-  transform: Translate { id: slide; x: 0 }
+  // Personal (S7 · Pop-out): a new card swings out of the screen edge towards
+  // you in 3D (a turn about its upright axis, starting close and large), over-
+  // shoots a little, then settles flat; it slides back out as it leaves, and
+  // a hovered card lifts slightly towards you. Only fresh arrivals pop: a
+  // reload or an opening deck keeps its cards where they are.
+  transform: [
+    Translate { id: slide; x: 0 },
+    Rotation { id: swing; axis { x: 0; y: 1; z: 0 } angle: 0
+               origin.x: card.width / 2; origin.y: card.height / 2 },
+    Scale { id: pop; xScale: 1; yScale: xScale
+            origin.x: card.width / 2; origin.y: card.height / 2 },
+    // Pinned at the notch's tip on the top card, so the tip stays on the bell.
+    Scale { id: lift; xScale: card.hovered ? 1.02 : 1; yScale: xScale
+            origin.x: card.pointerShown ? card.tipX : card.width / 2
+            origin.y: card.pointerShown ? 0 : card.height / 2
+            Behavior on xScale { NumberAnimation { duration: Style.duration(220); easing.type: Easing.OutBack } } }
+  ]
   readonly property bool leavingNow: !!place.leaving
   onLeavingNowChanged: {
-    slideIn.stop()
+    popIn.stop()
     slideOut.stop()
     // A card brought back by an update returns to its place at once.
-    if (!leavingNow) slide.x = 0
+    if (!leavingNow) { slide.x = 0; swing.angle = 0; pop.xScale = 1 }
     else if (!(scene && scene.jumping)) slideOut.start()
   }
-  NumberAnimation {
-    id: slideIn
-    target: slide; property: "x"; from: card.cardWidth * 0.6; to: 0
-    duration: Style.duration(480)
-    easing.type: Easing.OutBack
-    easing.overshoot: 1.3
+  ParallelAnimation {
+    id: popIn
+    onStarted: card.settled = false
+    onFinished: card.settled = true
+    onStopped: card.settled = true
+    NumberAnimation {
+      target: slide; property: "x"; from: card.cardWidth * 0.7; to: 0
+      duration: Style.duration(620); easing.type: Easing.OutBack; easing.overshoot: 1.2
+    }
+    NumberAnimation {
+      target: swing; property: "angle"; from: -50; to: 0
+      duration: Style.duration(820); easing.type: Easing.OutBack; easing.overshoot: 1.6
+    }
+    SequentialAnimation {
+      NumberAnimation { target: pop; property: "xScale"; from: 1.15; to: 1.05
+                        duration: Style.duration(450); easing.type: Easing.OutCubic }
+      NumberAnimation { target: pop; property: "xScale"; to: 1
+                        duration: Style.duration(350); easing.type: Easing.InOutQuad }
+    }
   }
   NumberAnimation {
     id: slideOut
@@ -388,7 +525,7 @@ Item {
     duration: Style.duration(200)
     easing.type: Easing.InCubic
   }
-  Component.onCompleted: if (scene && scene.fresh && scene.fresh[row.key]) slideIn.start()
+  Component.onCompleted: if (scene && scene.fresh && scene.fresh[row.key]) popIn.start()
 
   Item {
     id: body
