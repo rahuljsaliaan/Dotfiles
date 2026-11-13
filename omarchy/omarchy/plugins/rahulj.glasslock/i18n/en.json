@@ -1,0 +1,12 @@
+{
+  "greeting.night": "Good night, %1",
+  "greeting.morning": "Good morning, %1",
+  "greeting.afternoon": "Good afternoon, %1",
+  "greeting.evening": "Good evening, %1",
+  "prompt": "Enter your password to unlock",
+  "placeholder": "Password",
+  "checking": "Checking…",
+  "capsLock": "Caps Lock is on",
+  "wifi.none": "No Wi-Fi",
+  "wifi.off": "Wi-Fi off"
+}
