@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="36%" r="72%"><stop offset="0" stop-color="#2a2f45"/><stop offset="0.6" stop-color="#1a1b26"/><stop offset="1" stop-color="#121219"/></radialGradient>
+    <linearGradient id="rim" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#7aa2f7"/><stop offset="1" stop-color="#bb9af7"/></linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- The ring sits just inside the circle GitHub, WhatsApp and the lock screen
+       cut the square to (radius 256), so it shows whole. -->
+  <circle cx="256" cy="256" r="240" fill="none" stroke="url(#rim)" stroke-width="12"/>
+  <g>
+    <rect x="258.4" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="145.9" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="183.4" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="220.9" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="145.9" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="183.4" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="220.9" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="258.4" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="145.9" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="220.9" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="258.4" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="145.9" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="183.4" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="258.4" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="145.9" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="183.4" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+    <rect x="220.9" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#c0caf5" fill-opacity="0.05"/>
+  </g>
+  <g filter="url(#glow)" opacity="0.4">
+    <rect x="108.3" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="145.9" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="183.4" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="220.9" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="108.3" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#7dc0fb"/>
+    <rect x="258.4" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#7dc0fb"/>
+    <rect x="108.3" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="258.4" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="108.3" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="145.9" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="183.4" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="220.9" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="108.3" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#8f9ff7"/>
+    <rect x="183.4" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#8f9ff7"/>
+    <rect x="108.3" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#a49df7"/>
+    <rect x="220.9" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#a49df7"/>
+    <rect x="108.3" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#bb9af7"/>
+    <rect x="258.4" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#bb9af7"/>
+  </g>
+  <g>
+    <rect x="108.3" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="145.9" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="183.4" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="220.9" y="127.1" width="32.6" height="32.6" rx="5.9" fill="#7dcfff"/>
+    <rect x="108.3" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#7dc0fb"/>
+    <rect x="258.4" y="164.6" width="32.6" height="32.6" rx="5.9" fill="#7dc0fb"/>
+    <rect x="108.3" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="258.4" y="202.2" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="108.3" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="145.9" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="183.4" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="220.9" y="239.7" width="32.6" height="32.6" rx="5.9" fill="#7aa2f7"/>
+    <rect x="108.3" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#8f9ff7"/>
+    <rect x="183.4" y="277.2" width="32.6" height="32.6" rx="5.9" fill="#8f9ff7"/>
+    <rect x="108.3" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#a49df7"/>
+    <rect x="220.9" y="314.7" width="32.6" height="32.6" rx="5.9" fill="#a49df7"/>
+    <rect x="108.3" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#bb9af7"/>
+    <rect x="258.4" y="352.3" width="32.6" height="32.6" rx="5.9" fill="#bb9af7"/>
+  </g>
+  <g>
+      <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="1.06s" repeatCount="indefinite"/>
+    <g filter="url(#glow)" opacity="0.5"><rect x="333.5" y="352.3" width="70.2" height="32.6" rx="5.9" fill="#7aa2f7"/></g>
+    <rect x="333.5" y="352.3" width="70.2" height="32.6" rx="5.9" fill="#7aa2f7"/>
+  </g>
+</svg>
