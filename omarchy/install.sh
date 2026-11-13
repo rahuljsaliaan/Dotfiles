@@ -53,6 +53,7 @@ copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/t
 copy omarchy/themes/tokyo-night/shell.lock.toml  "$HOME/.config/omarchy/themes/tokyo-night/shell.lock.toml"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
 copy omarchy/backgrounds/tokyo-night/pixel-led.png "$HOME/.config/omarchy/backgrounds/tokyo-night/pixel-led.png"
+copy omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4 "$HOME/.config/omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4"
 copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
