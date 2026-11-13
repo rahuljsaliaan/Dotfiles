@@ -527,6 +527,11 @@ Item {
 
   readonly property var layout: { layoutRevision; return layoutWith(expanded, openDeck) }
 
+  // Personal: the card at the top of the deck, which carries the notch
+  // pointing at the bar's bell.
+  readonly property string pointerKey: layout.decks.length > 0 && layout.decks[0].rows.length > 0
+                                       ? String(layout.decks[0].rows[0].key) : ""
+
   // The deck as it would stand with this deck open; the keyboard asks before
   // it moves.
   function layoutWith(isExpanded, deckKey) {
@@ -1617,47 +1622,6 @@ Item {
         height: deck.y + deck.height + motionInset
         clip: true
 
-        // Personal: a small pointer on top of the deck, aimed at the bar's
-        // bell, so the cards read as coming from the bar. Filled with the card
-        // colour and outlined with its rim on the two upper sides.
-        Canvas {
-          id: pointer
-          z: 10
-          readonly property int half: clipper.pointerSize
-          readonly property real corner: Style.space(16)
-          visible: surface.showingNotifications && toasts.count > 0 && service.bellOffset > 0
-          opacity: visible ? 1 : 0
-          Behavior on opacity { NumberAnimation { duration: Style.duration(160) } }
-          width: half * 2
-          height: half + 2
-          x: Math.max(deck.x + corner, Math.min(deck.x + deck.width - corner - width,
-                                                 clipper.width - service.bellOffset - half))
-          y: deck.y - half + 1
-          onVisibleChanged: requestPaint()
-          onPaint: {
-            var ctx = getContext("2d")
-            ctx.reset()
-            ctx.fillStyle = Commons.Color.notifications.background
-            ctx.beginPath()
-            ctx.moveTo(0, height)
-            ctx.lineTo(half, 0.5)
-            ctx.lineTo(width, height)
-            ctx.closePath()
-            ctx.fill()
-            // Personal: the rim may be a gradient; the pointer sits at the top
-            // right, so it takes the gradient's last colour.
-            var rim = Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border, 1)
-            var stops = rim.gradient && rim.gradient.enabled ? rim.gradient.colors : []
-            ctx.strokeStyle = stops.length > 0 ? stops[stops.length - 1] : rim.color
-            ctx.lineWidth = 1
-            ctx.beginPath()
-            ctx.moveTo(0.5, height - 1.5)
-            ctx.lineTo(half, 0.5)
-            ctx.lineTo(width - 0.5, height - 1.5)
-            ctx.stroke()
-          }
-        }
-
         Item {
           id: deck
           x: clipper.motionInset
@@ -1742,6 +1706,10 @@ Item {
               row: model
               scene: service
               cardWidth: deck.width
+              // Personal: the top card's notch points at the bar's bell.
+              pointerShown: surface.showingNotifications && service.bellOffset > 0
+                            && model.key === service.pointerKey
+              pointerX: clipper.width - service.bellOffset - deck.x
               place: service.placements[model.key]
                      || ({ y: 0, scale: 1, opacity: 0, z: 1, front: false, hidden: true })
               hovered: service.keyboardMode ? service.keyboardKey === model.key : service.hoverKey === model.key
