@@ -141,7 +141,7 @@
     "position": "top"
   },
   "cloneSourceRestores": [
-    "rahulj.lock",
+    "rahulj.glasslock",
     "rahulj.dock",
     "rahulj.idle",
     "rahulj.notifications"
@@ -155,20 +155,23 @@
   "dock": {
     "pinned": [
       "chromium",
+      "Gmail",
       "Microsoft Outlook",
       "teams-for-linux",
-      "foot"
+      "foot",
+      "YouTube Music"
     ],
     "position": "bottom",
     "autohide": true
   },
   "idle": {
     "lock": 300,
-    "screensaver": 150
+    "screensaver": 0
   },
   "plugins": [
     {
-      "id": "rahulj.lock"
+      "id": "rahulj.glasslock",
+      "name": "Rahul"
     },
     {
       "id": "rahulj.dock"
