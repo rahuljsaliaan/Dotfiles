@@ -61,7 +61,8 @@ together for different monitors.
 | `omarchy/plugins/rahulj.idle` | `~/.config/omarchy/plugins/` | Idle timer that starts the main-screen-only screensaver |
 | `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, prompts and the lock field use the soft gradient border, and the lock field is frosted glass; notifications are the lifted float colour (#24283b, 95%) with the same gradient rim, and a red `border-critical` for critical ones. Shell surfaces read the copy `omarchy theme set tokyo-night` generates, so re-apply the theme after editing (then re-set the wallpaper, which the re-apply resets) |
 | `omarchy/themes/tokyo-night/shell.lock.toml` | `~/.config/omarchy/themes/tokyo-night/` | The lock screen's colours (frosted navy, the window-gradient rim, red only on a wrong password). Stock Tokyo Night ships its own `shell.lock.toml`, which replaces the whole `[lock]` section of `shell.toml` when the theme is applied, so they have to live in this file |
-| `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The `</>` wallpaper |
+| `omarchy/backgrounds/tokyo-night/pixel-led.png` (`backgrounds/src/pixel-led.svg` is its source) | `~/.config/omarchy/backgrounds/tokyo-night/` | The wallpaper: the screen as a faint grid of unlit pixels, like an LED panel switched off, fading towards the edges, with the `</>` lit in the middle in the avatar's pixel style (cyan → blue → purple, with a soft glow). Behind the glassy windows the grid blurs into a gentle texture |
+| `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The previous, smooth `</>` wallpaper, kept for the screensaver art and as an alternative |
 | `omarchy/branding/` | `~/.config/omarchy/branding/` | Screensaver art, and the clean (glow-free) `</>` it is traced from |
 | `omarchy/hooks/theme-set.d/screensaver-art` | `~/.config/omarchy/hooks/theme-set.d/` | Re-traces the screensaver art from the wallpaper on every theme switch |
 | `omarchy/hooks/theme-set.d/glassy-terminals` | `~/.config/omarchy/hooks/theme-set.d/` | Keeps terminals glassy after a theme switch: Omarchy gives every tmux pane a solid theme background (window-style and an OSC 11 into each pane), so the hook sets panes back to the terminal's own see-through background, and sets the terminal glass to 0.60 (a touch more see-through than Omarchy's 0.65) and resends it to running foot terminals, which the switch leaves solid |
@@ -93,7 +94,7 @@ together for different monitors.
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
 - `omarchy bar background glassy`: frosted top bar
 - `gsettings … button-layout 'appmenu:'`: no close buttons in GTK apps' own header bars
-- `omarchy theme bg set …code-brackets.png`: the wallpaper
+- `omarchy theme bg set …pixel-led.png`: the wallpaper
 
 ## The patched titlebar plugin
 
