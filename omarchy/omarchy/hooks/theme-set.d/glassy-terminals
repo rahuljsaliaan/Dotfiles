@@ -1,0 +1,44 @@
+#!/bin/bash
+# Keep terminals glassy after a theme change (Glassy windows only).
+#
+# omarchy-theme-set-tmux gives every tmux pane a solid theme background twice:
+# window-style bg=#1a1b26, and an OSC 11 written into each pane's tty, which
+# tmux keeps as that pane's own default background. Either paints over
+# foot's see-through background, so tmux sessions lose the glass. Panes take
+# the terminal's default background instead (OSC 111 resets the pane's own),
+# keeping the theme's text colour.
+#
+# Running foot terminals are also retinted before the glassy alpha is written
+# back, which leaves them solid; resend the theme's colours with that alpha.
+set -u
+
+[[ -f ${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/toggles/hypr/window-glassy.lua ]] || exit 0
+
+if tmux list-sessions >/dev/null 2>&1; then
+  fg=$(omarchy-theme-color foreground 2>/dev/null)
+  style="bg=default${fg:+,fg=$fg}"
+  tmux set-option -g window-style "$style" \; set-option -g window-active-style "$style" >/dev/null 2>&1
+  # Windows that set their own style keep it unless it is cleared.
+  tmux list-windows -a -F '#{window_id}' 2>/dev/null | while read -r w; do
+    tmux set-option -wu -t "$w" window-style \; set-option -wu -t "$w" window-active-style >/dev/null 2>&1
+  done
+  tmux list-panes -a -F '#{pane_tty}' 2>/dev/null | sort -u | while read -r tty; do
+    [[ $tty == /dev/pts/* ]] && printf '\033]111\007' >"$tty" 2>/dev/null
+  done
+  tmux list-clients -F '#{client_name}' 2>/dev/null | while read -r c; do
+    tmux refresh-client -t "$c" 2>/dev/null
+  done
+fi
+
+# Personal: the terminal glass a little more see-through than Omarchy's 0.65,
+# so more of the wallpaper's pixel grid shows behind the text. Written into the glass block the theme
+# switch just added, before the alpha is resent to running terminals; new ones
+# read it at launch.
+GLASS_ALPHA=0.60
+theme_foot="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/foot.ini"
+if [[ -f $theme_foot ]] && grep -q '^# omarchy-glass begin' "$theme_foot"; then
+  sed -i "/^# omarchy-glass begin/,/^# omarchy-glass end/ s/^alpha=.*/alpha=$GLASS_ALPHA/" "$theme_foot"
+fi
+
+command -v omarchy-theme-set-foot >/dev/null && omarchy-theme-set-foot
+exit 0

@@ -527,6 +527,11 @@ Item {
 
   readonly property var layout: { layoutRevision; return layoutWith(expanded, openDeck) }
 
+  // Personal: the card at the top of the deck, which carries the notch
+  // pointing at the bar's bell.
+  readonly property string pointerKey: layout.decks.length > 0 && layout.decks[0].rows.length > 0
+                                       ? String(layout.decks[0].rows[0].key) : ""
+
   // The deck as it would stand with this deck open; the keyboard asks before
   // it moves.
   function layoutWith(isExpanded, deckKey) {
@@ -715,10 +720,10 @@ Item {
         service.arriving = key
         toasts.insert(0, row)
         service.arriving = ""
-        // It drops in from just above where it lands, from under the bar for
-        // the top card, and fades in on the way.
+        // It fades in where it lands; Toast.qml slides it in from the screen
+        // edge (personal: Night Glass spring entrance).
         var landing = service.layout.placements[key]
-        snap[key] = { y: (landing ? landing.y : 0) - service.travel,
+        snap[key] = { y: (landing ? landing.y : 0),
                       scale: landing ? landing.scale : 1, opacity: 0,
                       height: landing ? landing.height : 0 }
         service.retarget(snap, deckNow, service.arriveDuration)
@@ -1611,52 +1616,20 @@ Item {
         // Personal: wide enough for the cards' deep shadow (Toast.qml), and a
         // strip at the top for the pointer towards the bar's bell.
         readonly property int motionInset: Style.space(26)
+        // Personal: extra room on the left for the pop-out entrance (Toast.qml),
+        // where a card arrives larger and swings past its place before it
+        // settles; without it the card's left side is cut off mid-bounce. The
+        // input mask is the deck only, so the extra width takes no clicks.
+        readonly property int popRoom: Style.space(64)
         readonly property int pointerSize: Style.space(8)
         readonly property int pointerRoom: pointerSize + Style.space(2)
-        width: service.notificationWidth + motionInset + surface.margins.right
+        width: service.notificationWidth + motionInset + popRoom + surface.margins.right
         height: deck.y + deck.height + motionInset
         clip: true
 
-        // Personal: a small pointer on top of the deck, aimed at the bar's
-        // bell, so the cards read as coming from the bar. Filled with the card
-        // colour and outlined with its rim on the two upper sides.
-        Canvas {
-          id: pointer
-          z: 10
-          readonly property int half: clipper.pointerSize
-          readonly property real corner: Style.space(16)
-          visible: surface.showingNotifications && toasts.count > 0 && service.bellOffset > 0
-          opacity: visible ? 1 : 0
-          Behavior on opacity { NumberAnimation { duration: Style.duration(160) } }
-          width: half * 2
-          height: half + 2
-          x: Math.max(deck.x + corner, Math.min(deck.x + deck.width - corner - width,
-                                                 clipper.width - service.bellOffset - half))
-          y: deck.y - half + 1
-          onVisibleChanged: requestPaint()
-          onPaint: {
-            var ctx = getContext("2d")
-            ctx.reset()
-            ctx.fillStyle = Commons.Color.notifications.background
-            ctx.beginPath()
-            ctx.moveTo(0, height)
-            ctx.lineTo(half, 0.5)
-            ctx.lineTo(width, height)
-            ctx.closePath()
-            ctx.fill()
-            ctx.strokeStyle = Commons.Color.notifications.border
-            ctx.lineWidth = 1
-            ctx.beginPath()
-            ctx.moveTo(0.5, height - 1.5)
-            ctx.lineTo(half, 0.5)
-            ctx.lineTo(width - 0.5, height - 1.5)
-            ctx.stroke()
-          }
-        }
-
         Item {
           id: deck
-          x: clipper.motionInset
+          x: clipper.motionInset + clipper.popRoom
           y: clipper.pointerRoom
           width: service.notificationWidth
           height: service.deckHeight
@@ -1738,6 +1711,10 @@ Item {
               row: model
               scene: service
               cardWidth: deck.width
+              // Personal: the top card's notch points at the bar's bell.
+              pointerShown: surface.showingNotifications && service.bellOffset > 0
+                            && model.key === service.pointerKey
+              pointerX: clipper.width - service.bellOffset - deck.x
               place: service.placements[model.key]
                      || ({ y: 0, scale: 1, opacity: 0, z: 1, front: false, hidden: true })
               hovered: service.keyboardMode ? service.keyboardKey === model.key : service.hoverKey === model.key

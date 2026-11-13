@@ -40,6 +40,7 @@ copy hypr/hyprland.lua   "$HOME/.config/hypr/hyprland.lua"
 copy hypr/looknfeel.lua  "$HOME/.config/hypr/looknfeel.lua"
 copy hypr/monitors.lua   "$HOME/.config/hypr/monitors.lua"
 copy hypr/bindings.lua   "$HOME/.config/hypr/bindings.lua"
+copy avatar/face.png     "$HOME/.face"
 copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
@@ -54,6 +55,7 @@ copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/ba
 copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
+copy omarchy/hooks/theme-set.d/glassy-terminals  "$HOME/.config/omarchy/hooks/theme-set.d/glassy-terminals"
 
 # Screensaver scripts, the floating tmux prompt, and browser-here.
 for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here; do
@@ -107,6 +109,18 @@ fi
 if [[ -f "$HOME/.local/share/applications/Microsoft Teams.desktop" ]]; then
   omarchy-webapp-remove "Microsoft Teams" >/dev/null && printf '  removed  Microsoft Teams web app\n'
 fi
+
+# Web apps pinned in the dock (shell.json dock.pinned names them by launcher).
+for entry in "Gmail|https://mail.google.com/|gmail" \
+             "YouTube Music|https://music.youtube.com/|youtube-music"; do
+  IFS='|' read -r name url icon <<<"$entry"
+  if [[ -f "$HOME/.local/share/applications/$name.desktop" ]]; then
+    printf '  ok       %s web app\n' "$name"
+  else
+    omarchy-webapp-install "$name" "$url" "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/$icon.png" >/dev/null &&
+      printf '  added    %s web app\n' "$name"
+  fi
+done
 
 # Community bar widgets, from their own repos (reviewed before adding):
 #   Pulse: CPU, memory, disk and network activity in one widget
