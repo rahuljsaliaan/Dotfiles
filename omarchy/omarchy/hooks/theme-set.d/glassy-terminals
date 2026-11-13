@@ -30,5 +30,15 @@ if tmux list-sessions >/dev/null 2>&1; then
   done
 fi
 
+# Personal: the terminal glass a little more solid than Omarchy's 0.65, so text
+# reads more easily over the wallpaper. Written into the glass block the theme
+# switch just added, before the alpha is resent to running terminals; new ones
+# read it at launch.
+GLASS_ALPHA=0.70
+theme_foot="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/foot.ini"
+if [[ -f $theme_foot ]] && grep -q '^# omarchy-glass begin' "$theme_foot"; then
+  sed -i "/^# omarchy-glass begin/,/^# omarchy-glass end/ s/^alpha=.*/alpha=$GLASS_ALPHA/" "$theme_foot"
+fi
+
 command -v omarchy-theme-set-foot >/dev/null && omarchy-theme-set-foot
 exit 0
