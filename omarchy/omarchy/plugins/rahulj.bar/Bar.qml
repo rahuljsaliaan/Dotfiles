@@ -86,7 +86,7 @@ Item {
   property color barForeground: useTransparentForeground ? transparentForeground : themeForeground
   property bool foregroundAnimationEnabled: true
   property color background: Commons.Color.bar.background
-  readonly property color glassBackground: Qt.rgba(background.r, background.g, background.b, Math.min(background.a, 0.35))
+  readonly property color glassBackground: Qt.rgba(background.r, background.g, background.b, Math.min(background.a, 0.40))
   property color urgent: Commons.Color.bar.active
 
   // A theme change cross-fades the bar's colors. Cycling the background
