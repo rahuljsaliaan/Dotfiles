@@ -40,19 +40,22 @@ copy hypr/hyprland.lua   "$HOME/.config/hypr/hyprland.lua"
 copy hypr/looknfeel.lua  "$HOME/.config/hypr/looknfeel.lua"
 copy hypr/monitors.lua   "$HOME/.config/hypr/monitors.lua"
 copy hypr/bindings.lua   "$HOME/.config/hypr/bindings.lua"
+copy avatar/face.png     "$HOME/.face"
 copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
 copy omarchy/extensions/omarchy-menu.jsonc       "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
-for plugin in lock bar dock idle notifications notification-bell divider net-speed reminders; do
+for plugin in lock glasslock bar dock idle notifications notification-bell divider net-speed reminders; do
   copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
+copy omarchy/themes/tokyo-night/shell.lock.toml  "$HOME/.config/omarchy/themes/tokyo-night/shell.lock.toml"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
 copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
+copy omarchy/hooks/theme-set.d/glassy-terminals  "$HOME/.config/omarchy/hooks/theme-set.d/glassy-terminals"
 
 # Screensaver scripts, the floating tmux prompt, and browser-here.
 for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here; do
@@ -107,6 +110,18 @@ if [[ -f "$HOME/.local/share/applications/Microsoft Teams.desktop" ]]; then
   omarchy-webapp-remove "Microsoft Teams" >/dev/null && printf '  removed  Microsoft Teams web app\n'
 fi
 
+# Web apps pinned in the dock (shell.json dock.pinned names them by launcher).
+for entry in "Gmail|https://mail.google.com/|gmail" \
+             "YouTube Music|https://music.youtube.com/|youtube-music"; do
+  IFS='|' read -r name url icon <<<"$entry"
+  if [[ -f "$HOME/.local/share/applications/$name.desktop" ]]; then
+    printf '  ok       %s web app\n' "$name"
+  else
+    omarchy-webapp-install "$name" "$url" "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/$icon.png" >/dev/null &&
+      printf '  added    %s web app\n' "$name"
+  fi
+done
+
 # Community bar widgets, from their own repos (reviewed before adding):
 #   Pulse: CPU, memory, disk and network activity in one widget
 #   AI Usage: Claude subscription session and weekly limits
@@ -125,8 +140,14 @@ for entry in io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarch
 done
 
 # Use the cloned plugins in place of Omarchy's own.
-for plugin in lock bar dock idle notifications notification-bell divider net-speed reminders; do
+for plugin in glasslock bar dock idle notifications notification-bell divider net-speed reminders; do
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
+done
+# Exactly one lock screen: Glasslock. rahulj.lock stays installed as a fallback
+# (omarchy plugin enable rahulj.lock), and disabling it restores omarchy.lock,
+# so both are switched off after it.
+for plugin in rahulj.lock omarchy.lock; do
+  omarchy plugin disable "$plugin" >/dev/null 2>&1 && printf '  disabled %s\n' "$plugin"
 done
 
 # Frosted windows and top bar.

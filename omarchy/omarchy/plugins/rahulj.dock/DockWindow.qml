@@ -320,7 +320,7 @@ PanelWindow {
       id: plate
       anchors.fill: parent
       radius: Math.round(window.slotSize * 0.3)
-      color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.62)
+      color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.67)
       border.width: 1
       border.color: Qt.rgba(Commons.Color.bar.text.r, Commons.Color.bar.text.g, Commons.Color.bar.text.b, 0.12)
 

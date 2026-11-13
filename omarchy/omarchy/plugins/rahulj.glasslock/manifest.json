@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "rahulj.glasslock",
+  "name": "My Glasslock",
+  "version": "1.0.0",
+  "author": "Jozz",
+  "license": "MIT",
+  "description": "Glasslock (rocanrolpsycho/glasslock) in this desktop's theme: password card on the main screen only, Tokyo Night glass with the window gradient rim, and the BenQ reconnect fix from rahulj.lock",
+  "omarchy": {
+    "capabilities": [
+      "authentication"
+    ],
+    "clonedFrom": "omarchy.lock"
+  },
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import qs.Commons
 import qs.Commons as Commons
@@ -27,6 +28,10 @@ Item {
   property double now: Date.now()
   property real cardWidth: Style.space(380)
   property var actions: []                   // what the sender put on the wire
+  // Personal: the top card points up at the bar's bell with a notch drawn as
+  // part of its own outline, so it moves, fades and colours with the card.
+  property bool pointerShown: false
+  property real pointerX: width / 2          // the notch's centre, card-local
 
   // The pointer in the deck's coordinates: the deck owns hover, so cards and
   // their buttons work out what is under it themselves.
@@ -73,8 +78,12 @@ Item {
   readonly property bool critical: row.urgency === 2
   readonly property color dimColor: Qt.darker(Commons.Color.notifications.text, 1.4)
   readonly property color bodyColor: Qt.darker(Commons.Color.notifications.text, 1.15)
+  // Personal (Night Glass): the urgency colour, used by the app pill and the
+  // draining line. Low is the theme's comment grey, normal the theme blue,
+  // critical red.
+  readonly property color lowColor: "#565f89"
   readonly property color accentColor: critical ? Commons.Color.urgent
-                                               : (row.urgency === 0 ? dimColor : Commons.Color.notifications.countdown)
+                                               : (row.urgency === 0 ? lowColor : Commons.Color.notifications.countdown)
   readonly property bool hasBody: String(row.body || "").length > 0
   readonly property bool redacted: Store.redacted(row)
   // Omarchy's own toasts and bare notify-send calls name no source worth a
@@ -218,34 +227,211 @@ Item {
   enabled: !place.hidden && !place.leaving
 
   // BorderSurface keeps gradients and per-side border widths; content below is
-  // inset by those exact widths.
-  // Personal "elevated glass" card: a lighter surface than any window, a fine
-  // light rim (theme overlay [notifications]), rounder corners than windows,
-  // and a deep soft shadow so it clearly floats above whatever is behind it.
+  // inset by those exact widths. Personal: it is kept only for those insets;
+  // the card itself is drawn by cardShape below.
   BorderSurface {
     id: plate
+    visible: false
     width: body.width
     height: body.height
     radius: Style.space(14)
     color: Commons.Color.notifications.background
-    borderSpec: Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
-                                   Math.max(1, Style.space(2)))
+    borderSpec: card.critical
+                ? Border.surfaceSpec("notifications", "border-critical", Commons.Color.urgent,
+                                     Math.max(1, Style.space(2)))
+                : Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
+                                     Math.max(1, Style.space(2)))
+  }
+
+  // Personal "Night Glass" card: a lifted Tokyo Night surface (a shade lighter
+  // than any window, a little see-through so Hyprland's blur still frosts it),
+  // with the focused-window gradient as its rim (theme overlay
+  // [notifications]; red for critical). To stand apart from windows it also
+  // has a slab edge underneath that gives it thickness, and a long shadow falling down-left, as if lit from the bar.
+  // Drawn as one outline, so the top card's notch towards the bell is the
+  // same surface and rim as the card.
+  readonly property real notchRoom: Style.space(8)
+  // The notch grows out of the top edge only once the card has settled, and
+  // goes back in before it leaves, so it never swings or zooms with the card.
+  property bool settled: true
+  property real notchGrow: pointerShown && settled && !leavingNow ? 1 : 0
+  Behavior on notchGrow { NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic } }
+  readonly property real notchSize: notchRoom * notchGrow
+  readonly property real tipX: Math.max(plate.radius + notchRoom, Math.min(width - plate.radius - notchRoom, pointerX))
+  readonly property var rimSpec: plate.borderSpec
+  readonly property var rimColors: rimSpec && rimSpec.gradient && rimSpec.gradient.enabled
+                                   ? rimSpec.gradient.colors : [Border.color(rimSpec), Border.color(rimSpec)]
+  readonly property real rimAngle: rimSpec && rimSpec.gradient && rimSpec.gradient.enabled ? (rimSpec.gradient.angle || 0) : 0
+  function rimStop(i) { return i < rimColors.length ? rimColors[i] : rimColors[rimColors.length - 1] }
+  function rimAt(i) { return rimColors.length <= 1 ? (i === 0 ? 0 : 1) : (i >= rimColors.length ? 1 : i / (rimColors.length - 1)) }
+
+  // The card's outline inset by k and moved down by dy: a rounded rectangle
+  // whose top edge rises into a 45° notch. Inset, the notch's sides move in
+  // parallel, so the rim keeps one width all the way round.
+  function outline(k, dy, w, h) {
+    var room = notchRoom, r = plate.radius, notch = notchSize
+    var tip = tipX
+    var top = room + k + dy, left = k, right = w - k, bottom = room + h - k + dy
+    var rr = Math.max(0, r - k)
+    var p = "M " + (left + rr) + " " + top
+    if (notch > 0) {
+      var d = k * (Math.SQRT2 - 1)
+      p += " L " + (tip - notch + d) + " " + top
+         + " L " + tip + " " + (room - notch + k * Math.SQRT2 + dy)
+         + " L " + (tip + notch - d) + " " + top
+    }
+    p += " L " + (right - rr) + " " + top + " A " + rr + " " + rr + " 0 0 1 " + right + " " + (top + rr)
+       + " L " + right + " " + (bottom - rr) + " A " + rr + " " + rr + " 0 0 1 " + (right - rr) + " " + bottom
+       + " L " + (left + rr) + " " + bottom + " A " + rr + " " + rr + " 0 0 1 " + left + " " + (bottom - rr)
+       + " L " + left + " " + (top + rr) + " A " + rr + " " + rr + " 0 0 1 " + (left + rr) + " " + top + " Z"
+    return p
+  }
+
+  // The contact shadow: tight and a little darker right under the card, the
+  // way a real object darkens the surface it nearly touches.
+  Item {
+    id: contactShadow
+    readonly property real spill: Style.space(14)
+    x: -spill
+    y: -card.notchRoom - spill + Style.space(3)
+    width: body.width + spill * 2
+    height: body.height + card.notchRoom + spill * 2
+    opacity: card.place.front || card.expanded ? 0.45 * card.contentOpacity : 0
+    visible: opacity > 0.01
     layer.enabled: true
     layer.effect: MultiEffect {
       autoPaddingEnabled: true
+      blurEnabled: true
+      blur: 1.0
+      blurMax: 10
+    }
+    Shape {
+      x: contactShadow.spill
+      y: contactShadow.spill
+      width: body.width
+      height: body.height + card.notchRoom
+      preferredRendererType: Shape.CurveRenderer
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillColor: "#05060e"
+        PathSvg { path: card.outline(Style.space(2), 0, body.width, body.height) }
+      }
+    }
+  }
+
+  Item {
+    id: cardShape
+    readonly property real room: card.notchRoom
+    readonly property real rim: plate.borderTop
+    readonly property real gdx: Math.cos(card.rimAngle * Math.PI / 180)
+    readonly property real gdy: Math.sin(card.rimAngle * Math.PI / 180)
+    readonly property real glen: (Math.abs(width * gdx) + Math.abs(height * gdy)) / 2
+    readonly property string outer: card.outline(0, 0, width, body.height)
+    readonly property string inner: card.outline(rim, 0, width, body.height)
+    // S1 · Lifted surface: a shade lighter at the top, like a lit sheet.
+    readonly property color base: Commons.Color.notifications.background
+    readonly property color lit: Qt.rgba(Math.min(1, base.r * 1.13), Math.min(1, base.g * 1.13), Math.min(1, base.b * 1.12), base.a)
+
+    y: -room
+    width: body.width
+    height: body.height + room
+    layer.enabled: true
+    // The ambient shadow: wide, soft and faint, in a deep navy rather than
+    // black (shadows on a blue-dark desktop read blue), a little smaller than
+    // the card so no hard edge shows, and falling slightly down-left, away
+    // from the bar. The contact shadow below does the close-in darkening.
+    layer.effect: MultiEffect {
+      autoPaddingEnabled: true
       shadowEnabled: true
-      shadowColor: "#000000"
-      shadowOpacity: 0.6
+      shadowColor: "#05060e"
+      shadowOpacity: 0.42
       shadowBlur: 1.0
-      shadowVerticalOffset: Style.space(10)
+      blurMax: 64
+      shadowScale: 0.97
+      shadowVerticalOffset: Style.space(14)
+      shadowHorizontalOffset: -Style.space(4)
     }
 
-    // A faint highlight along the top edge, like light catching glass.
+    // S6 · Floating slab: two edges under the bottom of the card give it
+    // thickness. Only the part below the card is drawn, so the see-through
+    // surface does not show them through it.
+    Item {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      y: cardShape.room + body.height - plate.radius
+      height: plate.radius + Style.space(6)
+      clip: true
+      Shape {
+        y: -parent.y
+        width: cardShape.width
+        height: cardShape.height + Style.space(6)
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+          strokeWidth: -1
+          strokeColor: "transparent"
+          fillColor: "#262b40"
+          PathSvg { path: card.outline(0, Style.space(4), cardShape.width, body.height) }
+        }
+        ShapePath {
+          strokeWidth: -1
+          strokeColor: "transparent"
+          fillColor: "#3b4261"
+          PathSvg { path: card.outline(0, Style.space(2), cardShape.width, body.height) }
+        }
+      }
+    }
+
+    Shape {
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
+
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillGradient: LinearGradient {
+          x1: 0; y1: cardShape.room; x2: 0; y2: cardShape.height
+          GradientStop { position: 0; color: cardShape.lit }
+          GradientStop { position: 1; color: cardShape.base }
+        }
+        PathSvg { path: cardShape.outer }
+      }
+
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillRule: ShapePath.OddEvenFill
+        fillGradient: LinearGradient {
+          x1: cardShape.width / 2 - cardShape.gdx * cardShape.glen
+          y1: cardShape.height / 2 - cardShape.gdy * cardShape.glen
+          x2: cardShape.width / 2 + cardShape.gdx * cardShape.glen
+          y2: cardShape.height / 2 + cardShape.gdy * cardShape.glen
+          GradientStop { position: card.rimAt(0); color: card.rimStop(0) }
+          GradientStop { position: card.rimAt(1); color: card.rimStop(1) }
+          GradientStop { position: card.rimAt(2); color: card.rimStop(2) }
+          GradientStop { position: card.rimAt(3); color: card.rimStop(3) }
+        }
+        PathSvg { path: cardShape.outer + " " + cardShape.inner }
+      }
+    }
+
+    // S1: a faint light line just inside the top edge, like light on glass.
+    // It stops either side of the notch, so the notch has no line across it.
+    readonly property real gapLeft: card.notchSize > 0 ? card.tipX - card.notchRoom - Style.space(3) : cardShape.width / 2
+    readonly property real gapRight: card.notchSize > 0 ? card.tipX + card.notchRoom + Style.space(3) : cardShape.width / 2
     Rectangle {
-      anchors { top: parent.top; left: parent.left; right: parent.right
-                topMargin: plate.borderTop; leftMargin: parent.radius; rightMargin: parent.radius }
+      x: plate.radius
+      y: cardShape.room + cardShape.rim + 1
+      width: Math.max(0, cardShape.gapLeft - plate.radius)
       height: 1
-      color: Qt.rgba(1, 1, 1, 0.07)
+      color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
+    }
+    Rectangle {
+      x: cardShape.gapRight
+      y: cardShape.room + cardShape.rim + 1
+      width: Math.max(0, cardShape.width - plate.radius - cardShape.gapRight)
+      height: 1
+      color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
     }
   }
 
@@ -257,6 +443,82 @@ Item {
     visible: card.selected
     color: Style.hoverFillFor(Commons.Color.notifications.text, Commons.Color.accent)
   }
+
+  // Personal: the time left, as a thin line along the bottom edge that drains
+  // to the left (blue -> purple like the rim; grey for low urgency). Critical
+  // cards wait to be dismissed and have none. Smoothed between the coarse
+  // half-second ticks.
+  Rectangle {
+    id: countdownLine
+    readonly property real total: Number(card.row.duration || 0)
+    readonly property real fraction: total > 0 ? Math.max(0, Math.min(1, card.remaining / total)) : 0
+    visible: total > 0 && !card.critical && (card.place.front || card.expanded) && !card.paused
+    anchors { left: plate.left; bottom: plate.bottom
+              leftMargin: plate.radius; bottomMargin: plate.borderBottom }
+    height: Math.max(1, Style.space(2))
+    radius: height / 2
+    width: Math.max(0, (plate.width - plate.radius * 2) * fraction)
+    opacity: card.contentOpacity
+    Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.Linear } }
+    gradient: Gradient {
+      orientation: Gradient.Horizontal
+      GradientStop { position: 0; color: card.row.urgency === 0 ? card.lowColor : Commons.Color.notifications.countdown }
+      GradientStop { position: 1; color: card.row.urgency === 0 ? card.lowColor : "#bb9af7" }
+    }
+  }
+
+  // Personal (S7 · Pop-out): a new card swings out of the screen edge towards
+  // you in 3D (a turn about its upright axis, starting close and large), over-
+  // shoots a little, then settles flat; it slides back out as it leaves, and
+  // a hovered card lifts slightly towards you. Only fresh arrivals pop: a
+  // reload or an opening deck keeps its cards where they are.
+  transform: [
+    Translate { id: slide; x: 0 },
+    Rotation { id: swing; axis { x: 0; y: 1; z: 0 } angle: 0
+               origin.x: card.width / 2; origin.y: card.height / 2 },
+    Scale { id: pop; xScale: 1; yScale: xScale
+            origin.x: card.width / 2; origin.y: card.height / 2 },
+    // Pinned at the notch's tip on the top card, so the tip stays on the bell.
+    Scale { id: lift; xScale: card.hovered ? 1.02 : 1; yScale: xScale
+            origin.x: card.pointerShown ? card.tipX : card.width / 2
+            origin.y: card.pointerShown ? 0 : card.height / 2
+            Behavior on xScale { NumberAnimation { duration: Style.duration(220); easing.type: Easing.OutBack } } }
+  ]
+  readonly property bool leavingNow: !!place.leaving
+  onLeavingNowChanged: {
+    popIn.stop()
+    slideOut.stop()
+    // A card brought back by an update returns to its place at once.
+    if (!leavingNow) { slide.x = 0; swing.angle = 0; pop.xScale = 1 }
+    else if (!(scene && scene.jumping)) slideOut.start()
+  }
+  ParallelAnimation {
+    id: popIn
+    onStarted: card.settled = false
+    onFinished: card.settled = true
+    onStopped: card.settled = true
+    NumberAnimation {
+      target: slide; property: "x"; from: card.cardWidth * 0.7; to: 0
+      duration: Style.duration(620); easing.type: Easing.OutBack; easing.overshoot: 1.2
+    }
+    NumberAnimation {
+      target: swing; property: "angle"; from: -50; to: 0
+      duration: Style.duration(820); easing.type: Easing.OutBack; easing.overshoot: 1.6
+    }
+    SequentialAnimation {
+      NumberAnimation { target: pop; property: "xScale"; from: 1.15; to: 1.05
+                        duration: Style.duration(450); easing.type: Easing.OutCubic }
+      NumberAnimation { target: pop; property: "xScale"; to: 1
+                        duration: Style.duration(350); easing.type: Easing.InOutQuad }
+    }
+  }
+  NumberAnimation {
+    id: slideOut
+    target: slide; property: "x"; to: card.cardWidth * 0.5
+    duration: Style.duration(200)
+    easing.type: Easing.InCubic
+  }
+  Component.onCompleted: if (scene && scene.fresh && scene.fresh[row.key]) popIn.start()
 
   Item {
     id: body
@@ -416,7 +678,7 @@ Item {
                    - Style.space(8))
             text: card.redacted ? I18n.t("notifications.redactedSummary") : String(card.row.summary || "")
             color: Commons.Color.notifications.text
-            font.family: "Liberation Sans"
+            font.family: Style.font.family
             font.pixelSize: Style.font.title
             font.bold: true
             wrapMode: Text.Wrap
@@ -462,21 +724,48 @@ Item {
               height: Math.max(stamp.implicitHeight, shut.implicitHeight)
               anchors.verticalCenter: parent.verticalCenter
 
-              Text {
-                textFormat: Text.PlainText
+              // Personal: the sending app in a small pill in the urgency colour
+              // (like the workspace number and the prompt's folder), then how
+              // long ago, so the card says who it is from at a glance.
+              Row {
                 id: stamp
                 anchors.centerIn: parent
-                // Personal: the sending app's name beside the time ("Teams · 2m",
-                // or "Teams" while it is fresh), so the card says who it is from.
-                readonly property string appLabel: card.anonymous ? "" : String(card.row.app || card.row.source || "")
+                spacing: Style.space(5)
+                readonly property string appLabel: card.anonymous ? "" : String(card.row.app || card.row.source || "").toLowerCase()
                 readonly property string when: card.ago()
-                text: appLabel && when ? appLabel + " · " + when : (appLabel || when)
-                color: card.dimColor
                 opacity: card.hovered ? 0 : 1
                 visible: opacity > 0.01
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
                 Behavior on opacity { NumberAnimation { duration: card.fade; easing.type: Easing.InOutQuad } }
+
+                Rectangle {
+                  visible: stamp.appLabel !== ""
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: pillText.implicitWidth + Style.space(12)
+                  height: pillText.implicitHeight + Style.space(2)
+                  radius: height / 2
+                  color: card.accentColor
+
+                  Text {
+                    id: pillText
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: stamp.appLabel
+                    color: "#1a1b26"
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    font.weight: Font.Bold
+                  }
+                }
+
+                Text {
+                  visible: stamp.when !== ""
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: stamp.when
+                  color: card.dimColor
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                }
               }
 
               Item {
@@ -513,7 +802,7 @@ Item {
 
         FontMetrics {
           id: metrics
-          font.family: "Liberation Sans"
+          font.family: Style.font.family
           font.pixelSize: Style.font.title
         }
 
@@ -531,7 +820,7 @@ Item {
           text: card.redacted ? I18n.t("notifications.redactedBody") : String(card.row.bodyRich || "")
           color: card.bodyColor
           linkColor: Commons.Color.notifications.countdown
-          font.family: "Liberation Sans"
+          font.family: Style.font.family
           font.pixelSize: Style.font.title
           wrapMode: Text.Wrap
           maximumLineCount: card.bodyLines
