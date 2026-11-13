@@ -141,7 +141,7 @@
     "position": "top"
   },
   "cloneSourceRestores": [
-    "rahulj.lock",
+    "rahulj.glasslock",
     "rahulj.dock",
     "rahulj.idle",
     "rahulj.notifications"
@@ -168,7 +168,7 @@
   },
   "plugins": [
     {
-      "id": "rahulj.lock"
+      "id": "rahulj.glasslock"
     },
     {
       "id": "rahulj.dock"
