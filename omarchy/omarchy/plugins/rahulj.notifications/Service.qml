@@ -715,10 +715,10 @@ Item {
         service.arriving = key
         toasts.insert(0, row)
         service.arriving = ""
-        // It drops in from just above where it lands, from under the bar for
-        // the top card, and fades in on the way.
+        // It fades in where it lands; Toast.qml slides it in from the screen
+        // edge (personal: Night Glass spring entrance).
         var landing = service.layout.placements[key]
-        snap[key] = { y: (landing ? landing.y : 0) - service.travel,
+        snap[key] = { y: (landing ? landing.y : 0),
                       scale: landing ? landing.scale : 1, opacity: 0,
                       height: landing ? landing.height : 0 }
         service.retarget(snap, deckNow, service.arriveDuration)
@@ -1644,7 +1644,11 @@ Item {
             ctx.lineTo(width, height)
             ctx.closePath()
             ctx.fill()
-            ctx.strokeStyle = Commons.Color.notifications.border
+            // Personal: the rim may be a gradient; the pointer sits at the top
+            // right, so it takes the gradient's last colour.
+            var rim = Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border, 1)
+            var stops = rim.gradient && rim.gradient.enabled ? rim.gradient.colors : []
+            ctx.strokeStyle = stops.length > 0 ? stops[stops.length - 1] : rim.color
             ctx.lineWidth = 1
             ctx.beginPath()
             ctx.moveTo(0.5, height - 1.5)
