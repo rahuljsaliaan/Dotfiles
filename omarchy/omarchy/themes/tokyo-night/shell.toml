@@ -219,7 +219,7 @@ accent           = "#7aa2f7"
 # (theme background, partly see-through) with the same soft blue -> purple
 # border as focused windows and panels, red only on a wrong password.
 background       = "#1a1b26"
-background-alpha = 0.55
+background-alpha = 0.60
 text             = "#c0caf5"
 placeholder      = "#565f89"
 text-error       = "#f7768e"
