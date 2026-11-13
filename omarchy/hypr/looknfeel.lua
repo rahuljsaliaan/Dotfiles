@@ -190,7 +190,7 @@ hl.config({
 -- One overriding value settles it, added once the rest of the config has loaded
 -- so it comes after both of those rules.
 hl.timer(function()
-  o.window("org\\.gnome\\.Nautilus", { opacity = "0.75 override 0.75 override" })
+  o.window("org\\.gnome\\.Nautilus", { opacity = "0.80 override 0.80 override" })
 end, { timeout = 1, type = "oneshot" })
 
 -- Floating workspaces: a window opening onto an empty one sits exactly in the
