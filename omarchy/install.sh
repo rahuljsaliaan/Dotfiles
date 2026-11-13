@@ -49,6 +49,7 @@ for plugin in lock bar dock idle notifications notification-bell divider net-spe
   copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
+copy omarchy/themes/tokyo-night/shell.lock.toml  "$HOME/.config/omarchy/themes/tokyo-night/shell.lock.toml"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
 copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
