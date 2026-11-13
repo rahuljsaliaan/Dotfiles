@@ -18,3 +18,8 @@
 - Always include a visible toggle in the page header that switches `data-theme` between `dark` and `light`. Remember the choice in localStorage under `lavish-theme`, with every access wrapped in try/catch, and apply a stored choice in `<head>` before first paint. The page must still render dark when storage is unavailable.
 - Keep both modes readable: color inline SVG and custom CSS through `currentColor` and DaisyUI tokens (`--color-base-100`, `--color-base-content`, …), not fixed light-only colors. Re-render any Mermaid diagram when the theme flips.
 - Open the page on the same Hyprland workspace as the terminal Claude runs in, not wherever the browser last was. Start or resume the session with `npx -y lavish-axi <file> --no-open` (add `--reopen` only when reopening is warranted), then open the `url` it prints with `browser-here <url>`. That puts it as a new tab in the browser window already on that workspace, or opens a new browser window there. If `browser-here` is missing or fails, fall back to a plain `npx -y lavish-axi <file>`.
+
+## "Quick task" — the code word for speed
+
+- When the user says "quick task", do it fast: keep reasoning short and skip build, lint, typecheck and test runs.
+- Still do the critical checks: the right repo, branch and base, nothing destructive, no private data, and no AI attribution.
