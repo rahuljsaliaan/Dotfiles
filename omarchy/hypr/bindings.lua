@@ -72,3 +72,35 @@ o.bind_commands[overview_or_next_workspace] = 'hl.dsp.focus({ workspace = "m+1" 
 o.bind_commands[overview_or_previous_workspace] = 'hl.dsp.focus({ workspace = "m-1" })'
 o.rebind("SUPER + TAB", "Next workspace", overview_or_next_workspace)
 o.rebind("SUPER + SHIFT + TAB", "Previous workspace", overview_or_previous_workspace)
+
+-- H/J/K/L alternatives to Omarchy's Super + arrow binds. On the 60% keyboard
+-- the arrows need Fn, and Fn together with Super toggles the keyboard's own
+-- Win-key lock, so these avoid Fn entirely. The arrow binds stay as they are.
+local vim_directions = {
+  { key = "H", dir = "l", name = "left", swap = "to the left" },
+  { key = "J", dir = "d", name = "down", swap = "down" },
+  { key = "K", dir = "u", name = "up", swap = "up" },
+  { key = "L", dir = "r", name = "right", swap = "to the right" },
+}
+
+for _, d in ipairs(vim_directions) do
+  o.bind("SUPER + SHIFT + " .. d.key, "Swap window " .. d.swap, hl.dsp.window.swap({ direction = d.dir }))
+  o.bind("SUPER + SHIFT + CTRL + " .. d.key, "Move window to " .. d.name .. " monitor", o.workspaces.move_window_to_monitor(d.dir))
+  o.bind("SUPER + SHIFT + ALT + " .. d.key, "Move workspace to " .. d.name .. " monitor", o.workspaces.move_to_monitor(d.dir))
+end
+
+-- Navigation mode: Super + ; turns it on, then plain H/J/K/L focus windows,
+-- Shift + H/J/K/L move the window into a group and Ctrl + H/L move focus
+-- inside a group. It stays on until Esc or Super + ; again.
+o.bind("SUPER + SEMICOLON", "Nav mode: turn on (H/J/K/L focus; Esc leaves)", hl.dsp.submap("nav"))
+
+hl.define_submap("nav", function()
+  for _, d in ipairs(vim_directions) do
+    o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", hl.dsp.focus({ direction = d.dir }))
+    o.bind("SHIFT + " .. d.key, "Nav mode: Move window to group " .. d.name, hl.dsp.window.move({ into_group = d.dir }))
+  end
+  o.bind("CTRL + H", "Nav mode: Grouped window focus left", hl.dsp.group.prev())
+  o.bind("CTRL + L", "Nav mode: Grouped window focus right", hl.dsp.group.next())
+  o.bind("ESCAPE", "Nav mode: leave", hl.dsp.submap("reset"))
+  o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
+end)
