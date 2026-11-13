@@ -5,7 +5,7 @@
 # the whole [lock] section of shell.toml when the theme is applied, so the
 # lock colours have to live here, not in this overlay's shell.toml.
 background       = "#1a1b26"
-background-alpha = 0.55
+background-alpha = 0.60
 text             = "#c0caf5"
 placeholder      = "#565f89"
 text-error       = "#f7768e"
