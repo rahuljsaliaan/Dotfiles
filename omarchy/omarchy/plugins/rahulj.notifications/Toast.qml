@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import qs.Commons
 import qs.Commons as Commons
@@ -27,6 +28,10 @@ Item {
   property double now: Date.now()
   property real cardWidth: Style.space(380)
   property var actions: []                   // what the sender put on the wire
+  // Personal: the top card points up at the bar's bell with a notch drawn as
+  // part of its own outline, so it moves, fades and colours with the card.
+  property bool pointerShown: false
+  property real pointerX: width / 2          // the notch's centre, card-local
 
   // The pointer in the deck's coordinates: the deck owns hover, so cards and
   // their buttons work out what is under it themselves.
@@ -222,12 +227,11 @@ Item {
   enabled: !place.hidden && !place.leaving
 
   // BorderSurface keeps gradients and per-side border widths; content below is
-  // inset by those exact widths.
-  // Personal "Night Glass" card: the theme's navy, see-through and blurred by
-  // Hyprland, with the focused-window gradient as its rim (theme overlay
-  // [notifications]), rounder corners than windows, and a deep soft shadow.
+  // inset by those exact widths. Personal: it is kept only for those insets;
+  // the card itself is drawn by cardShape below.
   BorderSurface {
     id: plate
+    visible: false
     width: body.width
     height: body.height
     radius: Style.space(14)
@@ -237,6 +241,56 @@ Item {
                                      Math.max(1, Style.space(2)))
                 : Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
                                      Math.max(1, Style.space(2)))
+  }
+
+  // Personal "Night Glass" card: the theme's navy, see-through and blurred by
+  // Hyprland, with the focused-window gradient as its rim (theme overlay
+  // [notifications]; red for critical), rounder corners than windows, and a
+  // deep soft shadow. Drawn as one outline, so the top card's notch towards
+  // the bell is the same surface and rim as the card, not a separate piece.
+  Item {
+    id: cardShape
+    readonly property real room: Style.space(8)                  // space kept above for the notch
+    readonly property real notch: card.pointerShown ? room : 0
+    readonly property real r: plate.radius
+    readonly property real rim: plate.borderTop
+    readonly property var spec: plate.borderSpec
+    readonly property var colors: spec && spec.gradient && spec.gradient.enabled
+                                  ? spec.gradient.colors : [Border.color(spec), Border.color(spec)]
+    readonly property real angle: spec && spec.gradient && spec.gradient.enabled ? (spec.gradient.angle || 0) : 0
+    readonly property real tipX: Math.max(r + notch, Math.min(width - r - notch, card.pointerX))
+
+    // The card's outline inset by k: a rounded rectangle whose top edge rises
+    // into a 45° notch. Inset, the notch's sides move in parallel, so the rim
+    // keeps one width all the way round.
+    function outline(k) {
+      var top = room + k, left = k, right = width - k, bottom = room + body.height - k
+      var rr = Math.max(0, r - k)
+      var p = "M " + (left + rr) + " " + top
+      if (notch > 0) {
+        var d = k * (Math.SQRT2 - 1)
+        p += " L " + (tipX - notch + d) + " " + top
+           + " L " + tipX + " " + (room - notch + k * Math.SQRT2)
+           + " L " + (tipX + notch - d) + " " + top
+      }
+      p += " L " + (right - rr) + " " + top + " A " + rr + " " + rr + " 0 0 1 " + right + " " + (top + rr)
+         + " L " + right + " " + (bottom - rr) + " A " + rr + " " + rr + " 0 0 1 " + (right - rr) + " " + bottom
+         + " L " + (left + rr) + " " + bottom + " A " + rr + " " + rr + " 0 0 1 " + left + " " + (bottom - rr)
+         + " L " + left + " " + (top + rr) + " A " + rr + " " + rr + " 0 0 1 " + (left + rr) + " " + top + " Z"
+      return p
+    }
+    readonly property string outer: outline(0)
+    readonly property string inner: outline(rim)
+
+    function stop(i) { return i < colors.length ? colors[i] : colors[colors.length - 1] }
+    function at(i) { return colors.length <= 1 ? (i === 0 ? 0 : 1) : (i >= colors.length ? 1 : i / (colors.length - 1)) }
+    readonly property real gdx: Math.cos(angle * Math.PI / 180)
+    readonly property real gdy: Math.sin(angle * Math.PI / 180)
+    readonly property real glen: (Math.abs(width * gdx) + Math.abs(height * gdy)) / 2
+
+    y: -room
+    width: body.width
+    height: body.height + room
     layer.enabled: true
     layer.effect: MultiEffect {
       autoPaddingEnabled: true
@@ -247,12 +301,33 @@ Item {
       shadowVerticalOffset: Style.space(10)
     }
 
-    // A faint highlight along the top edge, like light catching glass.
-    Rectangle {
-      anchors { top: parent.top; left: parent.left; right: parent.right
-                topMargin: plate.borderTop; leftMargin: parent.radius; rightMargin: parent.radius }
-      height: 1
-      color: Qt.rgba(1, 1, 1, 0.07)
+    Shape {
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
+
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillColor: Commons.Color.notifications.background
+        PathSvg { path: cardShape.outer }
+      }
+
+      ShapePath {
+        strokeWidth: -1
+        strokeColor: "transparent"
+        fillRule: ShapePath.OddEvenFill
+        fillGradient: LinearGradient {
+          x1: cardShape.width / 2 - cardShape.gdx * cardShape.glen
+          y1: cardShape.height / 2 - cardShape.gdy * cardShape.glen
+          x2: cardShape.width / 2 + cardShape.gdx * cardShape.glen
+          y2: cardShape.height / 2 + cardShape.gdy * cardShape.glen
+          GradientStop { position: cardShape.at(0); color: cardShape.stop(0) }
+          GradientStop { position: cardShape.at(1); color: cardShape.stop(1) }
+          GradientStop { position: cardShape.at(2); color: cardShape.stop(2) }
+          GradientStop { position: cardShape.at(3); color: cardShape.stop(3) }
+        }
+        PathSvg { path: cardShape.outer + " " + cardShape.inner }
+      }
     }
   }
 
