@@ -107,6 +107,18 @@ if [[ -f "$HOME/.local/share/applications/Microsoft Teams.desktop" ]]; then
   omarchy-webapp-remove "Microsoft Teams" >/dev/null && printf '  removed  Microsoft Teams web app\n'
 fi
 
+# Web apps pinned in the dock (shell.json dock.pinned names them by launcher).
+for entry in "Gmail|https://mail.google.com/|gmail" \
+             "YouTube Music|https://music.youtube.com/|youtube-music"; do
+  IFS='|' read -r name url icon <<<"$entry"
+  if [[ -f "$HOME/.local/share/applications/$name.desktop" ]]; then
+    printf '  ok       %s web app\n' "$name"
+  else
+    omarchy-webapp-install "$name" "$url" "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/$icon.png" >/dev/null &&
+      printf '  added    %s web app\n' "$name"
+  fi
+done
+
 # Community bar widgets, from their own repos (reviewed before adding):
 #   Pulse: CPU, memory, disk and network activity in one widget
 #   AI Usage: Claude subscription session and weekly limits
