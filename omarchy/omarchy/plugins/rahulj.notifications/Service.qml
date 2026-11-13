@@ -1611,10 +1611,7 @@ Item {
         visible: surface.showingNotifications
         anchors.right: parent.right
         anchors.top: parent.top
-        // Personal: starts up to glowRoom higher, so the top card's halo is
-        // not cut off by the clipper's edge; the deck keeps its place.
-        readonly property int glowRoom: Math.min(Style.space(14), surface.margins.top)
-        anchors.topMargin: surface.margins.top - glowRoom
+        anchors.topMargin: surface.margins.top
         // Room for the arrival's scale animation, and the gap from the edge.
         // Personal: wide enough for the cards' deep shadow (Toast.qml), and a
         // strip at the top for the pointer towards the bar's bell.
@@ -1633,7 +1630,7 @@ Item {
         Item {
           id: deck
           x: clipper.motionInset + clipper.popRoom
-          y: clipper.pointerRoom + clipper.glowRoom
+          y: clipper.pointerRoom
           width: service.notificationWidth
           height: service.deckHeight
 

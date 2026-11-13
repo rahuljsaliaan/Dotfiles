@@ -247,8 +247,7 @@ Item {
   // than any window, a little see-through so Hyprland's blur still frosts it),
   // with the focused-window gradient as its rim (theme overlay
   // [notifications]; red for critical). To stand apart from windows it also
-  // has a soft halo in the rim's colours, a slab edge underneath that gives it
-  // thickness, and a long shadow falling down-left, as if lit from the bar.
+  // has a slab edge underneath that gives it thickness, and a long shadow falling down-left, as if lit from the bar.
   // Drawn as one outline, so the top card's notch towards the bell is the
   // same surface and rim as the card.
   readonly property real notchRoom: Style.space(8)
@@ -395,50 +394,6 @@ Item {
       width: Math.max(0, cardShape.width - plate.radius - cardShape.gapRight)
       height: 1
       color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
-    }
-  }
-
-  // S2 · Halo: a ring round the card's edge in the rim's colours, blurred into
-  // a soft glow. Drawn over the card's shadow, which would otherwise swallow
-  // it; the ring leaves the card's face alone, so only its edge is lit.
-  Item {
-    id: halo
-    // The layer only captures its own rectangle, so it reaches past the card
-    // by `spill` on every side for the ring that sits outside the card.
-    readonly property real spill: Style.space(18)
-    x: -spill
-    y: -card.notchRoom - spill
-    width: body.width + spill * 2
-    height: body.height + card.notchRoom + spill * 2
-    // Only cards you can see glow; one behind the front of a deck does not.
-    opacity: card.place.front || card.expanded ? 0.55 * card.contentOpacity : 0
-    visible: opacity > 0.01
-    layer.enabled: true
-    layer.effect: MultiEffect {
-      autoPaddingEnabled: true
-      blurEnabled: true
-      blur: 1.0
-      blurMax: 28
-    }
-    Shape {
-      x: halo.spill
-      y: halo.spill
-      width: body.width
-      height: body.height + card.notchRoom
-      preferredRendererType: Shape.CurveRenderer
-      ShapePath {
-        strokeWidth: -1
-        strokeColor: "transparent"
-        fillGradient: LinearGradient {
-          x1: 0; y1: 0; x2: body.width; y2: body.height + card.notchRoom
-          GradientStop { position: card.rimAt(0); color: card.rimStop(0) }
-          GradientStop { position: card.rimAt(1); color: card.rimStop(1) }
-          GradientStop { position: card.rimAt(2); color: card.rimStop(2) }
-        }
-        fillRule: ShapePath.OddEvenFill
-        PathSvg { path: card.outline(-Style.space(6), 0, body.width, body.height) + " "
-                        + card.outline(Style.space(1), 0, body.width, body.height) }
-      }
     }
   }
 
