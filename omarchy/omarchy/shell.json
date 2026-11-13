@@ -155,9 +155,11 @@
   "dock": {
     "pinned": [
       "chromium",
+      "Gmail",
       "Microsoft Outlook",
       "teams-for-linux",
-      "foot"
+      "foot",
+      "YouTube Music"
     ],
     "position": "bottom",
     "autohide": true
