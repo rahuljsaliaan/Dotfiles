@@ -40,6 +40,7 @@ copy hypr/hyprland.lua   "$HOME/.config/hypr/hyprland.lua"
 copy hypr/looknfeel.lua  "$HOME/.config/hypr/looknfeel.lua"
 copy hypr/monitors.lua   "$HOME/.config/hypr/monitors.lua"
 copy hypr/bindings.lua   "$HOME/.config/hypr/bindings.lua"
+copy avatar/face.png     "$HOME/.face"
 copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
