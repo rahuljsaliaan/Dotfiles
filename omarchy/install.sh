@@ -50,6 +50,7 @@ for plugin in lock bar dock idle notifications notification-bell divider net-spe
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
+copy omarchy/backgrounds/tokyo-night/pixel-led.png "$HOME/.config/omarchy/backgrounds/tokyo-night/pixel-led.png"
 copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
@@ -137,7 +138,7 @@ omarchy bar background glassy >/dev/null && printf '  glassy   top bar\n'
 gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:' && printf '  gtk      header-bar buttons off\n'
 
 # Wallpaper (also regenerates the screensaver art through the theme hook's script).
-omarchy theme bg set "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png" >/dev/null && printf '  wallpaper code-brackets\n'
+omarchy theme bg set "$HOME/.config/omarchy/backgrounds/tokyo-night/pixel-led.png" >/dev/null && printf '  wallpaper pixel-led\n'
 "$HOME/.local/bin/screensaver-art-from-wallpaper" && printf '  screensaver art regenerated\n'
 
 if [[ ${1:-} == "--titlebars" ]]; then

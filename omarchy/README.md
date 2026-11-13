@@ -59,7 +59,8 @@ together for different monitors.
 | `omarchy/plugins/rahulj.notification-bell` | `~/.config/omarchy/plugins/` | Notification Center: a bell in the bar with a purple unread dot that opens a dropdown, like the Wi-Fi panel, listing notifications grouped Today / Yesterday / Earlier: search as you type, filter chips (All, Unread since last opened, Urgent, top apps), Do Not Disturb, Clear (all, or just what is shown), copy / remove per entry, click to focus the app, and keyboard control (↑↓, Enter, Delete, Ctrl+C, Esc) |
 | `omarchy/plugins/rahulj.idle` | `~/.config/omarchy/plugins/` | Idle timer that starts the main-screen-only screensaver |
 | `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, prompts and the lock field use the soft gradient border, and the lock field is frosted glass; notifications use a lighter glass surface with a fine light rim |
-| `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The `</>` wallpaper |
+| `omarchy/backgrounds/tokyo-night/pixel-led.png` (`backgrounds/src/pixel-led.svg` is its source) | `~/.config/omarchy/backgrounds/tokyo-night/` | The wallpaper: the screen as a faint grid of unlit pixels, like an LED panel switched off, fading towards the edges, with the `</>` lit in the middle in the avatar's pixel style (cyan → blue → purple, with a soft glow). Behind the glassy windows the grid blurs into a gentle texture |
+| `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The previous, smooth `</>` wallpaper, kept for the screensaver art and as an alternative |
 | `omarchy/branding/` | `~/.config/omarchy/branding/` | Screensaver art, and the clean (glow-free) `</>` it is traced from |
 | `omarchy/hooks/theme-set.d/screensaver-art` | `~/.config/omarchy/hooks/theme-set.d/` | Re-traces the screensaver art from the wallpaper on every theme switch |
 | `bin/omarchy-launch-screensaver-main` | `~/.local/bin/` | Omarchy's screensaver launcher, limited to the main screen |
@@ -88,7 +89,7 @@ together for different monitors.
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
 - `omarchy bar background glassy`: frosted top bar
 - `gsettings … button-layout 'appmenu:'`: no close buttons in GTK apps' own header bars
-- `omarchy theme bg set …code-brackets.png`: the wallpaper
+- `omarchy theme bg set …pixel-led.png`: the wallpaper
 
 ## The patched titlebar plugin
 
