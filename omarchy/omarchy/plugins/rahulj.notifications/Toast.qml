@@ -73,8 +73,12 @@ Item {
   readonly property bool critical: row.urgency === 2
   readonly property color dimColor: Qt.darker(Commons.Color.notifications.text, 1.4)
   readonly property color bodyColor: Qt.darker(Commons.Color.notifications.text, 1.15)
+  // Personal (Night Glass): the urgency colour, used by the app pill and the
+  // draining line. Low is the theme's comment grey, normal the theme blue,
+  // critical red.
+  readonly property color lowColor: "#565f89"
   readonly property color accentColor: critical ? Commons.Color.urgent
-                                               : (row.urgency === 0 ? dimColor : Commons.Color.notifications.countdown)
+                                               : (row.urgency === 0 ? lowColor : Commons.Color.notifications.countdown)
   readonly property bool hasBody: String(row.body || "").length > 0
   readonly property bool redacted: Store.redacted(row)
   // Omarchy's own toasts and bare notify-send calls name no source worth a
@@ -219,17 +223,20 @@ Item {
 
   // BorderSurface keeps gradients and per-side border widths; content below is
   // inset by those exact widths.
-  // Personal "elevated glass" card: a lighter surface than any window, a fine
-  // light rim (theme overlay [notifications]), rounder corners than windows,
-  // and a deep soft shadow so it clearly floats above whatever is behind it.
+  // Personal "Night Glass" card: the theme's navy, see-through and blurred by
+  // Hyprland, with the focused-window gradient as its rim (theme overlay
+  // [notifications]), rounder corners than windows, and a deep soft shadow.
   BorderSurface {
     id: plate
     width: body.width
     height: body.height
     radius: Style.space(14)
     color: Commons.Color.notifications.background
-    borderSpec: Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
-                                   Math.max(1, Style.space(2)))
+    borderSpec: card.critical
+                ? Border.surfaceSpec("notifications", "border-critical", Commons.Color.urgent,
+                                     Math.max(1, Style.space(2)))
+                : Border.surfaceSpec("notifications", "border", Commons.Color.notifications.border,
+                                     Math.max(1, Style.space(2)))
     layer.enabled: true
     layer.effect: MultiEffect {
       autoPaddingEnabled: true
@@ -257,6 +264,56 @@ Item {
     visible: card.selected
     color: Style.hoverFillFor(Commons.Color.notifications.text, Commons.Color.accent)
   }
+
+  // Personal: the time left, as a thin line along the bottom edge that drains
+  // to the left (blue -> purple like the rim; grey for low urgency). Critical
+  // cards wait to be dismissed and have none. Smoothed between the coarse
+  // half-second ticks.
+  Rectangle {
+    id: countdownLine
+    readonly property real total: Number(card.row.duration || 0)
+    readonly property real fraction: total > 0 ? Math.max(0, Math.min(1, card.remaining / total)) : 0
+    visible: total > 0 && !card.critical && (card.place.front || card.expanded) && !card.paused
+    anchors { left: plate.left; bottom: plate.bottom
+              leftMargin: plate.radius; bottomMargin: plate.borderBottom }
+    height: Math.max(1, Style.space(2))
+    radius: height / 2
+    width: Math.max(0, (plate.width - plate.radius * 2) * fraction)
+    opacity: card.contentOpacity
+    Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.Linear } }
+    gradient: Gradient {
+      orientation: Gradient.Horizontal
+      GradientStop { position: 0; color: card.row.urgency === 0 ? card.lowColor : Commons.Color.notifications.countdown }
+      GradientStop { position: 1; color: card.row.urgency === 0 ? card.lowColor : "#bb9af7" }
+    }
+  }
+
+  // Personal: a new card slides in from the screen edge with a small spring
+  // overshoot, and slides back out as it leaves. Only fresh arrivals slide:
+  // a reload or an opening deck keeps its cards where they are.
+  transform: Translate { id: slide; x: 0 }
+  readonly property bool leavingNow: !!place.leaving
+  onLeavingNowChanged: {
+    slideIn.stop()
+    slideOut.stop()
+    // A card brought back by an update returns to its place at once.
+    if (!leavingNow) slide.x = 0
+    else if (!(scene && scene.jumping)) slideOut.start()
+  }
+  NumberAnimation {
+    id: slideIn
+    target: slide; property: "x"; from: card.cardWidth * 0.6; to: 0
+    duration: Style.duration(480)
+    easing.type: Easing.OutBack
+    easing.overshoot: 1.3
+  }
+  NumberAnimation {
+    id: slideOut
+    target: slide; property: "x"; to: card.cardWidth * 0.5
+    duration: Style.duration(200)
+    easing.type: Easing.InCubic
+  }
+  Component.onCompleted: if (scene && scene.fresh && scene.fresh[row.key]) slideIn.start()
 
   Item {
     id: body
@@ -416,7 +473,7 @@ Item {
                    - Style.space(8))
             text: card.redacted ? I18n.t("notifications.redactedSummary") : String(card.row.summary || "")
             color: Commons.Color.notifications.text
-            font.family: "Liberation Sans"
+            font.family: Style.font.family
             font.pixelSize: Style.font.title
             font.bold: true
             wrapMode: Text.Wrap
@@ -462,21 +519,48 @@ Item {
               height: Math.max(stamp.implicitHeight, shut.implicitHeight)
               anchors.verticalCenter: parent.verticalCenter
 
-              Text {
-                textFormat: Text.PlainText
+              // Personal: the sending app in a small pill in the urgency colour
+              // (like the workspace number and the prompt's folder), then how
+              // long ago, so the card says who it is from at a glance.
+              Row {
                 id: stamp
                 anchors.centerIn: parent
-                // Personal: the sending app's name beside the time ("Teams · 2m",
-                // or "Teams" while it is fresh), so the card says who it is from.
-                readonly property string appLabel: card.anonymous ? "" : String(card.row.app || card.row.source || "")
+                spacing: Style.space(5)
+                readonly property string appLabel: card.anonymous ? "" : String(card.row.app || card.row.source || "").toLowerCase()
                 readonly property string when: card.ago()
-                text: appLabel && when ? appLabel + " · " + when : (appLabel || when)
-                color: card.dimColor
                 opacity: card.hovered ? 0 : 1
                 visible: opacity > 0.01
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
                 Behavior on opacity { NumberAnimation { duration: card.fade; easing.type: Easing.InOutQuad } }
+
+                Rectangle {
+                  visible: stamp.appLabel !== ""
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: pillText.implicitWidth + Style.space(12)
+                  height: pillText.implicitHeight + Style.space(2)
+                  radius: height / 2
+                  color: card.accentColor
+
+                  Text {
+                    id: pillText
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: stamp.appLabel
+                    color: "#1a1b26"
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    font.weight: Font.Bold
+                  }
+                }
+
+                Text {
+                  visible: stamp.when !== ""
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: stamp.when
+                  color: card.dimColor
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                }
               }
 
               Item {
@@ -513,7 +597,7 @@ Item {
 
         FontMetrics {
           id: metrics
-          font.family: "Liberation Sans"
+          font.family: Style.font.family
           font.pixelSize: Style.font.title
         }
 
@@ -531,7 +615,7 @@ Item {
           text: card.redacted ? I18n.t("notifications.redactedBody") : String(card.row.bodyRich || "")
           color: card.bodyColor
           linkColor: Commons.Color.notifications.countdown
-          font.family: "Liberation Sans"
+          font.family: Style.font.family
           font.pixelSize: Style.font.title
           wrapMode: Text.Wrap
           maximumLineCount: card.bodyLines
