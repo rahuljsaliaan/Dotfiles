@@ -143,16 +143,22 @@ border           = "hyprland.active-border-foreground"
 border-alpha     = 1.0
 
 [notifications]
-# Personal "elevated glass" cards (see the rahulj.notifications plugin): a
-# lighter surface than any window, a fine light rim instead of a coloured
-# border, and the theme accent for the countdown. The deep shadow and rounder
-# corners are drawn by the plugin.
-background       = "#343a56"
-background-alpha = 0.94
+# Personal "Night Glass" cards (see the rahulj.notifications plugin): a
+# lifted Tokyo Night surface (#24283b, the float colour, a shade lighter than
+# windows), almost solid (lines behind would show through the notch) but still a
+# little see-through so Hyprland's layer blur frosts what is
+# behind (window-glassy blurs omarchy-notifications), with the same blue ->
+# purple rim as focused windows. The plugin adds a halo, slab edge and long
+# shadow so cards stand apart from windows. countdown is the normal-urgency accent (app
+# pill, draining line); a critical card swaps the rim for border-critical.
+background       = "#24283b"
+background-alpha = 0.95
 text             = "#c0caf5"
-border           = "#c0caf5"
-border-alpha     = 0.16
-border-width     = 1
+border           = "hyprland.active-border"
+border-alpha     = 1.0
+border-width     = 2
+border-critical       = "rgba(f7768ee6) rgba(bb9af7aa) 45deg"
+border-critical-alpha = 1.0
 countdown        = "#7aa2f7"
 
 [launcher]
