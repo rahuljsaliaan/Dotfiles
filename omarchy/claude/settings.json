@@ -10,5 +10,45 @@
     "command": "~/.claude/statusline.sh",
     "padding": 0,
     "refreshInterval": 60
+  },
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Primary use of Claude Code**: software development",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: not queryable (no git remotes configured in this repo) — assume private unless later shown otherwise",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: unknown — origin/HEAD unset, no remotes configured",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
+      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured) — this repo currently has no remotes configured",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development; also used for machine/dotfiles configuration sync (per ~/.claude/CLAUDE.md) and routine terminal/window-manager (Omarchy/Hyprland) operations",
+      "**Trusted repo**: /home/rahulj/Work — no remotes configured, 0 tracked files; treat as an empty/unestablished repo",
+      "**Org-specific CLIs**: None configured — frequent CLIs seen are machine/desktop tooling (omarchy, hyprctl, journalctl, coredumpctl, pacman, foot), not org-specific",
+      "routine under rahulj/ prefix: none established — no evidence of a routine path/namespace convention for this user beyond the home directory"
+    ]
+  },
+  "inputNeededNotifEnabled": true,
+  "model": "opus",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "xhigh"
+    }
   }
 }
