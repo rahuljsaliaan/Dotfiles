@@ -83,6 +83,25 @@ alias bat=batcat
 # -- while tmux refuses to start a server for a command it does not recognise.
 # So `tmux dev` with nothing running yet, which is exactly when it would be
 # typed, fails with "no server running". Intercepting here works cold.
+# Put the wezterm window frame back when tmux is no longer in front.
+#
+# The frame is drawn by the terminal from an OSC a session sends it, so
+# something has to say when that session stops being in front. Detaching cannot
+# say it: by the time tmux fires client-detached the client is already gone, and
+# a hook writing to #{client_tty} reaches nothing -- the bytes never arrive.
+# The shell is what is left, and it gets the terminal back the moment tmux lets
+# go, whether that was Ctrl-b d, the session ending, or the server dying.
+#
+# Guarded on $TMUX so it fires only outside a session. Inside one the frame
+# belongs to whatever session is in front, and tmux.conf's client-attached and
+# client-session-changed hooks own it.
+_dev_clear_frame() {
+  [[ -n ${TMUX:-} ]] && return
+  printf '\033]1337;SetUserVar=tmux_dev_accent=\007'
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _dev_clear_frame
+
 tmux() {
   case "$1" in
     dev) shift; tmux-dev "$@" ;;

@@ -75,6 +75,12 @@ than draw it. That happens on every session change ★, however you switch —
 `prefix` `s`, `prefix` `S`, or a fresh `tmux a` — so the frame always matches
 whatever is in front, and a session with no badge clears it.
 
+**Detaching clears it too** ★, so `Ctrl` `b` `d` leaves an unframed window
+rather than one still wearing the colour of a session you have left. That one
+cannot be a tmux hook: by the time tmux fires `client-detached` the client is
+gone, and writing to it reaches nothing. The shell does it instead, on its next
+prompt, which is the moment it gets the terminal back.
+
 The status bar also carries the **current branch** ★ beside the repo name,
 re-read every few seconds, so it follows a checkout rather than freezing at
 whatever was current when the session opened. The window is named `dev`, not
@@ -223,6 +229,13 @@ Changing that colour from inside the session:
 | `Ctrl` `b` `C` | Prompt for one, e.g. `#f7768e` ★ |
 
 Both repaint the status badge and the window frame together.
+
+The palette holds **thirteen** colours, all Tokyo Night so none of them can
+clash with the rest of the theme. They were picked on two measurements rather
+than by eye: each clears 6.5:1 against the near-black the badge prints on it, so
+the session name stays readable; and each sits at least 18 CIE Lab units from
+every other, which is where two accents stop being "that bluish one" and start
+being telling apart at a glance.
 
 ---
 
