@@ -1,0 +1,38 @@
+#!/bin/bash
+# Keep the wallpaper when a theme is re-applied.
+#
+# Applying the theme that is already current moves the wallpaper on to the next
+# one in the theme's list (omarchy-theme-set's choose_theme_background), so a
+# re-apply, for example to load an edited theme overlay, swapped the pixel
+# wallpaper for another. Switching to a different theme is left alone: Omarchy
+# restores that theme's remembered wallpaper itself.
+#
+# A re-apply always picks the entry after the one shown, from the same sorted
+# list built here, so stepping back one puts the previous wallpaper back.
+set -u
+
+theme=${1:-}
+[[ -n $theme ]] || exit 0
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy"
+last_file="$state_dir/keep-wallpaper.theme"
+last=$(cat "$last_file" 2>/dev/null || true)
+printf '%s\n' "$theme" >"$last_file"
+[[ $last == "$theme" ]] || exit 0
+
+current=$(readlink "$state_dir/current/background" 2>/dev/null) || exit 0
+mapfile -d '' -t backgrounds < <(
+  find -L "$HOME/.config/omarchy/backgrounds/$theme/" "$state_dir/current/theme/backgrounds/" -maxdepth 1 -type f \
+    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
+       -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) \
+    -print0 2>/dev/null | sort -z
+)
+(( ${#backgrounds[@]} > 1 )) || exit 0
+
+for i in "${!backgrounds[@]}"; do
+  if [[ ${backgrounds[$i]} == "$current" ]]; then
+    previous=${backgrounds[$(( (i - 1 + ${#backgrounds[@]}) % ${#backgrounds[@]} ))]}
+    omarchy-theme-bg-set "$previous" >/dev/null 2>&1
+    exit 0
+  fi
+done
+exit 0
