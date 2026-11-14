@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "rahulj.desk-map",
+  "name": "Desk Map",
+  "version": "1.0.0",
+  "author": "rahulj",
+  "description": "A tiny map of the screens as they sit on the desk, each showing the workspace it is on; the focused one is outlined.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Desk Map",
+    "description": "Each screen's workspace, laid out like the desk",
+    "category": "Workspaces",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}
