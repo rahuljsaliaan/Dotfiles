@@ -1,0 +1,4 @@
+#!/bin/bash
+# The same check at login, for updates made with pacman directly. It is quiet
+# when everything is current, and tells about each stock change only once.
+(sleep 20 && omarchy-custom-check --notify) >/dev/null 2>&1 &

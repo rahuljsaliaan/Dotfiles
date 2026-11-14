@@ -1,0 +1,4 @@
+#!/bin/bash
+# After an Omarchy update: say which copied plugins have stock changes to
+# merge, and rebuild the personal titlebar plugin for a new Hyprland.
+omarchy-custom-check --notify || true
