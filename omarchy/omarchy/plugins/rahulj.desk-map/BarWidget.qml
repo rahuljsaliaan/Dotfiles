@@ -7,14 +7,14 @@ import qs.Commons as Commons
 import qs.Ui
 
 // A map of the desk in the bar, which is also the workspace switcher: one
-// small screen per monitor, left to right and sized like the real ones. The
-// focused screen opens up to hold its workspaces, exactly as Omarchy's
-// workspaces widget shows them (1-10 per monitor, the one shown carrying its
-// layout: square tiles, circle scrolls, triangle floats; click it to cycle the
-// layout, click another to switch, scroll to step). The other screens stay
-// small and show just the workspace they are on; clicking one focuses it. So
-// the numbers always belong to the screen they sit in, whichever has focus.
-// It replaces omarchy.workspaces in the bar, and answers its refresh IPC.
+// small screen per monitor, left to right and sized like the real ones. Each
+// holds only the workspace it is on (1-10 per monitor, as omarchy.workspaces
+// numbers them), drawn inside that workspace's layout shape: a square tiles, a
+// circle scrolls, a triangle floats. The focused screen is drawn in the
+// accent. Click the focused screen to cycle its layout (as Super + L does),
+// scroll on it to step through its workspaces, and click another screen to
+// focus it. It replaces omarchy.workspaces in the bar, and answers its
+// refresh IPC.
 BarWidget {
   id: root
   moduleName: "rahulj.desk-map"
@@ -120,46 +120,37 @@ BarWidget {
     if (target !== ids[index]) root.focusWorkspace(target)
   }
 
-  // ---- the layout of the workspace shown: square tiles, circle scrolls, triangle floats
-  property string activeMode: "dwindle"
-  property bool modeStale: false
-  function modeGlyph(mode) {
-    if (mode === "scrolling") return "󰝥"
-    if (mode === "floating") return "󰔶"
-    return "󱓻"
+  // ---- the layout of the workspace each screen shows: read for all of them
+  // at once and cached per workspace; a layout only changes through the
+  // layout commands (which send the refresh IPC) or a config reload.
+  property var modes: ({})
+  property bool modesStale: false
+  function shownIds() {
+    var ids = []
+    for (var i = 0; i < root.screens.length; i++) {
+      var w = root.screens[i].activeWorkspace
+      if (w && w.id > 0) ids.push(w.id)
+    }
+    return ids
   }
-  property var modeCache: ({})
-  property int modeGeneration: 0
-  property int modeProcWorkspace: -1
-  property int modeProcGeneration: 0
-  function showActiveMode() {
-    var mode = root.modeCache[root.activeWorkspaceId()]
-    if (mode !== undefined) root.activeMode = mode
-    else root.readMode()
-  }
-  function readMode() {
-    if (modeProc.running) { root.modeStale = true; return }
-    var id = root.activeWorkspaceId()
-    if (id === -1) return
-    root.modeProcWorkspace = id
-    root.modeProcGeneration = root.modeGeneration
-    modeProc.command = ["omarchy-hyprland-workspace-layout-current", String(id)]
+  function modeOf(id) { return root.modes[id] || "dwindle" }
+  function readModes(force) {
+    var want = root.shownIds().filter(function(id) { return force || root.modes[id] === undefined })
+    if (want.length === 0) return
+    if (modeProc.running) { root.modesStale = true; return }
+    modeProc.command = ["bash", "-c", "for id in \"$@\"; do printf '%s %s\\n' \"$id\" \"$(omarchy-hyprland-workspace-layout-current \"$id\")\"; done", "_"].concat(want.map(String))
     modeProc.running = true
   }
   function refresh() {
-    root.modeCache = ({})
-    root.modeGeneration++
-    root.readMode()
+    root.modes = ({})
+    root.readModes(true)
   }
-  // The layout commands act on the focused workspace, which is the one shown here.
+  // The layout commands act on the focused workspace.
   function cycleLayout() { root.run("omarchy-hyprland-workspace-layout-toggle") }
 
   Component.onCompleted: refresh()
-  onMonitorNameChanged: root.showActiveMode()
-  Connections {
-    target: root.monitor
-    function onActiveWorkspaceChanged() { root.showActiveMode() }
-  }
+  onScreensChanged: root.readModes(false)
+  Timer { id: settle; interval: 120; onTriggered: root.readModes(false) }
   Connections {
     target: Hyprland
     function onRawEvent(event) {
@@ -168,6 +159,7 @@ BarWidget {
       if (name === "workspacev2" || name === "moveworkspacev2" || name === "changeworkspaceid" || name === "focusedmonv2") {
         Hyprland.refreshMonitors()
         Hyprland.refreshWorkspaces()
+        settle.restart()
       }
     }
   }
@@ -175,16 +167,20 @@ BarWidget {
     id: modeProc
     stdout: StdioCollector {
       onStreamFinished: {
-        var mode = text.trim()
-        if (!mode || root.modeProcGeneration !== root.modeGeneration) return
-        root.modeCache[root.modeProcWorkspace] = mode
-        if (root.modeProcWorkspace === root.activeWorkspaceId()) root.activeMode = mode
+        var next = {}
+        for (var k in root.modes) next[k] = root.modes[k]
+        var lines = String(text).split("\n")
+        for (var i = 0; i < lines.length; i++) {
+          var f = lines[i].trim().split(" ")
+          if (f.length >= 2 && f[1]) next[parseInt(f[0], 10)] = f[1]
+        }
+        root.modes = next
       }
     }
     onExited: {
-      if (!root.modeStale) return
-      root.modeStale = false
-      Qt.callLater(root.showActiveMode)
+      if (!root.modesStale) return
+      root.modesStale = false
+      Qt.callLater(function() { root.readModes(false) })
     }
   }
   // Super + L and the default layout ask omarchy.workspaces to read the mode
@@ -210,11 +206,15 @@ BarWidget {
         id: cell
         required property var modelData
         readonly property bool focused: String(modelData.name) === root.monitorName
+        readonly property int wsId: modelData.activeWorkspace ? modelData.activeWorkspace.id : -1
+        readonly property string mode: root.modeOf(wsId)
         readonly property real h: Math.max(10, root.maxHeight * root.logicalHeight(modelData) / root.tallest)
-        readonly property real smallWidth: Math.round(h * root.logicalWidth(modelData) / root.logicalHeight(modelData))
-        width: focused ? Math.max(smallWidth, list.implicitWidth + Style.space(6)) : smallWidth
+        readonly property color line: focused ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.32)
+        readonly property color figure: focused ? root.ink : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.55)
+        width: Math.round(h * root.logicalWidth(modelData) / root.logicalHeight(modelData))
         height: root.barSize
 
+        // The screen.
         Rectangle {
           id: frame
           anchors.bottom: parent.bottom
@@ -223,57 +223,68 @@ BarWidget {
           height: Math.round(cell.h)
           radius: Style.space(3)
           color: "transparent"
-          border.width: 1.5
-          border.color: cell.focused ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.3)
+          border.width: 1
+          border.color: Qt.rgba(cell.line.r, cell.line.g, cell.line.b, cell.focused ? 0.55 : 0.6)
 
-          // Another screen: just the workspace it is on.
-          Text {
-            visible: !cell.focused
+          // Its workspace: the number inside the layout's shape.
+          Canvas {
+            id: shape
             anchors.centerIn: parent
-            textFormat: Text.PlainText
-            text: root.slotLabel(cell.modelData.activeWorkspace ? cell.modelData.activeWorkspace.id : -1)
-            color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.5)
-            font.family: Style.font.family
-            font.pixelSize: Math.max(8, Math.round(cell.h * 0.62))
+            width: Math.round(frame.height * 0.86)
+            height: width
+            readonly property string mode: cell.mode
+            readonly property color stroke: cell.line
+            onModeChanged: requestPaint()
+            onStrokeChanged: requestPaint()
+            onWidthChanged: requestPaint()
+            onPaint: {
+              var c = getContext("2d"), w = width, k = 1.4
+              c.reset()
+              c.lineWidth = k
+              c.strokeStyle = stroke
+              c.lineJoin = "round"
+              c.beginPath()
+              if (mode === "scrolling") {
+                c.arc(w / 2, w / 2, w / 2 - k, 0, Math.PI * 2)
+              } else if (mode === "floating") {
+                c.moveTo(w / 2, k)
+                c.lineTo(w - k, w - k)
+                c.lineTo(k, w - k)
+                c.closePath()
+              } else {
+                var r = w * 0.18, x = k, y = k, s = w - 2 * k
+                c.moveTo(x + r, y); c.lineTo(x + s - r, y); c.arcTo(x + s, y, x + s, y + r, r)
+                c.lineTo(x + s, y + s - r); c.arcTo(x + s, y + s, x + s - r, y + s, r)
+                c.lineTo(x + r, y + s); c.arcTo(x, y + s, x, y + s - r, r)
+                c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r)
+                c.closePath()
+              }
+              c.stroke()
+            }
           }
+          Text {
+            anchors.horizontalCenter: shape.horizontalCenter
+            anchors.verticalCenter: shape.verticalCenter
+            // A triangle's middle sits low.
+            anchors.verticalCenterOffset: cell.mode === "floating" ? Math.round(shape.height * 0.14) : 0
+            textFormat: Text.PlainText
+            text: root.slotLabel(cell.wsId)
+            color: cell.figure
+            font.family: Style.font.family
+            font.pixelSize: Math.max(7, Math.round(shape.height * (cell.mode === "floating" ? 0.46 : 0.58)))
+            font.weight: cell.focused ? Font.Bold : Font.Normal
+          }
+
           MouseArea {
-            visible: !cell.focused
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.focusMonitor(String(cell.modelData.name))
-          }
-
-          // The focused screen: its workspaces, the shown one as its layout.
-          Row {
-            id: list
-            visible: cell.focused
-            anchors.centerIn: parent
-            spacing: 0
-
-            Repeater {
-              model: cell.focused ? root.workspaceIds() : []
-
-              WidgetButton {
-                required property int modelData
-                required property int index
-                readonly property var workspace: root.workspaceById(modelData)
-                readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
-                readonly property bool shown: root.monitor !== null && root.monitor.activeWorkspace !== null && root.monitor.activeWorkspace.id === modelData
-
-                bar: root.bar
-                text: shown ? root.modeGlyph(root.activeMode) : root.slotLabel(modelData)
-                fontSize: Math.max(9, Math.round(cell.h * 0.62))
-                opacity: occupied || shown ? 1 : 0.5
-                horizontalMargin: 4
-                verticalPadding: 0
-                fixedWidth: Style.space(16)
-                fixedHeight: Math.round(cell.h) - 2
-                onPressed: function() {
-                  if (shown) root.cycleLayout()
-                  else root.focusWorkspace(modelData)
-                }
-                onWheelMoved: function(delta) { root.scrollWorkspaces(delta) }
-              }
+            onClicked: {
+              if (cell.focused) root.cycleLayout()
+              else root.focusMonitor(String(cell.modelData.name))
+            }
+            onWheel: function(wheel) {
+              if (!cell.focused) return
+              root.scrollWorkspaces(wheel.angleDelta.y)
             }
           }
         }
