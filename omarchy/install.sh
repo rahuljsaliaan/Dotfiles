@@ -69,6 +69,7 @@ copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarc
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
 copy omarchy/hooks/theme-set.d/glassy-terminals  "$HOME/.config/omarchy/hooks/theme-set.d/glassy-terminals"
+copy omarchy/hooks/theme-set.d/tmux-colors       "$HOME/.config/omarchy/hooks/theme-set.d/tmux-colors"
 copy omarchy/hooks/theme-set.d/keep-wallpaper    "$HOME/.config/omarchy/hooks/theme-set.d/keep-wallpaper"
 copy omarchy/hooks/post-update.d/custom-check   "$HOME/.config/omarchy/hooks/post-update.d/custom-check"
 copy omarchy/hooks/post-boot.d/custom-check     "$HOME/.config/omarchy/hooks/post-boot.d/custom-check"
@@ -92,6 +93,7 @@ copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.conf
 # Prompt, terminal multiplexer and editor.
 copy omarchy/themed/starship.toml.tpl "$HOME/.config/omarchy/themed/starship.toml.tpl"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
+copy tmux/theme-colors.sh   "$HOME/.config/tmux/theme-colors.sh"
 copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy qrg/guides/nvim.txt    "$HOME/.config/qrg/guides/nvim.txt"
 copy bash/.bashrc           "$HOME/.bashrc"

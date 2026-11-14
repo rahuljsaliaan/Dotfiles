@@ -1,0 +1,5 @@
+#!/bin/bash
+# Recolour tmux to the theme just applied: the session pill, window list,
+# dividers, borders and prompts take the new colors.toml, as the Starship prompt
+# and Neovim's status line do, so all three switch together.
+exec "$HOME/.config/tmux/theme-colors.sh"
