@@ -73,6 +73,8 @@ together for different monitors.
 | `omarchy/hooks/theme-set.d/keep-wallpaper` | `~/.config/omarchy/hooks/theme-set.d/` | Keeps the wallpaper when the current theme is re-applied (for example to load an edited overlay): Omarchy moves on to the next wallpaper in the theme's list then, so the hook steps back to the one that was shown. Switching to another theme is left alone |
 | `omarchy/hooks/post-update.d/custom-check`, `post-boot.d/custom-check` | `~/.config/omarchy/hooks/` | Run `bin/omarchy-custom-check` after `omarchy update` and at login (for updates made with pacman directly); silent when everything is current |
 | `omarchy/clone-baselines/` | `~/.config/omarchy/clone-baselines/` | For each copied plugin, the checksums of the stock plugin it was last brought up to date with |
+| `omarchy/themes/tokyo-night/icons.theme` | `~/.config/omarchy/themes/tokyo-night/` | Yaru-blue app icons with Tokyo Night (Omarchy ships Yaru-magenta) |
+| `omarchy/defaults/agent` | `~/.config/omarchy/defaults/` | Claude Code as Omarchy's default coding agent |
 | `bin/omarchy-launch-screensaver-main` | `~/.local/bin/` | Omarchy's screensaver launcher, limited to the main screen |
 | `bin/omarchy-screensaver-tokyo` | `~/.local/bin/` | The screensaver: navy background, 14 calm text effects, theme blue→purple finish |
 | `bin/tmux-prompt` | `~/.local/bin/` | The floating tmux input box (fzf in a tmux popup): renames pre-fill the old name; `:` is a command palette listing every tmux command, filtered as you type (Tab completes, Enter runs, Esc cancels) |
@@ -99,6 +101,8 @@ together for different monitors.
 - `omarchy pkg aur add teams-for-linux-bin`, and removal of the Teams web app: Teams runs as a desktop app that stays in the tray when closed, so its notifications keep arriving
 - `omarchy-webapp-install` for Gmail and YouTube Music (icons from the dashboard-icons set), so their dock pins have a launcher to point at
 
+- `omarchy-default-terminal foot`: foot as the terminal
+- `omarchy plugin add` (left off) for upstream Glasslock and brightwalker25's net-speed: the originals `rahulj.glasslock` and `rahulj.net-speed` were copied from, which `omarchy-custom-check` compares against
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
 - `omarchy bar background glassy`: frosted top bar
 - `gsettings … button-layout 'appmenu:'`: no close buttons in GTK apps' own header bars
@@ -128,3 +132,7 @@ go back to Omarchy's plugin for good, delete that `.so` and run `hyprctl reload`
   only the keys above are tracked, and merged in rather than replaced.
 - **Omarchy, Superwhisper and diagnose-crash skills**: links to files those
   packages install.
+- **Superwhisper** (the dictation default): install it with
+  `omarchy-install-dictation-superwhisper` and sign in; its config holds the
+  account, so it stays off the repo.
+- **git identity** (`~/.config/git/config`): name and email stay private.
