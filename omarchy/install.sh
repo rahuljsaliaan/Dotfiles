@@ -46,7 +46,7 @@ copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
 copy omarchy/extensions/omarchy-menu.jsonc       "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
-for plugin in lock glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign; do
+for plugin in lock glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map; do
   copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
