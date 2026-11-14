@@ -147,3 +147,12 @@ hl.define_submap("nav", function()
   o.bind("ESCAPE", "Nav mode: leave", hl.dsp.submap("reset"))
   o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
 end)
+
+-- Volume on the bracket keys: this 60% keyboard has no media keys, and keys
+-- behind Fn clash with its Fn + Super Win-key lock. Same commands as Omarchy's
+-- media keys, so the volume popup still shows.
+o.bind("SUPER + BRACKETRIGHT", "Volume up", { audio = "raise" }, { locked = true, repeating = true })
+o.bind("SUPER + BRACKETLEFT", "Volume down", { audio = "lower" }, { locked = true, repeating = true })
+o.bind("SUPER + BACKSLASH", "Mute", { audio = "mute-toggle" }, { locked = true })
+o.bind("SUPER + SHIFT + BRACKETRIGHT", "Volume up precise", "omarchy-audio-output-volume +1", { locked = true, repeating = true })
+o.bind("SUPER + SHIFT + BRACKETLEFT", "Volume down precise", "omarchy-audio-output-volume -1", { locked = true, repeating = true })
