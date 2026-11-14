@@ -52,6 +52,8 @@ for plugin in lock glasslock bar dock idle notifications notification-bell divid
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
 copy omarchy/themes/tokyo-night/shell.lock.toml  "$HOME/.config/omarchy/themes/tokyo-night/shell.lock.toml"
+copy omarchy/themes/tokyo-night/icons.theme      "$HOME/.config/omarchy/themes/tokyo-night/icons.theme"
+copy omarchy/defaults/agent                       "$HOME/.config/omarchy/defaults/agent"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
 copy omarchy/backgrounds/tokyo-night/pixel-led.png "$HOME/.config/omarchy/backgrounds/tokyo-night/pixel-led.png"
 copy omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4 "$HOME/.config/omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4"
@@ -147,8 +149,21 @@ for entry in io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarch
   fi
 done
 
+# The originals of two copies, installed but left off: rahulj.glasslock and
+# rahulj.net-speed are made from them, and omarchy-custom-check compares the
+# copies' baselines against them.
+for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsycho/glasslock.git \
+             brightwalker25.net-speed=https://github.com/brightwalker25/omarchy-net-speed.git; do
+  id="${entry%%=*}" url="${entry#*=}"
+  if [[ -d $HOME/.config/omarchy/plugins/$id ]]; then
+    printf '  ok       %s\n' "$id"
+  else
+    omarchy plugin add "$url" --yes >/dev/null && printf '  added    %s (off)\n' "$id"
+  fi
+done
+
 # Use the cloned plugins in place of Omarchy's own.
-for plugin in glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign; do
+for plugin in glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map; do
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
 done
 # Exactly one lock screen: Glasslock. rahulj.lock stays installed as a fallback
@@ -157,6 +172,9 @@ done
 for plugin in rahulj.lock omarchy.lock; do
   omarchy plugin disable "$plugin" >/dev/null 2>&1 && printf '  disabled %s\n' "$plugin"
 done
+
+# Foot as the terminal (Super + Return); it is in Omarchy's base packages.
+omarchy-default-terminal foot >/dev/null && printf '  terminal foot\n'
 
 # Frosted windows and top bar.
 omarchy hyprland window transparency glassy >/dev/null && printf '  glassy   windows\n'
