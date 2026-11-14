@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "Jozz",
   "license": "MIT",
-  "description": "Glasslock (rocanrolpsycho/glasslock) in this desktop's theme: password card on the main screen only, Tokyo Night glass with the window gradient rim, and the BenQ reconnect fix from rahulj.lock",
+  "description": "Glasslock (rocanrolpsycho/glasslock) in this desktop's theme: password card on the main screen only, frosted glass in the theme's colours with the window gradient rim, and the BenQ reconnect fix from rahulj.lock",
   "omarchy": {
     "capabilities": [
       "authentication"

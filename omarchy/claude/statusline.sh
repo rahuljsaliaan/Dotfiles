@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude Code status line (settings.json → statusLine), in Tokyo Night colours.
+# Claude Code status line (settings.json → statusLine), in the Omarchy theme's colours.
 # Claude Code pipes session data in as JSON on stdin; this prints one short row:
 #
 #   󰚩 Opus 5.5 high │ ctx 68k 34% │ $4.12 │ 5h 23% ↻2h10m │ wk 41%
@@ -30,10 +30,24 @@ IFS=$'\x1f' read -r model effort ctx_pct ctx_used cost five_pct five_reset week_
   ] | map(tostring) | join("\u001f")'
 )
 
-# Tokyo Night
+# Colours from the current Omarchy theme's colors.toml, read on every refresh,
+# so the line follows a theme switch. The keys match the Starship prompt's
+# (starship.toml.tpl); the fallbacks are Tokyo Night's.
+declare -A theme=(
+  [bright_foreground]=c0caf5 [dark_foreground]=565f89 [bright_magenta]=bb9af7
+  [bright_cyan]=7dcfff [green]=9ece6a [yellow]=e0af68 [red]=f7768e
+)
+colors_toml="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/colors.toml"
+if [[ -r $colors_toml ]]; then
+  while IFS= read -r line; do
+    [[ $line =~ ^[[:space:]]*([a-z_]+)[[:space:]]*=[[:space:]]*\"#([0-9A-Fa-f]{6})\" ]] || continue
+    [[ -n ${theme[${BASH_REMATCH[1]}]+set} ]] && theme[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+  done <"$colors_toml"
+fi
 c() { printf '\033[38;2;%d;%d;%dm' "0x${1:0:2}" "0x${1:2:2}" "0x${1:4:2}"; }
-FG="$(c c0caf5)" DIM="$(c 565f89)" MAG="$(c bb9af7)" CYAN="$(c 7dcfff)"
-GREEN="$(c 9ece6a)" YELLOW="$(c e0af68)" RED="$(c f7768e)" R=$'\033[0m'
+FG="$(c "${theme[bright_foreground]}")" DIM="$(c "${theme[dark_foreground]}")"
+MAG="$(c "${theme[bright_magenta]}")" CYAN="$(c "${theme[bright_cyan]}")"
+GREEN="$(c "${theme[green]}")" YELLOW="$(c "${theme[yellow]}")" RED="$(c "${theme[red]}")" R=$'\033[0m'
 
 pct() { # pct <percent> → 34% in green, yellow or red
   local p=${1%%.*} col=$GREEN

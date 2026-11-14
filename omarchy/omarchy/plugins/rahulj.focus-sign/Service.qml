@@ -1,4 +1,4 @@
-// Focus sign: the pixel LED-panel wallpaper tells you which screen has focus.
+// Focus sign: the pixel LED-panel wallpapers tell you which screen has focus.
 // Its </> stays lit on the focused screen; on every other screen a copy of the
 // wallpaper with the sign switched off is drawn over it, in the layer just
 // above the wallpaper and below every window. Nothing moves: the switched-off
@@ -15,14 +15,22 @@ Item {
   id: root
 
   readonly property string home: Quickshell.env("HOME")
-  // The wallpaper this works with, and its switched-off copy.
-  readonly property string litWallpaper: home + "/.config/omarchy/backgrounds/tokyo-night/pixel-led.png"
-  readonly property string offWallpaper: home + "/.config/omarchy/branding/focus-sign/pixel-led-off.png"
+  // The pixel wallpapers this works with, each mapped to its switched-off copy:
+  // Tokyo Night's pixel-led, and Shinkai's three scenes. Shinkai's are
+  // rendered by backgrounds/src/shinkai-pixel.py (its `off` mode).
+  readonly property string branding: home + "/.config/omarchy/branding/focus-sign/"
+  readonly property var offCopies: ({
+    [home + "/.config/omarchy/backgrounds/tokyo-night/pixel-led.png"]: branding + "pixel-led-off.png",
+    [home + "/.config/omarchy/backgrounds/shinkai/1-abyss.png"]: branding + "shinkai-abyss-off.png",
+    [home + "/.config/omarchy/backgrounds/shinkai/2-tide.png"]: branding + "shinkai-tide-off.png",
+    [home + "/.config/omarchy/backgrounds/shinkai/3-recolour.png"]: branding + "shinkai-recolour-off.png"
+  })
   readonly property string backgroundLink: home + "/.local/state/omarchy/current/background"
 
-  // Only while that wallpaper is the one in use.
+  // Only while one of those wallpapers is the one in use.
   property string currentBackground: ""
-  readonly property bool active: currentBackground === litWallpaper
+  readonly property string offWallpaper: offCopies[currentBackground] || ""
+  readonly property bool active: offWallpaper !== ""
 
   // Wait out the login intro, which plays on every screen behind this layer.
   property bool started: false
@@ -70,7 +78,7 @@ Item {
       // this screen's size), so the copy lines up with it pixel for pixel.
       Image {
         anchors.fill: parent
-        source: "file://" + root.offWallpaper
+        source: root.active ? "file://" + root.offWallpaper : ""
         sourceSize.width: Math.ceil(panel.width * panel.screen.devicePixelRatio)
         sourceSize.height: Math.ceil(panel.height * panel.screen.devicePixelRatio)
         fillMode: Image.PreserveAspectCrop

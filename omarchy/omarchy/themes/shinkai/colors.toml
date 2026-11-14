@@ -1,0 +1,34 @@
+# Shinkai (深海, "deep sea"): Tokyo Night's UI feel sunk into Material Ocean.
+# Surfaces come from Material Ocean, UI text and the blue accent from Tokyo
+# Night, syntax hues from Material. Every themed app is generated from this file.
+mode = "dark"
+
+accent = "#82aaff"
+selection = "#2a2e45"
+muted = "#464b5d"
+
+background = "#0f111a"
+dark_background = "#0b0d14"
+darker_background = "#07080c"
+lighter_background = "#1f2233"
+
+foreground = "#a6accd"
+dark_foreground = "#525975"
+light_foreground = "#b8bedd"
+bright_foreground = "#c8d3f5"
+
+red = "#f07178"
+yellow = "#ffcb6b"
+orange = "#f78c6c"
+green = "#c3e88d"
+cyan = "#89ddff"
+blue = "#82aaff"
+magenta = "#c792ea"
+brown = "#8f5f54"
+
+bright_red = "#ff8b92"
+bright_yellow = "#ffe585"
+bright_green = "#ddffa7"
+bright_cyan = "#a3f7ff"
+bright_blue = "#9cc4ff"
+bright_magenta = "#e1acff"
