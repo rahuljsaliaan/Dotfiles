@@ -67,10 +67,11 @@ copy omarchy/hooks/theme-set.d/glassy-terminals  "$HOME/.config/omarchy/hooks/th
 copy omarchy/hooks/theme-set.d/keep-wallpaper    "$HOME/.config/omarchy/hooks/theme-set.d/keep-wallpaper"
 copy omarchy/hooks/post-update.d/custom-check   "$HOME/.config/omarchy/hooks/post-update.d/custom-check"
 copy omarchy/hooks/post-boot.d/custom-check     "$HOME/.config/omarchy/hooks/post-boot.d/custom-check"
+copy omarchy/hooks/post-boot.d/qrg-hyprland-guide "$HOME/.config/omarchy/hooks/post-boot.d/qrg-hyprland-guide"
 copy omarchy/clone-baselines                     "$HOME/.config/omarchy/clone-baselines"
 
 # Screensaver scripts, the floating tmux prompt, browser-here, and the update check.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle; do
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 
@@ -216,6 +217,9 @@ done
 for plugin in rahulj.lock omarchy.lock; do
   omarchy plugin disable "$plugin" >/dev/null 2>&1 && printf '  disabled %s\n' "$plugin"
 done
+
+# The Hyprland search guide, built from the live bindings (also at every login).
+"$HOME/.local/bin/qrg-hyprland-guide" && printf '  guide    hyprland search guide\n'
 
 # Foot as the terminal (Super + Return); it is in Omarchy's base packages.
 omarchy-default-terminal foot >/dev/null && printf '  terminal foot\n'

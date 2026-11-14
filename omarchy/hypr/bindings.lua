@@ -54,7 +54,7 @@ local function hyprpin_or(name, fallback)
   end
 end
 hl.unbind("SUPER + O")
-o.bind("SUPER + O", "Pop window out (Hyprpin, else float & pin)", hyprpin_or("toggle_pop", function() hl.exec_cmd("omarchy-hyprland-window-pop") end))
+o.bind("SUPER + O", "Pop window out (Hyprpin or float & pin)", hyprpin_or("toggle_pop", function() hl.exec_cmd("omarchy-hyprland-window-pop") end))
 hl.unbind("SUPER + T")
 o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("toggle_dock", function() hl.dispatch(hl.dsp.window.float({ action = "toggle" })) end))
 hl.unbind("SUPER + P")
