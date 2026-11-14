@@ -621,7 +621,9 @@ Item {
             width: 320
             height: 48
             radius: 10
-            color: Util.alpha("#16161e", 0.55)
+            // Personal: a shade below the theme background (on Tokyo Night the
+            // #16161e this used to fix), so the field follows the theme.
+            color: Util.alpha(Qt.darker(Commons.Color.background, 1.15), 0.55)
             borderSpec: root.errorState ? root.errorRimSpec
                       : (passwordInput.activeFocus ? root.rimSpec
                          : Border.surfaceSpec("lock", "border", Util.alpha(root.accent, 0.5), 2, "border-alpha"))
