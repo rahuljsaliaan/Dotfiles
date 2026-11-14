@@ -54,6 +54,7 @@ copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/t
 copy omarchy/themes/tokyo-night/shell.lock.toml  "$HOME/.config/omarchy/themes/tokyo-night/shell.lock.toml"
 copy omarchy/themes/tokyo-night/icons.theme      "$HOME/.config/omarchy/themes/tokyo-night/icons.theme"
 copy omarchy/defaults/agent                       "$HOME/.config/omarchy/defaults/agent"
+copy omarchy/last-session.ini                     "$HOME/.config/omarchy/last-session.ini"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
 copy omarchy/backgrounds/tokyo-night/pixel-led.png "$HOME/.config/omarchy/backgrounds/tokyo-night/pixel-led.png"
 copy omarchy/backgrounds/tokyo-night/omarchy-mark.png "$HOME/.config/omarchy/backgrounds/tokyo-night/omarchy-mark.png"
@@ -138,10 +139,18 @@ done
 #   AI Usage: Claude subscription session and weekly limits
 #   Quick Reference Guide: searchable cheat sheets (Neovim, git, Docker, zsh)
 #   NittyGriddy: window overview grid (Super+E, three-finger swipes)
+#   Hyprpin: keep chosen windows (a Teams call) visible across workspaces
+#   Last Session: reopen the windows that were open, after a reboot
+#   Agent Skills Manager: what skills and MCP servers coding agents load
+#   Omapop: a small action bar beside selected text
 for entry in io.github.sanchokusika.pulse=https://github.com/SanchoKusika/omarchy-pulse.git \
              jim.aiusage=https://github.com/whitecliffs/omarchy-aiusage.git \
              jcmarin.qrg=https://github.com/jcmarinn/Omarchy-QRG.git \
-             timsonner.nitty-griddy=https://github.com/timsonner/nitty-griddy.git; do
+             timsonner.nitty-griddy=https://github.com/timsonner/nitty-griddy.git \
+             io.github.jondkinney.hyprpin=https://github.com/jondkinney/hyprpin.git \
+             io.github.asmyshlyaev177.last-session=https://github.com/asmyshlyaev177/omarchy-last-session.git \
+             oliwier.agent-skills-manager=https://github.com/oliwier-xiao/agent-skills-manager.git \
+             io.github.jondkinney.omapop=https://github.com/jondkinney/omapop.git; do
   id="${entry%%=*}" url="${entry#*=}"
   if [[ -d $HOME/.config/omarchy/plugins/$id ]]; then
     printf '  ok       %s\n' "$id"
@@ -162,6 +171,31 @@ for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsych
     omarchy plugin add "$url" --yes >/dev/null && printf '  added    %s (off)\n' "$id"
   fi
 done
+
+# Small fixes to community plugins, kept as in-place edits: their lists' hint
+# lines were centred, and every list here is left-aligned. `omarchy plugin
+# update` refuses an update that touches the same file ("local changes");
+# drop the edit with `git -C <plugin> checkout .`, update, and re-run this.
+python3 - <<'PY'
+import os
+plugins = os.path.expanduser("~/.config/omarchy/plugins/")
+tweaks = [
+    ("jim.aiusage/BarWidget.qml",
+     "        font.pixelSize: Style.font.caption\n        horizontalAlignment: Text.AlignHCenter\n      }",
+     "        font.pixelSize: Style.font.caption\n        horizontalAlignment: Text.AlignLeft\n      }"),
+    ("oliwier.agent-skills-manager/Panel.qml",
+     "          width: parent.width\n          horizontalAlignment: Text.AlignHCenter\n          textFormat: Text.PlainText\n          text: {\n            var typing",
+     "          width: parent.width\n          horizontalAlignment: Text.AlignLeft\n          textFormat: Text.PlainText\n          text: {\n            var typing"),
+]
+for rel, old, new in tweaks:
+    path = plugins + rel
+    if not os.path.isfile(path):
+        continue
+    text = open(path).read()
+    if text.count(old) == 1:
+        open(path, "w").write(text.replace(old, new))
+        print("  tweaked  " + rel)
+PY
 
 # Use the cloned plugins in place of Omarchy's own.
 for plugin in glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map; do

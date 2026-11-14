@@ -132,6 +132,19 @@
           "id": "omarchy.tray"
         },
         {
+          "id": "io.github.jondkinney.omapop",
+          "directoryRefresh": false,
+          "accessibilityProbe": false,
+          "excludedApps": "1password,Bitwarden,org.keepassxc.KeePassXC,KeePassXC",
+          "terminalClasses": "Alacritty,kitty,foot,footclient,org.omarchy.agent,com.mitchellh.ghostty,Ghostty,org.wezfurlong.wezterm,xterm,konsole,org.kde.konsole,org.gnome.Terminal,gnome-terminal-server,Terminal,st-256color,tilix,wezterm"
+        },
+        {
+          "id": "oliwier.agent-skills-manager"
+        },
+        {
+          "id": "io.github.jondkinney.hyprpin"
+        },
+        {
           "id": "rahulj.notification-bell"
         }
       ],
@@ -195,6 +208,9 @@
     },
     {
       "id": "rahulj.focus-sign"
+    },
+    {
+      "id": "io.github.asmyshlyaev177.last-session"
     }
   ],
   "version": 1
