@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -191,13 +192,21 @@ BarWidget {
   }
 
   // ---- drawing
+  // Every screen the same size (a map, not a scale drawing), so the eye reads
+  // the marks rather than the frames.
+  readonly property int frameHeight: Math.round(root.barSize * 0.84)
+  readonly property int frameWidth: Math.round(root.frameHeight * 16 / 9)
+  readonly property int pad: 3
+  readonly property int markSize: root.frameHeight - 2 * root.pad
+  readonly property color barBg: root.bar && root.bar.background !== undefined ? root.bar.background : Commons.Color.bar.background
+
   implicitWidth: row.implicitWidth + Style.space(8)
   implicitHeight: root.barSize
 
   Row {
     id: row
     anchors.centerIn: parent
-    spacing: Style.space(3)
+    spacing: Style.space(4)
 
     Repeater {
       model: root.screens
@@ -208,71 +217,70 @@ BarWidget {
         readonly property bool focused: String(modelData.name) === root.monitorName
         readonly property int wsId: modelData.activeWorkspace ? modelData.activeWorkspace.id : -1
         readonly property string mode: root.modeOf(wsId)
-        readonly property real h: Math.max(10, root.maxHeight * root.logicalHeight(modelData) / root.tallest)
-        readonly property color line: focused ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.32)
-        readonly property color figure: focused ? root.ink : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.55)
-        width: Math.round(h * root.logicalWidth(modelData) / root.logicalHeight(modelData))
+        // Filled marks: the focused screen's in the accent, the others' in the
+        // bar's text colour turned down. The number is cut out of the mark in
+        // the bar's own background colour, so it reads sharply on either.
+        readonly property color fill: focused ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.62)
+        readonly property color figure: Qt.rgba(0.102, 0.106, 0.149, 1)
+        width: root.frameWidth
         height: root.barSize
 
         // The screen.
         Rectangle {
           id: frame
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Math.round((root.barSize - root.maxHeight) / 2)
-          width: parent.width
-          height: Math.round(cell.h)
-          radius: Style.space(3)
+          anchors.centerIn: parent
+          width: root.frameWidth
+          height: root.frameHeight
+          radius: Math.round(root.frameHeight * 0.18)
           color: "transparent"
           border.width: 1
-          border.color: Qt.rgba(cell.line.r, cell.line.g, cell.line.b, cell.focused ? 0.55 : 0.6)
+          border.color: cell.focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.7)
+                                     : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.28)
 
-          // Its workspace: the number inside the layout's shape.
-          Canvas {
-            id: shape
+          // Its workspace: the number inside the layout's shape, clear of the frame.
+          Item {
+            id: mark
             anchors.centerIn: parent
-            width: Math.round(frame.height * 0.86)
-            height: width
-            readonly property string mode: cell.mode
-            readonly property color stroke: cell.line
-            onModeChanged: requestPaint()
-            onStrokeChanged: requestPaint()
-            onWidthChanged: requestPaint()
-            onPaint: {
-              var c = getContext("2d"), w = width, k = 1.4
-              c.reset()
-              c.lineWidth = k
-              c.strokeStyle = stroke
-              c.lineJoin = "round"
-              c.beginPath()
-              if (mode === "scrolling") {
-                c.arc(w / 2, w / 2, w / 2 - k, 0, Math.PI * 2)
-              } else if (mode === "floating") {
-                c.moveTo(w / 2, k)
-                c.lineTo(w - k, w - k)
-                c.lineTo(k, w - k)
-                c.closePath()
-              } else {
-                var r = w * 0.18, x = k, y = k, s = w - 2 * k
-                c.moveTo(x + r, y); c.lineTo(x + s - r, y); c.arcTo(x + s, y, x + s, y + r, r)
-                c.lineTo(x + s, y + s - r); c.arcTo(x + s, y + s, x + s - r, y + s, r)
-                c.lineTo(x + r, y + s); c.arcTo(x, y + s, x, y + s - r, r)
-                c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r)
-                c.closePath()
-              }
-              c.stroke()
+            width: cell.mode === "floating" ? Math.round(root.markSize * 1.3) : root.markSize
+            height: root.markSize
+
+            // Square (tiling) and circle (scrolling).
+            Rectangle {
+              visible: cell.mode !== "floating"
+              anchors.fill: parent
+              radius: cell.mode === "scrolling" ? width / 2 : Math.round(width * 0.22)
+              color: cell.fill
+              antialiasing: true
             }
-          }
-          Text {
-            anchors.horizontalCenter: shape.horizontalCenter
-            anchors.verticalCenter: shape.verticalCenter
-            // A triangle's middle sits low.
-            anchors.verticalCenterOffset: cell.mode === "floating" ? Math.round(shape.height * 0.14) : 0
-            textFormat: Text.PlainText
-            text: root.slotLabel(cell.wsId)
-            color: cell.figure
-            font.family: Style.font.family
-            font.pixelSize: Math.max(7, Math.round(shape.height * (cell.mode === "floating" ? 0.46 : 0.58)))
-            font.weight: cell.focused ? Font.Bold : Font.Normal
+            // Triangle (floating), as a vector shape so its edges stay crisp.
+            Shape {
+              visible: cell.mode === "floating"
+              anchors.fill: parent
+              preferredRendererType: Shape.CurveRenderer
+              ShapePath {
+                strokeWidth: -1
+                strokeColor: "transparent"
+                fillColor: cell.fill
+                joinStyle: ShapePath.RoundJoin
+                startX: mark.width / 2; startY: 0
+                PathLine { x: mark.width; y: mark.height }
+                PathLine { x: 0; y: mark.height }
+                PathLine { x: mark.width / 2; y: 0 }
+              }
+            }
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              anchors.verticalCenter: parent.verticalCenter
+              // A triangle's room is low and narrow.
+              anchors.verticalCenterOffset: cell.mode === "floating" ? Math.round(root.markSize * 0.18) : 0
+              textFormat: Text.PlainText
+              text: root.slotLabel(cell.wsId)
+              color: cell.figure
+              font.family: Style.font.family
+              font.pixelSize: Math.round(root.markSize * (cell.mode === "floating" ? 0.6 : 0.74))
+              font.weight: Font.Black
+              renderType: Text.NativeRendering
+            }
           }
 
           MouseArea {
