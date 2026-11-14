@@ -262,13 +262,22 @@ Panel {
     }
   }
 
+  // Personal: the unread dots take the far (purple) end of the notification
+  // cards' rim, the focused-window gradient, so they follow the theme like
+  // the cards do (Tokyo Night #bb9af7).
+  readonly property var rimSpec: Border.surfaceSpec("notifications", "border", Commons.Color.accent, 2)
+  readonly property color rimEndRaw: rimSpec && rimSpec.gradient && rimSpec.gradient.enabled
+                                     ? rimSpec.gradient.colors[rimSpec.gradient.colors.length - 1]
+                                     : Border.color(rimSpec)
+  readonly property color unreadColor: Qt.rgba(rimEndRaw.r, rimEndRaw.g, rimEndRaw.b, 1)
+
   // The unread dot, at the bell's top-right.
   Rectangle {
     visible: root.unseen > 0
     width: Math.max(5, Math.round(Style.bar.iconSize * 0.42))
     height: width
     radius: width / 2
-    color: "#bb9af7"
+    color: root.unreadColor
     anchors.horizontalCenter: button.horizontalCenter
     anchors.horizontalCenterOffset: Math.round(Style.bar.iconSize * 0.42)
     anchors.verticalCenter: button.verticalCenter
@@ -552,7 +561,7 @@ Panel {
                    : hover.hovered ? Qt.rgba(keys.fg.r, keys.fg.g, keys.fg.b, 0.08)
                                    : Qt.rgba(keys.fg.r, keys.fg.g, keys.fg.b, 0.04)
               border.width: entry.urgent || entry.selected ? 1 : 0
-              border.color: entry.urgent ? "#f7768e" : Qt.rgba(keys.accent.r, keys.accent.g, keys.accent.b, 0.55)
+              border.color: entry.urgent ? Commons.Color.urgent : Qt.rgba(keys.accent.r, keys.accent.g, keys.accent.b, 0.55)
 
               MouseArea {
                 anchors.fill: parent
@@ -599,7 +608,7 @@ Panel {
                   Rectangle {
                     visible: entry.unread
                     width: Style.space(8); height: width; radius: width / 2
-                    color: "#bb9af7"
+                    color: root.unreadColor
                     anchors.right: parent.right; anchors.top: parent.top
                     anchors.rightMargin: -Style.space(2); anchors.topMargin: -Style.space(2)
                   }
