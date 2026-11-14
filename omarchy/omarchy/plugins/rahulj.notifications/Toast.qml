@@ -101,6 +101,9 @@ Item {
   FileView {
     id: themeFile
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    // Read before the card is first drawn: a card lives for seconds, and an
+    // asynchronous read left its first frame on the Tokyo Night fallbacks.
+    blockLoading: true
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
