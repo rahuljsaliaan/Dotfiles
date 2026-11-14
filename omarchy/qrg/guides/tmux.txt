@@ -4,9 +4,15 @@ This setup's tmux: prefix Ctrl+Space, Alt keys without the prefix, floating prom
 // Generated from ~/.config/tmux/tmux.conf and ~/.bashrc. Keep in step with them.
 // "Prefix" means press Ctrl+Space, let go, then the key.
 
-## Prefix and help
-Ctrl+Space | Prefix (press, let go, then the key) | Ctrl+b is switched off | #prefix
-Prefix Ctrl+Space | Send the prefix to the program inside | #prefix
+## What "Prefix" means
+Prefix = Ctrl+Space | The key that tells tmux "the next key is for you" | Without it, keys go to the program in the pane (Neovim, Claude, the shell), so tmux needs a signal first | #prefix #what #help
+Prefix c | Read it as: Ctrl+Space, let go, then c | Two steps, not held together: press Ctrl+Space, release both keys, then press c | #prefix #how #help
+PREFIX in the status bar | tmux is waiting for that next key | It appears at the top right after Ctrl+Space and goes away once you press the key | #prefix #status
+Alt+… keys | Work straight away, no prefix | Alt+Enter, Alt+1, Alt+Left …: the everyday moves were put on Alt so they need no prefix | #prefix #alt
+Ctrl+b | Not the prefix here | Stock tmux uses Ctrl+b; this setup switched it off | #prefix
+
+## Prefix keys and help
+Prefix Ctrl+Space | Send Ctrl+Space to the program inside | For a program that itself uses Ctrl+Space | #prefix
 Prefix ? | All tmux keys, in a popup | #help #keys
 Prefix q | Reload tmux.conf | Shows "Configuration reloaded" | #reload #config
 Prefix : | Command palette (floating) | Lists every tmux command as you type; Tab completes, Enter runs, Esc cancels | #command #palette
