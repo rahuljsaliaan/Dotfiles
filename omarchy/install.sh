@@ -65,7 +65,6 @@ copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"
 copy omarchy/hooks/theme-set.d/glassy-terminals  "$HOME/.config/omarchy/hooks/theme-set.d/glassy-terminals"
 copy omarchy/hooks/theme-set.d/keep-wallpaper    "$HOME/.config/omarchy/hooks/theme-set.d/keep-wallpaper"
-copy omarchy/hooks/theme-set.d/starship-theme    "$HOME/.config/omarchy/hooks/theme-set.d/starship-theme"
 copy omarchy/hooks/post-update.d/custom-check   "$HOME/.config/omarchy/hooks/post-update.d/custom-check"
 copy omarchy/hooks/post-boot.d/custom-check     "$HOME/.config/omarchy/hooks/post-boot.d/custom-check"
 copy omarchy/hooks/post-boot.d/qrg-hyprland-guide "$HOME/.config/omarchy/hooks/post-boot.d/qrg-hyprland-guide"
@@ -86,7 +85,7 @@ copy xdg-desktop-portal/portals/nautilus.portal "$HOME/.local/share/xdg-desktop-
 copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.config/systemd/user/xdg-desktop-portal.service.d/nautilus-filechooser.conf"
 
 # Prompt, terminal multiplexer and editor.
-copy starship/starship.toml.tpl "$HOME/.config/starship/starship.toml.tpl"
+copy omarchy/themed/starship.toml.tpl "$HOME/.config/omarchy/themed/starship.toml.tpl"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy qrg/guides/nvim.txt    "$HOME/.config/qrg/guides/nvim.txt"
@@ -110,9 +109,21 @@ fi
 
 printf '\nApplying settings that are not files\n'
 
-# Render ~/.config/starship.toml from its template in the current theme's
-# colours (the starship-theme hook does it again on every theme switch).
-"$HOME/.config/omarchy/hooks/theme-set.d/starship-theme" && printf '  rendered %s\n' "$HOME/.config/starship.toml"
+# The Starship prompt follows the theme: omarchy theme set renders
+# omarchy/themed/starship.toml.tpl into the current theme, and
+# ~/.config/starship.toml links to that copy. Re-applying the theme renders it
+# for the first time.
+starship_theme="$HOME/.local/state/omarchy/current/theme/starship.toml"
+if [[ $(readlink "$HOME/.config/starship.toml" 2>/dev/null) == "$starship_theme" ]]; then
+  printf '  ok       %s\n' "$HOME/.config/starship.toml"
+else
+  [[ -e $HOME/.config/starship.toml || -L $HOME/.config/starship.toml ]] && mv "$HOME/.config/starship.toml" "$HOME/.config/starship.toml.bak.$STAMP"
+  ln -s "$starship_theme" "$HOME/.config/starship.toml"
+  printf '  linked   %s -> %s\n' "$HOME/.config/starship.toml" "$starship_theme"
+fi
+if [[ ! -f $starship_theme ]] && command -v omarchy >/dev/null; then
+  omarchy theme set "$(omarchy theme current)" >/dev/null 2>&1 && printf '  rendered %s\n' "$starship_theme"
+fi
 
 # Restart the portal service so the Nautilus file chooser takes effect.
 systemctl --user daemon-reload && systemctl --user restart xdg-desktop-portal && printf '  restarted xdg-desktop-portal (Nautilus file chooser)\n'

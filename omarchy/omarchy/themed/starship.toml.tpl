@@ -1,10 +1,12 @@
 add_newline = false
 
-# Template for ~/.config/starship.toml. Do not edit starship.toml itself: the
-# theme-set hook (~/.config/omarchy/hooks/theme-set.d/starship-theme) rebuilds it
-# from this file on every theme switch, replacing each {{ key }} with that key
-# from the current theme's colors.toml (any key `omarchy-theme-color --all` lists).
-# To apply an edit without switching themes, run the hook by hand.
+# Omarchy theme template for the Starship prompt. omarchy theme set renders it
+# into ~/.local/state/omarchy/current/theme/starship.toml with the theme's
+# colors.toml values (any key `omarchy-theme-color --all` lists, written in
+# double braces), before the theme is swapped in, like the terminal colours.
+# ~/.config/starship.toml is a symlink to that file, and Starship rereads it on
+# every prompt, so prompts drawn after a switch use the new colours. Edit this
+# file, then re-apply the theme (omarchy theme set "$(omarchy theme current)").
 #
 # Prompt in the plain style of the Claude Code status line
 # (~/.claude/statusline.sh), with the folder on one rounded accent pill
