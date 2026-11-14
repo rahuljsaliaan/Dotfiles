@@ -47,7 +47,7 @@ copy hypr/keep-fullscreen.lua "$HOME/.config/hypr/keep-fullscreen.lua"
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
 copy omarchy/extensions/omarchy-menu.jsonc       "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
-for plugin in lock glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map; do
+for plugin in lock glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map jarvis; do
   copy "omarchy/plugins/rahulj.$plugin"          "$HOME/.config/omarchy/plugins/rahulj.$plugin"
 done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
@@ -163,8 +163,23 @@ for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsych
   fi
 done
 
+# Omarchy Jarvis (h3man.jarvis, reviewed: its bridge listens on 127.0.0.1 only
+# and needs a token; the phone tunnel is opt-in): chat with the default agent
+# from the bar. The original stays installed, off, because its launcher and
+# user service run from that checkout; rahulj.jarvis is the themed panel.
+# Text chat only here: voice needs `jarvis setup` (sudo for packages, an AUR
+# build of piper-tts, and the speech models).
+if [[ ! -d $HOME/.config/omarchy/plugins/h3man.jarvis ]]; then
+  omarchy plugin add https://github.com/Robindoris/omajarv.git --yes >/dev/null && printf '  added    h3man.jarvis (off)\n'
+fi
+if [[ ! -x $HOME/.local/bin/jarvis ]]; then
+  printf 'N\nN\n' | bash "$HOME/.config/omarchy/plugins/h3man.jarvis/install.sh" --no-plugin --no-packages --no-models >/dev/null &&
+    printf '  ok       jarvis launcher and service (text chat; run `jarvis setup` for voice)\n'
+fi
+omarchy plugin disable h3man.jarvis >/dev/null 2>&1 || true
+
 # Use the cloned plugins in place of Omarchy's own.
-for plugin in glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map; do
+for plugin in glasslock bar dock idle notifications notification-bell divider net-speed reminders focus-sign desk-map jarvis; do
   omarchy plugin enable "rahulj.$plugin" >/dev/null && printf '  enabled  rahulj.%s\n' "$plugin"
 done
 # Exactly one lock screen: Glasslock. rahulj.lock stays installed as a fallback
