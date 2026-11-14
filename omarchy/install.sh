@@ -193,6 +193,23 @@ tweaks = [
     ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
      "        Flickable {\n            id: scroller",
      "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close() }\n\n        Flickable {\n            id: scroller"),
+    # Omapop: its bar icon was sized from a loader with no size yet and drew nothing.
+    ("io.github.jondkinney.omapop/BarWidget.qml",
+     "            BarIcon {\n                anchors.fill: parent\n                color: button.foreground",
+     "            BarIcon {\n                width: Style.bar.iconCanvas\n                height: width\n                color: button.foreground"),
+    # Hyprpin: icon bright whenever it is on (it was dim until a rule existed).
+    ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
+     "        foreground: root.enabled && root.rules.length > 0\n            ? root.barForeground : Qt.darker(root.barForeground, 1.55)",
+     "        foreground: root.enabled ? root.barForeground : Qt.darker(root.barForeground, 1.55)"),
+    # Hyprpin: a new rule starts as a corner on the window's own display, not
+    # filling the last display listed (the main screen here).
+    ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
+     "            monitor: hasSpare ? root.monitorNames[root.monitorNames.length - 1] : \"\",\n            placement: hasSpare ? \"fill\" : \"bottom-right\",",
+     "            monitor: \"\",\n            placement: \"bottom-right\","),
+    # Agent Skills Manager: Claude's synced-skills folder is a container, not a broken skill.
+    ("oliwier.agent-skills-manager/bin/agent-skills",
+     "            findings.append({\"what\": tilde(dir_path),\n                             \"detail\": \"broken symlink\" if is_link and not os.path.exists(real)\n                             else \"directory without SKILL.md\"})",
+     "            nested = 0\n            if os.path.isdir(dir_path):\n                for _sub, _dirs, _files in os.walk(dir_path):\n                    if _sub[len(dir_path):].count(os.sep) >= 2:\n                        _dirs[:] = []\n                    nested += \"SKILL.md\" in _files\n            findings.append({\"what\": tilde(dir_path),\n                             \"detail\": \"broken symlink\" if is_link and not os.path.exists(real)\n                             else f\"holds {nested} skills in subfolders, not counted here\" if nested\n                             else \"directory without SKILL.md\"})"),
     ("oliwier.agent-skills-manager/Panel.qml",
      "          width: parent.width\n          horizontalAlignment: Text.AlignHCenter\n          textFormat: Text.PlainText\n          text: {\n            var typing",
      "          width: parent.width\n          horizontalAlignment: Text.AlignLeft\n          textFormat: Text.PlainText\n          text: {\n            var typing"),
