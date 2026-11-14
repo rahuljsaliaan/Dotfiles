@@ -32,13 +32,28 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
-  // Traffic-light colours are fixed rather than drawn from the theme, and are
-  // the same three the other brightwalker25 widgets use. A theme is free to
-  // define its urgent colour as a soft pink, and a signal that reads as
-  // decoration is not a signal.
-  readonly property color okColor: "#3fb950"
-  readonly property color warnColor: "#d29922"
-  readonly property color badColor: "#f85149"
+  // Traffic-light colours. Upstream fixes them (the three the other
+  // brightwalker25 widgets use) because a theme is free to define its red as a
+  // soft pink, and a signal that reads as decoration is not a signal. Personal:
+  // the theme's own green, yellow and red are used when each still reads as
+  // that signal (its hue in the right band, saturated, neither too dark nor too
+  // pale), so the panel matches the desktop; otherwise the fixed one stays.
+  function signalColor(key, fallback, hueFrom, hueTo) {
+    var hex = hostWidget && hostWidget.themeColor ? String(hostWidget.themeColor(key, "")) : ""
+    var m = hex.match(/^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/)
+    if (!m) return fallback
+    var r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min
+    if (d === 0) return fallback
+    var sat = d / (1 - Math.abs(2 * l - 1))
+    var hue = max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4)
+    if (hue < 0) hue += 360
+    var inBand = hueFrom <= hueTo ? (hue >= hueFrom && hue <= hueTo) : (hue >= hueFrom || hue <= hueTo)
+    return inBand && sat >= 0.45 && l >= 0.35 && l <= 0.85 ? hex : fallback
+  }
+  readonly property color okColor: signalColor("green", "#3fb950", 75, 160)
+  readonly property color warnColor: signalColor("yellow", "#d29922", 30, 60)
+  readonly property color badColor: signalColor("red", "#f85149", 345, 20)
 
   // Up and down take the bar's colours, read from the bar widget so the two
   // cannot drift apart.
