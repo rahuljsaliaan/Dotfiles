@@ -1,0 +1,4 @@
+#!/bin/bash
+# Rebuild the Hyprland search guide from the live bindings at login, so an
+# Omarchy update that changes its default keys shows up there too.
+(sleep 15 && qrg-hyprland-guide) >/dev/null 2>&1 &
