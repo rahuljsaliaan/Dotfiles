@@ -529,6 +529,14 @@ Item {
 
   // Personal: the card at the top of the deck, which carries the notch
   // pointing at the bar's bell.
+  // Personal: the size of the deck each card is in, for the "+N" stack badge.
+  readonly property var deckSizes: {
+    var out = {}, decks = layout.decks
+    for (var i = 0; i < decks.length; i++)
+      for (var j = 0; j < decks[i].rows.length; j++) out[String(decks[i].rows[j].key)] = decks[i].rows.length
+    return out
+  }
+
   readonly property string pointerKey: layout.decks.length > 0 && layout.decks[0].rows.length > 0
                                        ? String(layout.decks[0].rows[0].key) : ""
 
@@ -1715,6 +1723,7 @@ Item {
               pointerShown: surface.showingNotifications && service.bellOffset > 0
                             && model.key === service.pointerKey
               pointerX: clipper.width - service.bellOffset - deck.x
+              stackCount: service.deckSizes[model.key] || 1
               place: service.placements[model.key]
                      || ({ y: 0, scale: 1, opacity: 0, z: 1, front: false, hidden: true })
               hovered: service.keyboardMode ? service.keyboardKey === model.key : service.hoverKey === model.key

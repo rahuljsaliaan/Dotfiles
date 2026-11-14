@@ -31,6 +31,9 @@ Item {
   // Personal: the top card points up at the bar's bell with a notch drawn as
   // part of its own outline, so it moves, fades and colours with the card.
   property bool pointerShown: false
+  // Personal: how many cards share this card's deck (one app's stack), for the
+  // "+N" badge on the front card of a closed stack.
+  property int stackCount: 1
   property real pointerX: width / 2          // the notch's centre, card-local
 
   // The pointer in the deck's coordinates: the deck owns hover, so cards and
@@ -731,7 +734,16 @@ Item {
                 id: stamp
                 anchors.centerIn: parent
                 spacing: Style.space(5)
-                readonly property string appLabel: card.anonymous ? "" : String(card.row.app || card.row.source || "").toLowerCase()
+                // Personal: the app's everyday name, short enough for the pill:
+                // "Microsoft Outlook" reads "outlook", "teams-for-linux" "teams".
+                readonly property string appLabel: {
+                  if (card.anonymous) return ""
+                  var name = String(card.row.app || card.row.source || "").toLowerCase().trim()
+                  name = name.replace(/^(microsoft|google|the)\s+/, "")
+                  name = name.replace(/[-\s]+(for[-\s]+linux|desktop|app)$/, "")
+                  name = name.replace(/\.desktop$/, "")
+                  return name.length > 12 ? name.substring(0, 11) + "…" : name
+                }
                 readonly property string when: card.ago()
                 opacity: card.hovered ? 0 : 1
                 visible: opacity > 0.01
@@ -751,6 +763,27 @@ Item {
                     textFormat: Text.PlainText
                     text: stamp.appLabel
                     color: "#1a1b26"
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    font.weight: Font.Bold
+                  }
+                }
+
+                // Personal: a closed stack says how many more are behind its front card.
+                Rectangle {
+                  visible: card.stackCount > 1 && !card.expanded && card.place.front
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: moreText.implicitWidth + Style.space(10)
+                  height: moreText.implicitHeight + Style.space(2)
+                  radius: height / 2
+                  color: Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.22)
+
+                  Text {
+                    id: moreText
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: "+" + (card.stackCount - 1)
+                    color: card.accentColor
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     font.weight: Font.Bold
