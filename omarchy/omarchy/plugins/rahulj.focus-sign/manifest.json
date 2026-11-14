@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "rahulj.focus-sign",
+  "name": "Focus Sign",
+  "version": "1.0.0",
+  "author": "rahulj",
+  "description": "Shows which screen has focus through the pixel wallpaper: the </> sign is lit only on the focused screen and switched off on the others.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
