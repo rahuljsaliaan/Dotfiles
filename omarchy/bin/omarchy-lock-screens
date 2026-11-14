@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+#
+# Blank and wake the screens for the lock screen, leaving some screens powered.
+#
+# The HDMI BenQ drops off the bus a few seconds after it is put to sleep and
+# reconnects on its own; Hyprland turns a reconnected screen on, so the lock
+# screen kept reappearing every 10-15 seconds for as long as the computer was
+# locked. A screen named here is never put to sleep: the lock screen paints it
+# black instead (rahulj.glasslock) and its backlight is turned down to minimum
+# over DDC/CI, then put back on wake.
+#
+#   omarchy-lock-screens blank [SCREEN...]   sleep every screen but these
+#   omarchy-lock-screens wake                wake them, restore the backlight
+#
+# With no screen named, or none of them connected, blank is Omarchy's own
+# "all screens off".
+
+set -uo pipefail
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/lock-awake"
+mkdir -p "$state"
+
+# A wake that arrives while a blank is still dimming waits for it, so the
+# backlight is never left down by the two running across each other.
+exec {lock}>"$state/.lock"
+flock "$lock"
+
+case ${1:-} in
+blank)
+  shift
+  keep=" $* "
+  omarchy-brightness-keyboard off
+
+  mapfile -t screens < <(hyprctl monitors -j | jq -r '.[] | select(.disabled == false) | .name')
+  kept=0
+  for screen in "${screens[@]}"; do
+    [[ $keep == *" $screen "* ]] && kept=1
+  done
+  if (( ! kept )); then
+    omarchy-brightness-display off
+    exit 0
+  fi
+
+  for screen in "${screens[@]}"; do
+    if [[ $keep == *" $screen "* ]]; then
+      # Remember the brightness once; a second blank before a wake keeps the
+      # original value rather than recording the dimmed one.
+      if [[ ! -s $state/$screen ]]; then
+        brightness=$(omarchy-brightness-display-ddc "$screen" 2>/dev/null)
+        [[ $brightness =~ ^[0-9]+$ ]] && (( brightness > 1 )) && printf '%s\n' "$brightness" >"$state/$screen"
+      fi
+      [[ -s $state/$screen ]] && omarchy-brightness-display-ddc "$screen" "1%" >/dev/null 2>&1
+    else
+      hyprctl dispatch "hl.dsp.dpms({ action = \"disable\", monitor = \"$screen\" })" >/dev/null 2>&1
+    fi
+  done
+  ;;
+wake)
+  omarchy-system-wake
+  for file in "$state"/*; do
+    [[ -s $file ]] || continue
+    read -r brightness <"$file"
+    [[ $brightness =~ ^[0-9]+$ ]] || { rm -f "$file"; continue; }
+    # The monitor can ignore a brightness command sent just after the screens
+    # wake and still report success, so read it back and try again until it holds.
+    screen=$(basename "$file")
+    for attempt in 1 2 3 4 5 6; do
+      omarchy-brightness-display-ddc "$screen" "$brightness%" >/dev/null 2>&1
+      sleep 0.6
+      now=$(omarchy-brightness-display-ddc "$screen" 2>/dev/null)
+      if [[ $now =~ ^[0-9]+$ ]] && (( now >= brightness - 1 && now <= brightness + 1 )); then
+        rm -f "$file"
+        break
+      fi
+    done
+  done
+  ;;
+*)
+  echo "Usage: omarchy-lock-screens blank [SCREEN...] | wake" >&2
+  exit 1
+  ;;
+esac

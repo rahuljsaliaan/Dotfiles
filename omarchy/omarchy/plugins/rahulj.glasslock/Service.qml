@@ -25,6 +25,13 @@ Item {
   // lock and password field for the whole blank run-up, every ~18s.
   property bool displaysBlanked: false
   readonly property int reconnectBlankMs: 1000
+  // Screens that are never put to sleep while locked, because sleeping them is
+  // what starts that drop-and-reconnect loop: they are painted black instead
+  // and their backlight is turned down (see ~/.local/bin/omarchy-lock-screens).
+  readonly property var awakeScreens: ["HDMI-A-1"]
+  function staysAwake(screen) {
+    return !!screen && awakeScreens.indexOf(String(screen.name)) !== -1
+  }
   property bool pendingSessionLock: false
   property bool authenticatingPassword: false
   property bool fingerprintAuthenticating: false
@@ -545,6 +552,16 @@ Item {
         onWakeRequested: root.runWake()
       }
 
+      // A screen that stays powered goes black while the others sleep. It takes
+      // no input, so a key or the mouse still reaches the view and wakes it.
+      Rectangle {
+        anchors.fill: parent
+        color: "black"
+        opacity: root.displaysBlanked && root.staysAwake(lockSurface.screen) ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 250 } }
+      }
+
     }
   }
 
@@ -778,12 +795,14 @@ Item {
 
   Process {
     id: wakeProcess
-    command: ["bash", "-c", "omarchy-system-wake"]
+    // The helper also puts the awake screens' backlight back; without it this
+    // is Omarchy's own wake.
+    command: ["bash", "-c", "if command -v omarchy-lock-screens >/dev/null; then omarchy-lock-screens wake; else omarchy-system-wake; fi"]
   }
 
   Process {
     id: blankProcess
-    command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
+    command: ["bash", "-c", "if command -v omarchy-lock-screens >/dev/null; then omarchy-lock-screens blank \"$@\"; else omarchy-brightness-keyboard off; omarchy-brightness-display off; fi", "blank"].concat(root.awakeScreens)
   }
 
   Timer {
