@@ -12,6 +12,12 @@
 - Follow the repo's own `CLAUDE.md` (one concern per commit, its commit style, and checking for private data, since the repo is public). Commit on a branch and open or update a pull request to `main`; never push to `main` directly.
 - Tell the user what was synced, or say plainly when something could not be.
 
+## Keep the Quick Reference Guides in step
+
+- The bar's search guides (the Quick Reference Guide plugin, `jcmarin.qrg`) read this setup's own cheat sheets from `~/.config/qrg/guides/<tool>.txt`; `tmux.txt` covers this tmux edition (prefix Ctrl+Space, the Alt keys, the floating prompts, `tdl`).
+- Whenever you add, change or remove a keybinding, alias or workflow for a tool that has a guide there, update that guide in the same task, then sync it to Dotfiles like any other config. Check the file still parses (the plugin's `parseGuide` in `QrgSearch.js` reports no warnings).
+- Write entries as `keys | what it does | example or note | #tags`, describe this setup rather than the tool's defaults, and keep the header comment saying which config files the guide was generated from.
+
 ## Lavish artifacts
 
 - Default every Lavish HTML artifact to dark mode: `<html data-theme="dark">` (DaisyUI `dark`). This overrides the Lavish CLI's suggested default theme (`luxury`).
