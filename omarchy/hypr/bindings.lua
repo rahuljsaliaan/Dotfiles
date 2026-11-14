@@ -59,7 +59,13 @@ o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("
 hl.unbind("SUPER + P")
 o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
 o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
-o.bind("SUPER + ALT + O", "Hyprpin panel", "omarchy-shell shell toggle io.github.jondkinney.hyprpin")
+-- Opens, or closes when a panel is showing: the shell's toggle opened it but a
+-- second press while the panel had the keyboard left it open.
+o.bind("SUPER + ALT + O", "Hyprpin panel", function()
+  local shown = hl.get_layers({ namespace = "omarchy-keyboard-panel" })
+  local verb = (shown ~= nil and #shown > 0) and "hide" or "summon"
+  hl.exec_cmd("omarchy-shell shell " .. verb .. " io.github.jondkinney.hyprpin")
+end)
 hl.unbind("SUPER + ALT + S")
 o.bind("SUPER + ALT + S", "Move window to scratchpad (Hyprpin aware)", hyprpin_or("send_to_scratchpad", function() hl.dispatch(hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })) end))
 

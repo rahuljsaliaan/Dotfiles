@@ -105,7 +105,7 @@ together for different monitors.
 
 - `omarchy-default-terminal foot`: foot as the terminal
 - `omarchy plugin add` for the community plugins, each reviewed first: Pulse, AI Usage, Quick Reference Guide, NittyGriddy, Hyprpin (no network; writes only its state files), Last Session (no network; snapshots kept 0600 in `~/.local/state/omarchy-last-session`), Agent Skills Manager (read-only, no network; under-counts the synced org skills and plugins) and Omapop (with its weekly popclip.app catalogue refresh and the system-wide accessibility switch turned off, password managers excluded, and the agent console treated as a terminal: those settings are its bar entry in `shell.json`)
-- A one-line left-align fix in AI Usage and Agent Skills Manager, whose hint lines were centred, re-applied in place after they are added
+- Small in-place fixes re-applied after the plugins are added: left-aligned hint lines in AI Usage and Agent Skills Manager, and Esc closing Hyprpin's panel (it had no key handling)
 - `omarchy plugin add` (left off) for upstream Glasslock and brightwalker25's net-speed: the originals `rahulj.glasslock` and `rahulj.net-speed` were copied from, which `omarchy-custom-check` compares against
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
 - `omarchy bar background glassy`: frosted top bar
