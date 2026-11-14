@@ -33,6 +33,33 @@
 -- Omarchy's keys keep working as before.
 o.bind("SUPER + E", "Window overview", "omarchy-shell shell toggle timsonner.nitty-griddy")
 
+-- Hyprpin plugin: its keys act on windows that have a Hyprpin rule (set in its
+-- bar panel) and fall back to Omarchy's own action for every other window, so
+-- ordinary windows behave exactly as before.
+--   Super+O      pop the window out to its rule's spot, or put it back
+--   Super+T      float a tiled-edge pin out / tile a corner pin in
+--   Super+P      cycle the pin's placement (edges, then corners)
+--   Super+Z      zoom a pop-out to half the screen and back (new key)
+--   Super+Alt+S  send the pin to the scratchpad (Super+S summons it)
+local function hyprpin_or(name, fallback)
+  return function()
+    local window = hl.get_active_window()
+    if not window then return end
+    local hyprpin = _G.__hyprpin
+    if hyprpin and hyprpin[name] and hyprpin[name](window.address) then return end
+    if fallback then fallback() end
+  end
+end
+hl.unbind("SUPER + O")
+o.bind("SUPER + O", "Pop window out (Hyprpin, else float & pin)", hyprpin_or("toggle_pop", function() hl.exec_cmd("omarchy-hyprland-window-pop") end))
+hl.unbind("SUPER + T")
+o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("toggle_dock", function() hl.dispatch(hl.dsp.window.float({ action = "toggle" })) end))
+hl.unbind("SUPER + P")
+o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
+o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
+hl.unbind("SUPER + ALT + S")
+o.bind("SUPER + ALT + S", "Move window to scratchpad (Hyprpin aware)", hyprpin_or("send_to_scratchpad", function() hl.dispatch(hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })) end))
+
 -- Esc closes the overview while it is open, and passes through otherwise.
 local function nitty_griddy_mapped()
   local layers = hl.get_layers({ namespace = "timsonner-nitty-griddy" })
