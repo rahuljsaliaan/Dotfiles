@@ -14,8 +14,9 @@
 
 ## Keep the Quick Reference Guides in step
 
-- The bar's search guides (the Quick Reference Guide plugin, `jcmarin.qrg`) read this setup's own cheat sheets from `~/.config/qrg/guides/<tool>.txt`; `tmux.txt` covers this tmux edition (prefix Ctrl+Space, the Alt keys, the floating prompts, `tdl`).
-- Whenever you add, change or remove a keybinding, alias or workflow for a tool that has a guide there, update that guide in the same task, then sync it to Dotfiles like any other config. Check the file still parses (the plugin's `parseGuide` in `QrgSearch.js` reports no warnings).
+- The bar's search guides (the Quick Reference Guide plugin, `jcmarin.qrg`) read this setup's own cheat sheets from `~/.config/qrg/guides/<tool>.txt`: `tmux.txt` (this tmux edition: prefix Ctrl+Space, the Alt keys, the floating prompts, `tdl`), `nvim.txt` (this LazyVim setup; it replaces the plugin's bundled Neovim sheet) and `hyprland.txt`.
+- `hyprland.txt` is generated, not hand-written: run `qrg-hyprland-guide` after any change to the Hyprland bindings (it also runs at login). The other guides are edited by hand.
+- Whenever you add, change or remove a keybinding, alias or workflow for a tool that has a guide there, update that guide in the same task, then sync it to Dotfiles like any other config. Check the file still parses (the plugin's `parseGuide` in `QrgSearch.js` reports no warnings). Keep binding descriptions free of commas: Omarchy's key list cuts a description at the first comma.
 - Write entries as `keys | what it does | example or note | #tags`, describe this setup rather than the tool's defaults, and keep the header comment saying which config files the guide was generated from.
 
 ## Lavish artifacts
