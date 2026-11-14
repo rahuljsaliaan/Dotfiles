@@ -86,6 +86,7 @@ copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.conf
 # Prompt, terminal multiplexer and editor.
 copy starship/starship.toml "$HOME/.config/starship.toml"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
+copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy bash/.bashrc           "$HOME/.bashrc"
 copy foot/foot.ini          "$HOME/.config/foot/foot.ini"
 copy mise/config.toml       "$HOME/.config/mise/config.toml"

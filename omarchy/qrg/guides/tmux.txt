@@ -1,0 +1,50 @@
+# Tmux
+This setup's tmux: prefix Ctrl+Space, Alt keys without the prefix, floating prompts
+@legend S=Session, W=Window, P=Pane, C=Copy mode
+// Generated from ~/.config/tmux/tmux.conf and ~/.bashrc. Keep in step with them.
+// "Prefix" means press Ctrl+Space, let go, then the key.
+
+## Prefix and help
+Ctrl+Space | Prefix (press, let go, then the key) | Ctrl+b is switched off | #prefix
+Prefix Ctrl+Space | Send the prefix to the program inside | #prefix
+Prefix ? | All tmux keys, in a popup | #help #keys
+Prefix q | Reload tmux.conf | Shows "Configuration reloaded" | #reload #config
+Prefix : | Command palette (floating) | Lists every tmux command as you type; Tab completes, Enter runs, Esc cancels | #command #palette
+
+## Start and layouts
+t | Attach, or start session "Work" | Omarchy alias: tmux attach || tmux new -s Work | #start #attach
+tdl c | Dev layout: editor, Claude right, terminal below | Terminal 20% high, AI 40% wide, focus on the editor. tdl c cx adds a second AI pane | #layout #dev #claude
+tdlm c | One tdl window per subfolder | Run in a folder of projects | #layout #dev
+tsl 4 claude | Swarm: N panes all running a command | #layout #ai
+
+## Panes
+[P] Alt+Enter | Split, new pane below | Opens in the current folder | #split
+[P] Alt+Shift+Enter | Split, new pane right | Opens in the current folder | #split
+[P] Prefix h | Split, new pane below | Same as Alt+Enter | #split
+[P] Prefix v | Split, new pane right | Same as Alt+Shift+Enter | #split
+[P] Ctrl+Alt+Arrow | Focus the pane that way | No prefix needed | #focus #move
+[P] Ctrl+Alt+Shift+Arrow | Resize the pane by 5 | No prefix needed | #resize
+[P] Prefix z | Zoom the pane (again to restore) | ZOOM shows in the status bar | #zoom
+[P] Alt+Escape | Close the pane | Prefix x does the same | #kill #close
+
+## Windows
+[W] Prefix c | New window | Opens in the current folder | #create
+[W] Alt+1 … Alt+9 | Go to window 1-9 | Windows are numbered from 1 and renumber on close | #switch
+[W] Alt+Left / Alt+Right | Previous / next window | #switch
+[W] Alt+Shift+Left / Right | Move the window left / right | #move #reorder
+[W] Prefix r | Rename the window (floating box) | Prefix , too. Pre-filled with the old name; Enter keeps, Esc cancels | #rename
+[W] Prefix k | Close the window | #kill #close
+
+## Sessions
+[S] Prefix C | New session | Starts in the current folder | #create
+[S] Alt+Up / Alt+Down | Previous / next session | Prefix P / Prefix N too | #switch
+[S] Prefix R | Rename the session (floating box) | Prefix $ too | #rename
+[S] Prefix K | Close the session | You stay in tmux on another session | #kill #close
+[S] Prefix d | Detach (tmux keeps running) | Reattach with t | #detach
+
+## Copy and scroll
+[C] Prefix [ | Enter copy mode (scroll back) | The mouse wheel works too; 50,000 lines kept | #scroll #copy
+[C] v | Start selecting | In copy mode, vi keys move | #select
+[C] y | Copy the selection and leave | Goes to the system clipboard | #copy #yank
+[C] q | Leave copy mode | Escape only clears the selection | #exit
+Mouse drag | Select text (copies on release) | Hold Shift to use the terminal's own selection instead | #mouse #copy
