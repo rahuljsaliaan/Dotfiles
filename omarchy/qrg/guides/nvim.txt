@@ -1,0 +1,80 @@
+# Neovim
+This setup's Neovim: LazyVim, leader Space, explorer on the right, lines wrap
+@legend N=Normal, I=Insert, V=Visual, C=Command line, Y=This setup's own
+// Written from ~/.config/nvim (LazyVim + lua/config/keymaps.lua, options.lua,
+// lua/plugins/ui.lua, markdown.lua). Keep in step with them.
+// Replaces the plugin's bundled nvim.txt (same file name).
+
+## What Leader means
+Leader = Space | The key most commands start with | <leader>e reads "press Space, then e" | #leader #what #help
+[N] Space, wait | A popup lists what comes next | which-key: every leader key, grouped; keep typing to narrow it | #leader #help #which-key
+[N] Space s k | Search every key in Neovim | When you forget one | #help #keys
+Esc | Back to Normal mode | Normal is where keys are commands; Insert is where they type | #mode
+
+## Modes and saving
+[N] i / a | Insert before / after the cursor | o opens a new line below, O above | #insert #mode
+[N] v / V | Select characters / whole lines | Ctrl+v selects a block | #visual #select
+[N I V] Ctrl+S | Save the file | Works in every mode | #save #write
+[N] Space q q | Quit Neovim (all files) | :q closes just this window | #quit
+[N] u / Ctrl+R | Undo / redo | #undo #redo
+[N] . | Repeat the last change | #repeat
+
+## Files and the explorer
+[Y N] Space e | Explorer, on the right | Full window on a narrow screen (under 120 columns); shows dotfiles and gitignored files, skips .git and node_modules | #explorer #tree #files
+[Y] Enter / l | Explorer: open the file | In full-window mode the explorer steps aside | #explorer #open
+[Y N] q | Explorer full-window mode: back to the explorer | Only on a file opened from the full-window explorer; elsewhere q still records macros | #explorer #back
+H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default here | #explorer #hidden
+[Y N] Space Space | Find a file by name | Includes dotfiles and gitignored files here | #find #files
+[N] Space f r | Recent files | #find #recent
+[N] Space , | Switch between open files (buffers) | #buffers #switch
+[Y N] Space s g | Search text in the project (grep) | Includes gitignored files here | #grep #search
+[Y N] Space s s | Symbols in this file (like VS Code Ctrl+Shift+O) | Moving through the list scrolls the real editor to each symbol | #symbols #outline
+[N] Space s r | Search and replace in the project | #replace #search
+
+## Buffers and windows
+[N] Shift+H / Shift+L | Previous / next open file | #buffers #tabs
+[N] Space b d | Close this file (buffer) | #buffers #close
+[N] Space - / Space | | Split below / to the right | #split #window
+[N] Ctrl+H/J/K/L | Move to the window left/down/up/right | #window #focus
+[N] Space w d | Close this window | #window #close
+
+## Editing
+[Y I C] Ctrl+Backspace | Delete the word before the cursor | As in VS Code | #delete #word
+[Y I] Ctrl+Delete | Delete the word after the cursor | #delete #word
+[N] dd / yy / p | Cut line / copy line / paste | Copies go to the system clipboard, over SSH and tmux too | #copy #paste #yank
+[N] ciw | Change the word under the cursor | ci" changes inside quotes, ci( inside brackets | #change #word
+[N V] gcc / gc | Comment the line / the selection | #comment
+[N V] Alt+J / Alt+K | Move the line or selection down / up | #move #line
+[N] > / < (or >> <<) | Indent / unindent | #indent
+
+## Search and move
+[N] / text | Search forward | n next, N previous | #search
+[N] * | Search for the word under the cursor | #search #word
+[N] w / b | Next / previous word | #move #word
+[N] gg / G | Top / bottom of the file | #move #top #bottom
+[N] Ctrl+D / Ctrl+U | Half a page down / up | #scroll
+[N] j / k | Down / up | Moves by screen line on wrapped text here | #move #wrap
+
+## Code (LSP)
+[N] gd | Go to the definition | Ctrl+O comes back | #definition #goto
+[N] gr | Find references | #references
+[N] K | Show docs for the thing under the cursor | #hover #docs
+[N] Space c a | Code actions (quick fixes) | #fix #action
+[N] Space c r | Rename the symbol everywhere | #rename #refactor
+[N] Space c f | Format the file | Space u f turns format-on-save off/on | #format
+[N] Space c d | Show the full error for this line | Errors are shortened at the line end here; this shows all of it | #diagnostics #error
+[N] ] d / [ d | Next / previous error or warning | #diagnostics
+[N] Space x x | All problems in a list (Trouble) | #diagnostics #trouble
+
+## Git
+[N] Space g g | Lazygit | #git #lazygit
+[N] Space g b | Who changed this line (blame) | #git #blame
+[N] ] h / [ h | Next / previous changed block (hunk) | #git #hunk
+[N V] Space g h s / Space g h r | Stage / undo the changed block | #git #stage #reset
+[N V] Space g B | Open the file on GitHub | #git #browse
+
+## Toggles and views
+[Y N] Space u w | Line wrapping on/off | On by default here; wrapped lines are indented to match | #wrap
+[Y N] Space u m | Rendered Markdown on/off | #markdown #render
+[N] Space u f | Format on save on/off | #format
+[N] Space l | Plugin manager (Lazy) | #plugins #lazy
