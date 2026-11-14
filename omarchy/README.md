@@ -108,11 +108,14 @@ its background. `titlebars/button-rest-opacity.patch` adds one option,
 `plugin:hyprbars:button_rest_opacity`, so the buttons draw faint at rest and in
 full colour on hover. `hypr/looknfeel.lua` loads
 `~/.local/lib/omarchy-hyprland-titlebars/titlebars.so` instead of Omarchy's copy
-whenever it exists.
+when it was built for the installed Hyprland: `build.sh` writes the
+`pacman -Q hyprland` it built against into `built-for` next to it.
 
-**After every Hyprland update, run `titlebars/build.sh`.** A plugin built
-against older headers fails to load. To go back to Omarchy's plugin, delete
-that `.so` and run `hyprctl reload`; the buttons then stay full colour at rest.
+A plugin built against older headers fails to load, so after a Hyprland update
+Omarchy's copy is used (buttons full colour at rest) until the plugin is
+rebuilt. `bin/omarchy-custom-check` rebuilds it from the post-update and
+post-boot hooks; by hand, run `titlebars/build.sh` and log out and back in. To
+go back to Omarchy's plugin for good, delete that `.so` and run `hyprctl reload`.
 
 ## Not tracked here
 
