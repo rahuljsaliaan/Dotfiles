@@ -192,13 +192,16 @@ BarWidget {
   }
 
   // ---- drawing
-  // Every screen the same size (a map, not a scale drawing), so the eye reads
-  // the marks rather than the frames.
-  readonly property int frameHeight: Math.round(root.barSize * 0.84)
-  readonly property int frameWidth: Math.round(root.frameHeight * 16 / 9)
-  readonly property int pad: 3
-  readonly property int markSize: root.frameHeight - 2 * root.pad
-  readonly property color barBg: root.bar && root.bar.background !== undefined ? root.bar.background : Commons.Color.bar.background
+  // Every screen the same small frame (30x20 on a 26px bar), so the eye reads
+  // the marks rather than the frames. Inside, a soft tinted shape for the
+  // layout and the number in the bar's own text colour, SemiBold: the numbers
+  // read like the rest of the bar and the shapes stay clear without shouting.
+  readonly property int frameHeight: Math.round(root.barSize * 20 / 26)
+  readonly property int frameWidth: Math.round(root.frameHeight * 1.5)
+  readonly property int shapeSize: Math.round(root.frameHeight * 0.7)
+  // Triangles are drawn taller: their room for a number is low and narrow.
+  readonly property int triangleSize: Math.min(root.frameHeight - 3, Math.round(root.shapeSize * 1.25))
+  readonly property int numberSize: Math.round(root.frameHeight * 0.55)
 
   implicitWidth: row.implicitWidth + Style.space(8)
   implicitHeight: root.barSize
@@ -217,11 +220,11 @@ BarWidget {
         readonly property bool focused: String(modelData.name) === root.monitorName
         readonly property int wsId: modelData.activeWorkspace ? modelData.activeWorkspace.id : -1
         readonly property string mode: root.modeOf(wsId)
-        // Filled marks: the focused screen's in the accent, the others' in the
-        // bar's text colour turned down. The number is cut out of the mark in
-        // the bar's own background colour, so it reads sharply on either.
-        readonly property color fill: focused ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.62)
-        readonly property color figure: Qt.rgba(0.102, 0.106, 0.149, 1)
+        readonly property bool triangle: mode === "floating"
+        readonly property color tint: focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.30)
+                                              : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.13)
+        readonly property color figure: focused ? Qt.lighter(root.ink, 1.14)
+                                                : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.75)
         width: root.frameWidth
         height: root.barSize
 
@@ -231,54 +234,54 @@ BarWidget {
           anchors.centerIn: parent
           width: root.frameWidth
           height: root.frameHeight
-          radius: Math.round(root.frameHeight * 0.18)
+          radius: 4
           color: "transparent"
           border.width: 1
-          border.color: cell.focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.7)
-                                     : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.28)
+          border.color: cell.focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.75)
+                                     : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.22)
 
-          // Its workspace: the number inside the layout's shape, clear of the frame.
+          // Its workspace: the number on the layout's shape.
           Item {
             id: mark
             anchors.centerIn: parent
-            width: cell.mode === "floating" ? Math.round(root.markSize * 1.3) : root.markSize
-            height: root.markSize
+            width: cell.triangle ? Math.round(root.triangleSize * 1.3) : root.shapeSize
+            height: cell.triangle ? root.triangleSize : root.shapeSize
 
             // Square (tiling) and circle (scrolling).
             Rectangle {
-              visible: cell.mode !== "floating"
+              visible: !cell.triangle
               anchors.fill: parent
-              radius: cell.mode === "scrolling" ? width / 2 : Math.round(width * 0.22)
-              color: cell.fill
+              radius: cell.mode === "scrolling" ? width / 2 : Math.round(width * 0.24)
+              color: cell.tint
               antialiasing: true
             }
-            // Triangle (floating), as a vector shape so its edges stay crisp.
+            // Triangle (floating), as a vector shape so its edges stay crisp,
+            // its corners softened by a stroke of the same tint.
             Shape {
-              visible: cell.mode === "floating"
+              visible: cell.triangle
               anchors.fill: parent
               preferredRendererType: Shape.CurveRenderer
               ShapePath {
-                strokeWidth: -1
-                strokeColor: "transparent"
-                fillColor: cell.fill
+                strokeWidth: 1.6
+                strokeColor: cell.tint
+                fillColor: cell.tint
                 joinStyle: ShapePath.RoundJoin
-                startX: mark.width / 2; startY: 0
-                PathLine { x: mark.width; y: mark.height }
-                PathLine { x: 0; y: mark.height }
-                PathLine { x: mark.width / 2; y: 0 }
+                startX: mark.width / 2; startY: 0.8
+                PathLine { x: mark.width - 0.8; y: mark.height - 0.8 }
+                PathLine { x: 0.8; y: mark.height - 0.8 }
+                PathLine { x: mark.width / 2; y: 0.8 }
               }
             }
             Text {
               anchors.horizontalCenter: parent.horizontalCenter
               anchors.verticalCenter: parent.verticalCenter
-              // A triangle's room is low and narrow.
-              anchors.verticalCenterOffset: cell.mode === "floating" ? Math.round(root.markSize * 0.18) : 0
+              anchors.verticalCenterOffset: cell.triangle ? Math.round(root.triangleSize * 0.2) : 0
               textFormat: Text.PlainText
               text: root.slotLabel(cell.wsId)
               color: cell.figure
               font.family: Style.font.family
-              font.pixelSize: Math.round(root.markSize * (cell.mode === "floating" ? 0.6 : 0.74))
-              font.weight: Font.Black
+              font.pixelSize: root.numberSize
+              font.weight: Font.DemiBold
               renderType: Text.NativeRendering
             }
           }
