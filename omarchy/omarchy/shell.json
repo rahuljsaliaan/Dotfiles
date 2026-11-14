@@ -76,7 +76,10 @@
             "temp"
           ],
           "metrics": [
-            "cpu"
+            "cpu",
+            "mem",
+            "gpu",
+            "temp"
           ],
           "style": "bars"
         }
@@ -141,18 +144,21 @@
     "position": "top"
   },
   "cloneSourceRestores": [
-    "rahulj.glasslock",
     "rahulj.dock",
+    "rahulj.glasslock",
     "rahulj.idle",
-    "rahulj.notifications"
+    "rahulj.notifications",
+    "rahulj.reminders"
   ],
   "disabledPlugins": [
-    "omarchy.lock",
     "omarchy.dock",
     "omarchy.idle",
-    "omarchy.notifications"
+    "omarchy.notifications",
+    "omarchy.reminders",
+    "omarchy.lock"
   ],
   "dock": {
+    "autohide": true,
     "pinned": [
       "chromium",
       "Gmail",
@@ -161,18 +167,13 @@
       "foot",
       "YouTube Music"
     ],
-    "position": "bottom",
-    "autohide": true
+    "position": "bottom"
   },
   "idle": {
     "lock": 300,
     "screensaver": 0
   },
   "plugins": [
-    {
-      "id": "rahulj.glasslock",
-      "name": "Rahul"
-    },
     {
       "id": "rahulj.dock"
     },
@@ -184,6 +185,16 @@
     },
     {
       "id": "rahulj.notifications"
+    },
+    {
+      "id": "rahulj.reminders"
+    },
+    {
+      "id": "rahulj.glasslock",
+      "name": "Rahul"
+    },
+    {
+      "id": "rahulj.focus-sign"
     }
   ],
   "version": 1
