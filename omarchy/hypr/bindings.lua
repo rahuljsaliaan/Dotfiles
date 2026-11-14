@@ -60,8 +60,8 @@ end
 -- already floating: Super+O tiled the window instead of popping it (a second
 -- press popped it), and tiling a window there is where Hyprland 0.56.2 crashed
 -- twice on 2026-11-14 (a null layout space in its float-toggle and centre
--- code; crash reports in ~/.cache/hyprland). So: floating is set explicitly,
--- never toggled blind, and nothing is tiled on a floating-layout workspace.
+-- code; crash reports in ~/.cache/hyprland). So Super+O sets floating
+-- explicitly and never toggles it blind. Super+T still toggles: that is its job.
 local POP_TILED = "pop-was-tiled"
 local FLOATING_WORKSPACE = "omarchy-floating-workspace"
 
@@ -120,15 +120,11 @@ local function pop_out()
   set_tag(window, "+pop")
 end
 
--- Super+T: float or tile the window, except that a floating window on a
--- floating-layout workspace stays floating (Super+L changes the layout).
+-- Super+T: float or tile the window, as Omarchy's own binding does. It was
+-- briefly blocked for floating windows on floating-layout workspaces as a crash
+-- precaution, but tiling a window there is a normal thing to want, the crash
+-- never reproduced with it alone, and the block took the key away.
 local function toggle_floating()
-  local window = hl.get_active_window()
-  if not window then return end
-  if window.floating and has_tag(window, FLOATING_WORKSPACE) then
-    hl.exec_cmd('omarchy-notification-send -u low "Floating layout" "Windows float on this workspace. Super + L switches it to tiling."')
-    return
-  end
   hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
 end
 
