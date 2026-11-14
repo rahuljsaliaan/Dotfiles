@@ -3,7 +3,7 @@
 # section frames take the non-signal hues and the memory and network graphs
 # the wallpaper's cyan -> blue -> purple. Keep in step with colors.toml.
 # Main background, empty for terminal default, need to be empty if you want transparent background
-theme[main_bg]="#0f111a"
+theme[main_bg]="#0c1523"
 
 # Main text color
 theme[main_fg]="#a6accd"
@@ -15,7 +15,7 @@ theme[title]="#a6accd"
 theme[hi_fg]="#82aaff"
 
 # Background color of selected item in processes box
-theme[selected_bg]="#2a2e45"
+theme[selected_bg]="#1b3457"
 
 # Foreground color of selected item in processes box
 theme[selected_fg]="#82aaff"
@@ -27,7 +27,7 @@ theme[inactive_fg]="#464b5d"
 theme[graph_text]="#b8bedd"
 
 # Background color of the percentage meters
-theme[meter_bg]="#2a2e45"
+theme[meter_bg]="#1b3457"
 
 # Misc colors for processes box including mini cpu graphs, details memory graph and details status text
 theme[proc_misc]="#b8bedd"
@@ -87,9 +87,9 @@ theme[process_mid]="#82aaff"
 theme[process_end]="#c792ea"
 
 # Graph gradient colors (spectrum shades from background to foreground)
-theme[gradient_color_0]="#0f111a"
-theme[gradient_color_1]="#1f2233"
-theme[gradient_color_2]="#2a2e45"
+theme[gradient_color_0]="#0c1523"
+theme[gradient_color_1]="#162740"
+theme[gradient_color_2]="#1b3457"
 theme[gradient_color_3]="#464b5d"
 theme[gradient_color_4]="#525975"
 theme[gradient_color_5]="#a6accd"

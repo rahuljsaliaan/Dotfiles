@@ -21,10 +21,10 @@ return {
     priority = 1000,
     opts = {
       colors = {
-        bg = "#0f111a",
-        dark_bg = "#0b0d14",
-        darker_bg = "#07080c",
-        lighter_bg = "#1f2233",
+        bg = "#0c1523",
+        dark_bg = "#09111c",
+        darker_bg = "#070b12",
+        lighter_bg = "#162740",
 
         fg = "#a6accd",
         dark_fg = "#525975",
@@ -51,10 +51,10 @@ return {
         accent = "#82aaff",
         cursor = "#c8d3f5",
         foreground = "#a6accd",
-        background = "#0f111a",
-        selection = "#2a2e45",
+        background = "#0c1523",
+        selection = "#1b3457",
         selection_foreground = "#c8d3f5",
-        selection_background = "#2a2e45",
+        selection_background = "#1b3457",
       },
       -- Flat syntax, no italics or bold, as in the theme's design.
       styles = {
