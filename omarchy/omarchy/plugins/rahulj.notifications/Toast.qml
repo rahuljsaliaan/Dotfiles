@@ -111,6 +111,21 @@ Item {
   readonly property color themeLighter: themeColor("lighter_background", "#24283b")
   readonly property color themeMuted: themeColor("muted", "#414868")
   readonly property color themeDarkest: themeColor("darker_background", "#0e0e14")
+  readonly property color themeBright: themeColor("bright_foreground", "#c0caf5")
+
+  // Text on a coloured pill takes whichever of the theme's darkest and
+  // brightest text colours stands out more against it (WCAG contrast), so the
+  // grey low-priority pill gets light text instead of dark text at 2.7:1.
+  function relLum(c) {
+    function ch(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+    return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+  }
+  function contrastRatio(a, b) {
+    var x = relLum(a), y = relLum(b)
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
+  }
+  readonly property color pillTextColor: contrastRatio(Commons.Color.background, accentColor) >= contrastRatio(themeBright, accentColor)
+                                    ? Commons.Color.background : themeBright
   // Shadows: the theme's darkest background, darker still, so they read as
   // a deep tint of the desktop rather than flat black.
   readonly property color shadowTint: Qt.darker(themeDarkest, 2.4)
@@ -463,14 +478,14 @@ Item {
       y: cardShape.room + cardShape.rim + 1
       width: Math.max(0, cardShape.gapLeft - plate.radius)
       height: 1
-      color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
+      color: Qt.rgba(card.themeBright.r, card.themeBright.g, card.themeBright.b, 0.16)
     }
     Rectangle {
       x: cardShape.gapRight
       y: cardShape.room + cardShape.rim + 1
       width: Math.max(0, cardShape.width - plate.radius - cardShape.gapRight)
       height: 1
-      color: Qt.rgba(0.75, 0.79, 0.96, 0.16)
+      color: Qt.rgba(card.themeBright.r, card.themeBright.g, card.themeBright.b, 0.16)
     }
   }
 
@@ -798,7 +813,7 @@ Item {
                     anchors.centerIn: parent
                     textFormat: Text.PlainText
                     text: stamp.appLabel
-                    color: Commons.Color.background
+                    color: card.pillTextColor
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     font.weight: Font.Bold
