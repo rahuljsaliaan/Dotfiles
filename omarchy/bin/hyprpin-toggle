@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Switch Hyprpin on or off, like right-clicking its bar icon: off hands every
+# pinned window back where it came from and stops windows following you; the
+# rules are kept, and on resumes them. Bound to Super + Alt + O.
+#
+# It flips "enabled" in Hyprpin's state file through the plugin's own helper
+# (one atomic rename, as the panel saves); the panel and the engine both
+# reload when the file changes.
+
+set -euo pipefail
+
+plugin="$HOME/.config/omarchy/plugins/io.github.jondkinney.hyprpin"
+state="$HOME/.local/state/omarchy/hyprpin.json"
+helper=("/usr/bin/python3" -I "$plugin/statefile.py")
+limit=262144
+
+[[ -f $plugin/statefile.py ]] || { omarchy-notification-send -u low "Hyprpin is not installed"; exit 1; }
+
+current=$("${helper[@]}" read "$state" "$limit" 2>/dev/null || printf '{"version":1,"enabled":true,"rules":[]}')
+next=$(jq '.enabled = (.enabled == false)' <<<"$current")
+"${helper[@]}" write "$state" "$limit" <<<"$next"
+
+if [[ $(jq -r '.enabled' <<<"$next") == true ]]; then
+  omarchy-notification-send -u low -g 󰐃 "Hyprpin on" "Windows with a rule follow you again"
+else
+  omarchy-notification-send -u low -g 󰐄 "Hyprpin off" "Pinned windows went back home"
+fi

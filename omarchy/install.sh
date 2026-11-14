@@ -70,7 +70,7 @@ copy omarchy/hooks/post-boot.d/custom-check     "$HOME/.config/omarchy/hooks/pos
 copy omarchy/clone-baselines                     "$HOME/.config/omarchy/clone-baselines"
 
 # Screensaver scripts, the floating tmux prompt, browser-here, and the update check.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check; do
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 

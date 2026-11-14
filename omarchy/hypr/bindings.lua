@@ -41,8 +41,9 @@ o.bind("SUPER + E", "Window overview", "omarchy-shell shell toggle timsonner.nit
 --   Super+P      cycle the pin's placement (edges, then corners)
 --   Super+Z      zoom a pop-out to half the screen and back (new key)
 --   Super+Alt+S  send the pin to the scratchpad (Super+S summons it)
---   Super+Alt+O  open Hyprpin's panel, to add a window or change its spot
---                (Super+Shift+O stays Omarchy's Obsidian)
+--   Super+Alt+O  switch Hyprpin on/off, like right-clicking its bar icon
+--                (Super+Shift+O stays Omarchy's Obsidian); the panel, to add
+--                a window or change its spot, opens from the pin icon
 local function hyprpin_or(name, fallback)
   return function()
     local window = hl.get_active_window()
@@ -59,13 +60,7 @@ o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("
 hl.unbind("SUPER + P")
 o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
 o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
--- Opens, or closes when a panel is showing: the shell's toggle opened it but a
--- second press while the panel had the keyboard left it open.
-o.bind("SUPER + ALT + O", "Hyprpin panel", function()
-  local shown = hl.get_layers({ namespace = "omarchy-keyboard-panel" })
-  local verb = (shown ~= nil and #shown > 0) and "hide" or "summon"
-  hl.exec_cmd("omarchy-shell shell " .. verb .. " io.github.jondkinney.hyprpin")
-end)
+o.bind("SUPER + ALT + O", "Hyprpin on/off", "hyprpin-toggle")
 hl.unbind("SUPER + ALT + S")
 o.bind("SUPER + ALT + S", "Move window to scratchpad (Hyprpin aware)", hyprpin_or("send_to_scratchpad", function() hl.dispatch(hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })) end))
 
