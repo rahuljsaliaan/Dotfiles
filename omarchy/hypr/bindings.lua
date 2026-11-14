@@ -41,6 +41,8 @@ o.bind("SUPER + E", "Window overview", "omarchy-shell shell toggle timsonner.nit
 --   Super+P      cycle the pin's placement (edges, then corners)
 --   Super+Z      zoom a pop-out to half the screen and back (new key)
 --   Super+Alt+S  send the pin to the scratchpad (Super+S summons it)
+--   Super+Alt+O  open Hyprpin's panel, to add a window or change its spot
+--                (Super+Shift+O stays Omarchy's Obsidian)
 local function hyprpin_or(name, fallback)
   return function()
     local window = hl.get_active_window()
@@ -57,6 +59,7 @@ o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("
 hl.unbind("SUPER + P")
 o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
 o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
+o.bind("SUPER + ALT + O", "Hyprpin panel", "omarchy-shell shell toggle io.github.jondkinney.hyprpin")
 hl.unbind("SUPER + ALT + S")
 o.bind("SUPER + ALT + S", "Move window to scratchpad (Hyprpin aware)", hyprpin_or("send_to_scratchpad", function() hl.dispatch(hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })) end))
 
