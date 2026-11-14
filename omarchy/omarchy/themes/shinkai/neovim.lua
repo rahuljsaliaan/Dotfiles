@@ -41,12 +41,12 @@ return {
         magenta = "#c792ea",
         brown = "#8f5f54",
 
-        bright_red = "#ff8b92",
-        bright_yellow = "#ffe585",
-        bright_green = "#ddffa7",
-        bright_cyan = "#a3f7ff",
-        bright_blue = "#9cc4ff",
-        bright_magenta = "#e1acff",
+        bright_red = "#ff898e",
+        bright_yellow = "#fed282",
+        bright_green = "#ccf196",
+        bright_cyan = "#9ce1fe",
+        bright_blue = "#8cb1fe",
+        bright_magenta = "#dba5fe",
 
         accent = "#82aaff",
         cursor = "#c8d3f5",
