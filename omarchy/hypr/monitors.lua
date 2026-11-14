@@ -6,6 +6,8 @@
 -- "auto" lets Hyprland pick per display.
 local omarchy_monitor_scale = "auto"
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = omarchy_monitor_scale })
+hl.monitor({ output = "DP-2", mode = "preferred", position = "auto", scale = 1.25 })
+hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "auto", scale = 1.25 })
 
 -- Fixed layout, left to right: laptop | middle BenQ (main) | right BenQ.
 -- With "auto", a monitor that drops off and reconnects is re-placed at the far
@@ -28,5 +30,5 @@ hl.monitor({ output = "desc:BNQ BenQ GW2790 P8R0464701Q", mode = "preferred", po
 -- crisp instead of being stretched by the compositor. GTK only honors whole
 -- numbers, so use the nearest integer to the monitor scale, and restart an
 -- app for a change to reach it.
-local omarchy_gdk_scale = 2
+local omarchy_gdk_scale = 1
 hl.env("GDK_SCALE", tostring(omarchy_gdk_scale))
