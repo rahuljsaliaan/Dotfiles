@@ -4,7 +4,7 @@
     "pr": "",
     "sessionUrl": false
   },
-  "theme": "dark",
+  "theme": "custom:omarchy",
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh",
