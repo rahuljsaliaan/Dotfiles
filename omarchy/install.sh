@@ -173,7 +173,8 @@ for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsych
 done
 
 # Small fixes to community plugins, kept as in-place edits: their lists' hint
-# lines were centred, and every list here is left-aligned. `omarchy plugin
+# lines were centred (every list here is left-aligned), and Hyprpin's panel
+# ignored Esc. `omarchy plugin
 # update` refuses an update that touches the same file ("local changes");
 # drop the edit with `git -C <plugin> checkout .`, update, and re-run this.
 python3 - <<'PY'
@@ -183,6 +184,12 @@ tweaks = [
     ("jim.aiusage/BarWidget.qml",
      "        font.pixelSize: Style.font.caption\n        horizontalAlignment: Text.AlignHCenter\n      }",
      "        font.pixelSize: Style.font.caption\n        horizontalAlignment: Text.AlignLeft\n      }"),
+    ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
+     "        open: root.opened\n        contentWidth: panel.fittedContentWidth(Style.space(420))",
+     "        open: root.opened\n        // Esc closes it, as in the stock panels.\n        focusTarget: keyCatcher\n        contentWidth: panel.fittedContentWidth(Style.space(420))"),
+    ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
+     "        Flickable {\n            id: scroller",
+     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close() }\n\n        Flickable {\n            id: scroller"),
     ("oliwier.agent-skills-manager/Panel.qml",
      "          width: parent.width\n          horizontalAlignment: Text.AlignHCenter\n          textFormat: Text.PlainText\n          text: {\n            var typing",
      "          width: parent.width\n          horizontalAlignment: Text.AlignLeft\n          textFormat: Text.PlainText\n          text: {\n            var typing"),
