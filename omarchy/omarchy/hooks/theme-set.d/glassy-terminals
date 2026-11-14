@@ -30,11 +30,13 @@ if tmux list-sessions >/dev/null 2>&1; then
   done
 fi
 
-# Personal: the terminal glass a little more see-through than Omarchy's 0.65,
-# so more of the wallpaper's pixel grid shows behind the text. Written into the glass block the theme
-# switch just added, before the alpha is resent to running terminals; new ones
-# read it at launch.
-GLASS_ALPHA=0.60
+# Personal: the terminal glass a little more solid than Omarchy's 0.65, so
+# windows read as their own surface lifted off the wallpaper (which still shows,
+# quieter) and text sits on a steadier background. Compared on Shinkai at 0.60,
+# 0.70 and 0.72; 0.70 won. Written into the glass block the theme switch just
+# added, before the alpha is resent to running terminals; new ones read it at
+# launch.
+GLASS_ALPHA=0.70
 theme_foot="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/foot.ini"
 if [[ -f $theme_foot ]] && grep -q '^# omarchy-glass begin' "$theme_foot"; then
   sed -i "/^# omarchy-glass begin/,/^# omarchy-glass end/ s/^alpha=.*/alpha=$GLASS_ALPHA/" "$theme_foot"
