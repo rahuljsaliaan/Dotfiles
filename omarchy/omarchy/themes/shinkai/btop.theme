@@ -1,0 +1,100 @@
+# Shinkai btop: Omarchy's btop template rendered with this theme's colours,
+# then green, yellow and red kept for real signals (temperature) only: the
+# section frames take the non-signal hues and the memory and network graphs
+# the wallpaper's cyan -> blue -> purple. Keep in step with colors.toml.
+# Main background, empty for terminal default, need to be empty if you want transparent background
+theme[main_bg]="#0f111a"
+
+# Main text color
+theme[main_fg]="#a6accd"
+
+# Title color for boxes
+theme[title]="#a6accd"
+
+# Highlight color for keyboard shortcuts
+theme[hi_fg]="#82aaff"
+
+# Background color of selected item in processes box
+theme[selected_bg]="#2a2e45"
+
+# Foreground color of selected item in processes box
+theme[selected_fg]="#82aaff"
+
+# Color of inactive/disabled text
+theme[inactive_fg]="#464b5d"
+
+# Color of text appearing on top of graphs, i.e uptime and current network graph scaling
+theme[graph_text]="#b8bedd"
+
+# Background color of the percentage meters
+theme[meter_bg]="#2a2e45"
+
+# Misc colors for processes box including mini cpu graphs, details memory graph and details status text
+theme[proc_misc]="#b8bedd"
+
+# CPU, Memory, Network, Proc box outline colors
+theme[cpu_box]="#c792ea"
+theme[mem_box]="#89ddff"
+theme[net_box]="#f78c6c"
+theme[proc_box]="#82aaff"
+
+# Box divider line and small boxes line color
+theme[div_line]="#464b5d"
+
+# Temperature graph color (Green -> Yellow -> Red)
+theme[temp_start]="#c3e88d"
+theme[temp_mid]="#ffcb6b"
+theme[temp_end]="#f07178"
+
+# CPU graph colors (Teal -> Blue -> Magenta)
+theme[cpu_start]="#89ddff"
+theme[cpu_mid]="#82aaff"
+theme[cpu_end]="#c792ea"
+
+# Mem/Disk free meter
+theme[free_start]="#c792ea"
+theme[free_mid]="#82aaff"
+theme[free_end]="#89ddff"
+
+# Mem/Disk cached meter
+theme[cached_start]="#82aaff"
+theme[cached_mid]="#89ddff"
+theme[cached_end]="#c792ea"
+
+# Mem/Disk available meter
+theme[available_start]="#c792ea"
+theme[available_mid]="#82aaff"
+theme[available_end]="#89ddff"
+
+# Mem/Disk used meter (Green -> Teal -> Blue)
+theme[used_start]="#89ddff"
+theme[used_mid]="#82aaff"
+theme[used_end]="#c792ea"
+
+# Download graph colors
+theme[download_start]="#89ddff"
+theme[download_mid]="#82aaff"
+theme[download_end]="#c792ea"
+
+# Upload graph colors (Green -> Teal -> Blue)
+theme[upload_start]="#c792ea"
+theme[upload_mid]="#82aaff"
+theme[upload_end]="#89ddff"
+
+# Process box color gradient for threads, mem and cpu usage
+theme[process_start]="#89ddff"
+theme[process_mid]="#82aaff"
+theme[process_end]="#c792ea"
+
+# Graph gradient colors (spectrum shades from background to foreground)
+theme[gradient_color_0]="#0f111a"
+theme[gradient_color_1]="#1f2233"
+theme[gradient_color_2]="#2a2e45"
+theme[gradient_color_3]="#464b5d"
+theme[gradient_color_4]="#525975"
+theme[gradient_color_5]="#a6accd"
+theme[gradient_color_6]="#b8bedd"
+theme[gradient_color_7]="#c8d3f5"
+# omarchy-glass begin
+theme[main_bg]=""
+# omarchy-glass end
