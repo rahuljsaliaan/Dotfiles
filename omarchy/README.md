@@ -1,8 +1,9 @@
 # Dotfiles — Omarchy
 
-The setup for the Omarchy (Arch + Hyprland) machine: a Tokyo Night "frosted
-glass" desktop with rounded windows, three monitors with one main screen, and
-the developer tools on top. The Zorin OS setup lives in [`../zorin`](../zorin).
+The setup for the Omarchy (Arch + Hyprland) machine: a "frosted glass" desktop
+in Shinkai (Tokyo Night × Material Ocean, with Tokyo Night still set up) with
+rounded windows, three monitors with one main screen, and the developer tools
+on top. The Zorin OS setup lives in [`../zorin`](../zorin).
 
 ## Restore
 
@@ -65,7 +66,7 @@ together for different monitors.
 | `omarchy/last-session.ini` | `~/.config/omarchy/` | Settings for the Last Session plugin (reopens the windows that were open, at login after a reboot): the drop-down Claude console (`org.omarchy.agent`) is left out, since Omarchy starts its own and a replay would carry its saved flags, and Teams is launched once for all of its windows |
 | `omarchy/themes/tokyo-night/shell.toml` | `~/.config/omarchy/themes/tokyo-night/` | Theme overlay: panels, prompts and the lock field use the soft gradient border, and the lock field is frosted glass; notifications are the lifted float colour (#24283b, 95%) with the same gradient rim, and a red `border-critical` for critical ones. Shell surfaces read the copy `omarchy theme set tokyo-night` generates, so re-apply the theme after editing (then re-set the wallpaper, which the re-apply resets) |
 | `omarchy/themes/tokyo-night/shell.lock.toml` | `~/.config/omarchy/themes/tokyo-night/` | The lock screen's colours (frosted navy, the window-gradient rim, red only on a wrong password). Stock Tokyo Night ships its own `shell.lock.toml`, which replaces the whole `[lock]` section of `shell.toml` when the theme is applied, so they have to live in this file |
-| `omarchy/backgrounds/tokyo-night/pixel-led.png` (`backgrounds/src/pixel-led.svg` is its source) | `~/.config/omarchy/backgrounds/tokyo-night/` | The wallpaper: the screen as a faint grid of unlit pixels, like an LED panel switched off, fading towards the edges, with the `</>` lit in the middle in the avatar's pixel style (cyan → blue → purple, with a soft glow). Behind the glassy windows the grid blurs into a gentle texture |
+| `omarchy/backgrounds/tokyo-night/pixel-led.png` (`backgrounds/src/pixel-led.svg` is its source) | `~/.config/omarchy/backgrounds/tokyo-night/` | Tokyo Night's pixel wallpaper, in its rotation: the screen as a faint grid of unlit pixels, like an LED panel switched off, fading towards the edges, with the `</>` lit in the middle in the avatar's pixel style (cyan → blue → purple, with a soft glow). Behind the glassy windows the grid blurs into a gentle texture |
 | `omarchy/backgrounds/tokyo-night/omarchy-mark.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | A second wallpaper in the Tokyo Night rotation: the Omarchy mark in the blue→purple gradient, softly glowing on navy |
 | `omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4` (`backgrounds/src/pixel-led-intro.py` renders its frames) | `~/.config/omarchy/backgrounds/tokyo-night/intros/` | The wallpaper's login intro, played once per session while background intros are on (`omarchy theme bg intro status`): the LED panel powering on. A line of pixels flickers across the middle, the grid spreads out from the centre as the navy fades in, the `</>` lights pixel by pixel and the glow fades in, 3.8s at 2560×1440, ending on a frame identical to the wallpaper |
 | `omarchy/backgrounds/tokyo-night/code-brackets.png` | `~/.config/omarchy/backgrounds/tokyo-night/` | The previous, smooth `</>` wallpaper, kept for the screensaver art and as an alternative |
@@ -117,7 +118,7 @@ together for different monitors.
 - `omarchy hyprland window transparency glassy`: frosted terminal and windows
 - `omarchy bar background glassy`: frosted top bar
 - `gsettings … button-layout 'appmenu:'`: no close buttons in GTK apps' own header bars
-- `omarchy theme bg set …pixel-led.png`: the wallpaper
+- `omarchy theme set shinkai`: the Shinkai theme, on its Abyss pixel wallpaper; Tokyo Night stays set up and opens on its stock wallpaper
 
 ## The patched titlebar plugin
 
