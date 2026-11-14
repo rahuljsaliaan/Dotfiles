@@ -3,7 +3,7 @@
 # Keep the personal copies of Omarchy pieces from falling behind.
 #
 # 1. Copied shell plugins (rahulj.bar, rahulj.dock, ...) don't get Omarchy's
-#    updates. Each copy has a baseline in ~/.config/omarchy/clone-baselines/:
+#    (or the community original's) updates. Each copy has a baseline in ~/.config/omarchy/clone-baselines/:
 #    the checksums of the stock plugin it was last brought up to date with.
 #    When the stock plugin changes, this says which files changed.
 # 2. The personal titlebar plugin (~/.local/lib/omarchy-hyprland-titlebars)
@@ -37,6 +37,7 @@ declare -A SOURCE=(
   [rahulj.reminders]="$STOCK/reminders"
   [rahulj.lock]="$STOCK/lock"
   [rahulj.glasslock]="$PLUGINS/io.github.rocanrolpsycho.glasslock"
+  [rahulj.net-speed]="$PLUGINS/brightwalker25.net-speed"
 )
 
 notify=0
