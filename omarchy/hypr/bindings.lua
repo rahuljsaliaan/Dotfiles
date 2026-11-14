@@ -53,10 +53,92 @@ local function hyprpin_or(name, fallback)
     if fallback then fallback() end
   end
 end
+
+-- Pop-out and float toggle, done here rather than through Omarchy's
+-- omarchy-hyprland-window-pop and a bare float toggle. Both of those *toggle*
+-- floating, which on a floating-layout workspace tiles a window that was
+-- already floating: Super+O tiled the window instead of popping it (a second
+-- press popped it), and tiling a window there is where Hyprland 0.56.2 crashed
+-- twice on 2026-11-14 (a null layout space in its float-toggle and centre
+-- code; crash reports in ~/.cache/hyprland). So: floating is set explicitly,
+-- never toggled blind, and nothing is tiled on a floating-layout workspace.
+local POP_TILED = "pop-was-tiled"
+local FLOATING_WORKSPACE = "omarchy-floating-workspace"
+
+local function has_tag(window, name)
+  for _, tag in ipairs(window.tags or {}) do
+    local plain = tag:gsub("%*$", "")
+    if plain == name then return true end
+  end
+  return false
+end
+
+local function set_tag(window, tag)
+  hl.dispatch(hl.dsp.window.tag({ tag = tag, window = window }))
+end
+
+local function pop_size(window)
+  local monitor = window.monitor
+  if not monitor or not monitor.width then return 1300, 900 end
+  local scale = monitor.scale or 1
+  local width, height = math.floor(monitor.width / scale), math.floor(monitor.height / scale)
+  if (monitor.transform or 0) % 2 == 1 then width, height = height, width end
+  return math.min(1300, math.floor(width * 0.9)), math.min(900, math.floor(height * 0.9))
+end
+
+-- Super+O: float the window, centre it and pin it to every workspace; again
+-- puts it back, tiled only if popping is what floated it.
+local function pop_out()
+  local window = hl.get_active_window()
+  if not window then return end
+
+  if window.pinned then
+    hl.dispatch(hl.dsp.window.pin({ window = window }))
+    set_tag(window, "-pop")
+    if has_tag(window, POP_TILED) then
+      set_tag(window, "-" .. POP_TILED)
+      if not has_tag(window, FLOATING_WORKSPACE) then
+        hl.dispatch(hl.dsp.window.float({ action = "off", window = window }))
+      end
+    end
+    return
+  end
+
+  local fullscreen = window.fullscreen or 0
+  if fullscreen ~= 0 then
+    hl.dispatch(hl.dsp.window.fullscreen({ mode = fullscreen == 1 and "maximized" or "fullscreen", action = "unset", window = window }))
+  end
+  if not window.floating then
+    set_tag(window, "+" .. POP_TILED)
+    hl.dispatch(hl.dsp.window.float({ action = "on", window = window }))
+  end
+  local width, height = pop_size(window)
+  hl.dispatch(hl.dsp.window.resize({ x = width, y = height, relative = false, window = window }))
+  hl.dispatch(hl.dsp.window.center({ window = window }))
+  hl.dispatch(hl.dsp.window.pin({ window = window }))
+  hl.dispatch(hl.dsp.window.alter_zorder({ mode = "top", window = window }))
+  set_tag(window, "+pop")
+end
+
+-- Super+T: float or tile the window, except that a floating window on a
+-- floating-layout workspace stays floating (Super+L changes the layout).
+local function toggle_floating()
+  local window = hl.get_active_window()
+  if not window then return end
+  if window.floating and has_tag(window, FLOATING_WORKSPACE) then
+    hl.exec_cmd('omarchy-notification-send -u low "Floating layout" "Windows float on this workspace. Super + L switches it to tiling."')
+    return
+  end
+  hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+end
+
+-- Reachable from `hyprctl eval`, so both can be run without the keys.
+_G.rahulj_keys = { pop_out = pop_out, toggle_floating = toggle_floating }
+
 hl.unbind("SUPER + O")
-o.bind("SUPER + O", "Pop window out (Hyprpin or float & pin)", hyprpin_or("toggle_pop", function() hl.exec_cmd("omarchy-hyprland-window-pop") end))
+o.bind("SUPER + O", "Pop window out (Hyprpin or float & pin)", hyprpin_or("toggle_pop", pop_out))
 hl.unbind("SUPER + T")
-o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("toggle_dock", function() hl.dispatch(hl.dsp.window.float({ action = "toggle" })) end))
+o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("toggle_dock", toggle_floating))
 hl.unbind("SUPER + P")
 o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
 o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
