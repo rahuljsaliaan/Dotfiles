@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+#
+# Keep the personal copies of Omarchy pieces from falling behind.
+#
+# 1. Copied shell plugins (rahulj.bar, rahulj.dock, ...) don't get Omarchy's
+#    updates. Each copy has a baseline in ~/.config/omarchy/clone-baselines/:
+#    the checksums of the stock plugin it was last brought up to date with.
+#    When the stock plugin changes, this says which files changed.
+# 2. The personal titlebar plugin (~/.local/lib/omarchy-hyprland-titlebars)
+#    must be rebuilt for every new Hyprland package. It records the package it
+#    was built for in built-for; when Hyprland differs, this rebuilds it.
+#
+#   omarchy-custom-check              report, rebuild the titlebars if needed
+#   omarchy-custom-check --notify     the same, as notifications (for hooks)
+#   omarchy-custom-check --diff COPY  show what changed in COPY's stock plugin
+#   omarchy-custom-check --accept COPY|--all
+#                                     mark COPY as brought up to date
+#
+# Run by the post-update and post-boot hooks.
+
+set -uo pipefail
+
+STOCK=/usr/share/omarchy/shell/plugins
+PLUGINS="$HOME/.config/omarchy/plugins"
+BASELINES="$HOME/.config/omarchy/clone-baselines"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/custom-check"
+TITLEBARS="$HOME/.local/lib/omarchy-hyprland-titlebars"
+TITLEBARS_SRC="$HOME/.local/src/omarchy-hyprland-titlebars"
+DOTFILES_TITLEBARS="$HOME/Repository/MyRepositories/Dotfiles/omarchy/titlebars/build.sh"
+
+# copy -> the plugin it was made from (a stock path, or another plugin folder)
+declare -A SOURCE=(
+  [rahulj.bar]="$STOCK/bar"
+  [rahulj.dock]="$STOCK/dock"
+  [rahulj.notifications]="$STOCK/notifications"
+  [rahulj.idle]="$STOCK/services/idle"
+  [rahulj.reminders]="$STOCK/reminders"
+  [rahulj.lock]="$STOCK/lock"
+  [rahulj.glasslock]="$PLUGINS/io.github.rocanrolpsycho.glasslock"
+)
+
+notify=0
+[[ ${1:-} == --notify ]] && { notify=1; shift; }
+
+say() { # headline [description]
+  if (( notify )); then
+    omarchy-notification-send -u normal -g 󰚰 "$1" "${2:-}" >/dev/null 2>&1 || true
+  fi
+  printf '%s\n' "$1${2:+: $2}"
+}
+
+checksums() { # dir -> "hash  relative/path" lines, stable order
+  (cd "$1" && find . -type f ! -path './.git/*' ! -name preview.png -printf '%P\n' | LC_ALL=C sort | xargs -r -d '\n' sha256sum)
+}
+
+accept() {
+  local copy=$1 src=${SOURCE[$1]:-}
+  [[ -n $src ]] || { echo "Unknown copy: $copy" >&2; return 1; }
+  [[ -d $src ]] || { echo "Missing source: $src" >&2; return 1; }
+  mkdir -p "$BASELINES"
+  checksums "$src" >"$BASELINES/$copy.sha256"
+  rm -f "$STATE/$copy.told"
+  echo "Baseline recorded for $copy"
+}
+
+changed_files() { # copy -> changed, added and removed stock files
+  local copy=$1 src=${SOURCE[$1]}
+  checksums "$src" | awk '
+    NR == FNR { was[substr($0, 67)] = $1; next }
+    { path = substr($0, 67); if (was[path] != $1) print path; delete was[path] }
+    END { for (path in was) print path " (removed)" }
+  ' "$BASELINES/$copy.sha256" - | LC_ALL=C sort
+}
+
+case ${1:-} in
+  --accept)
+    if [[ ${2:-} == --all ]]; then
+      for copy in "${!SOURCE[@]}"; do [[ -d $PLUGINS/$copy ]] && accept "$copy"; done
+    else
+      accept "${2:?which copy}"
+    fi
+    exit
+    ;;
+  --diff)
+    copy=${2:?which copy}; src=${SOURCE[$copy]:-}
+    [[ -n $src ]] || { echo "Unknown copy: $copy" >&2; exit 1; }
+    echo "Stock files changed since $copy's baseline:"
+    changed_files "$copy" | sed 's/^/  /'
+    echo
+    echo "Your copy against the current stock plugin:"
+    diff -ru --exclude=.git "$src" "$PLUGINS/$copy" | ${PAGER:-less -R}
+    exit
+    ;;
+esac
+
+mkdir -p "$STATE"
+problems=0
+
+# ---- copied plugins
+for copy in $(printf '%s\n' "${!SOURCE[@]}" | sort); do
+  [[ -d $PLUGINS/$copy ]] || continue
+  src=${SOURCE[$copy]}
+  if [[ ! -d $src ]]; then
+    say "$copy: its source is gone" "$src no longer exists"; problems=1; continue
+  fi
+  [[ -f $BASELINES/$copy.sha256 ]] || accept "$copy" >/dev/null
+  files=$(changed_files "$copy")
+  if [[ -z $files ]]; then
+    (( notify )) || echo "ok  $copy"
+    continue
+  fi
+  problems=1
+  stamp=$(checksums "$src" | sha256sum | cut -c1-16)
+  if (( notify )) && [[ $(cat "$STATE/$copy.told" 2>/dev/null) == "$stamp" ]]; then
+    continue # already told about this version of the stock plugin
+  fi
+  list=$(printf '%s\n' "$files" | head -4 | paste -sd ' ')
+  (( $(printf '%s\n' "$files" | wc -l) > 4 )) && list+=" ..."
+  say "Omarchy updated $(basename "$src"), which $copy copies" "Changed: $list. See: omarchy-custom-check --diff $copy"
+  echo "$stamp" >"$STATE/$copy.told"
+done
+
+# ---- personal titlebar plugin
+if [[ -f $TITLEBARS/titlebars.so ]]; then
+  hyprland=$(pacman -Q hyprland 2>/dev/null)
+  built=$(cat "$TITLEBARS/built-for" 2>/dev/null)
+  if [[ -n $hyprland && $built == "$hyprland" ]]; then
+    (( notify )) || echo "ok  titlebars (built for $hyprland)"
+  else
+    if [[ -x $TITLEBARS_SRC/rebuild-personal.sh ]]; then build=$TITLEBARS_SRC/rebuild-personal.sh
+    elif [[ -x $DOTFILES_TITLEBARS ]]; then build=$DOTFILES_TITLEBARS
+    else build=
+    fi
+    if [[ -n $build ]] && "$build" >"$STATE/titlebars-build.log" 2>&1; then
+      pacman -Q hyprland >"$TITLEBARS/built-for"
+      say "Titlebars rebuilt for ${hyprland#hyprland }" "Log out and back in for the faint buttons to return"
+    else
+      problems=1
+      say "Titlebar rebuild failed" "Omarchy's own titlebars are used meanwhile. Log: $STATE/titlebars-build.log"
+    fi
+  fi
+fi
+
+exit $problems
