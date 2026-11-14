@@ -62,6 +62,9 @@ copy omarchy/backgrounds/tokyo-night/omarchy-mark.png "$HOME/.config/omarchy/bac
 copy omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4 "$HOME/.config/omarchy/backgrounds/tokyo-night/intros/pixel-led.mp4"
 copy omarchy/backgrounds/shinkai                 "$HOME/.config/omarchy/backgrounds/shinkai"
 copy omarchy/branding/focus-sign/pixel-led-off.png "$HOME/.config/omarchy/branding/focus-sign/pixel-led-off.png"
+for scene in abyss tide recolour; do
+  copy "omarchy/branding/focus-sign/shinkai-$scene-off.png" "$HOME/.config/omarchy/branding/focus-sign/shinkai-$scene-off.png"
+done
 copy omarchy/branding/screensaver-sources/code-brackets.png "$HOME/.config/omarchy/branding/screensaver-sources/code-brackets.png"
 copy omarchy/branding/screensaver.txt            "$HOME/.config/omarchy/branding/screensaver.txt"
 copy omarchy/hooks/theme-set.d/screensaver-art   "$HOME/.config/omarchy/hooks/theme-set.d/screensaver-art"

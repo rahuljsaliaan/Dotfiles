@@ -4,7 +4,7 @@
   "name": "Focus Sign",
   "version": "1.0.0",
   "author": "rahulj",
-  "description": "Shows which screen has focus through the pixel wallpaper: the </> sign is lit only on the focused screen and switched off on the others.",
+  "description": "Shows which screen has focus through the pixel wallpapers (Tokyo Night pixel-led and the Shinkai scenes): the </> sign is lit only on the focused screen and switched off on the others.",
   "kinds": [
     "service"
   ],
