@@ -38,6 +38,7 @@ declare -A SOURCE=(
   [rahulj.lock]="$STOCK/lock"
   [rahulj.glasslock]="$PLUGINS/io.github.rocanrolpsycho.glasslock"
   [rahulj.net-speed]="$PLUGINS/brightwalker25.net-speed"
+  [rahulj.jarvis]="$PLUGINS/h3man.jarvis/plugin/h3man.jarvis"
 )
 
 notify=0

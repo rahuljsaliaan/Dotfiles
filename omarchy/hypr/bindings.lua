@@ -33,6 +33,11 @@
 -- Omarchy's keys keep working as before.
 o.bind("SUPER + E", "Window overview", "omarchy-shell shell toggle timsonner.nitty-griddy")
 
+-- Jarvis (rahulj.jarvis, the themed copy of h3man.jarvis): Super+Ctrl+J opens/closes its assistant panel,
+-- the bar's chat with the default agent (Claude); J for Jarvis, as Super+J is
+-- Omarchy's toggle-split.
+o.bind("SUPER + CTRL + J", "Jarvis assistant", "omarchy-shell shell toggle rahulj.jarvis")
+
 -- Esc closes the overview while it is open, and passes through otherwise.
 local function nitty_griddy_mapped()
   local layers = hl.get_layers({ namespace = "timsonner-nitty-griddy" })
