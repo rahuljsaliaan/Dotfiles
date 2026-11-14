@@ -7,14 +7,14 @@
 
 .theme-dark, .theme-light {
   /* Core colors */
-  --background-primary: #0f111a;
-  --background-primary-alt: #0f111a;
-  --background-secondary: #0f111a;
-  --background-secondary-alt: #0f111a;
+  --background-primary: #0c1523;
+  --background-primary-alt: #0c1523;
+  --background-secondary: #0c1523;
+  --background-secondary-alt: #0c1523;
   --text-normal: #a6accd;
 
   /* Selection colors */
-  --text-selection: #2a2e45;
+  --text-selection: #1b3457;
 
   /* Border color */
   --background-modifier-border: #464b5d;

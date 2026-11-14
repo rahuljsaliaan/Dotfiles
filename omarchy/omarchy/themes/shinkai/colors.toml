@@ -1,16 +1,19 @@
 # Shinkai (深海, "deep sea"): Tokyo Night's UI feel sunk into Material Ocean.
-# Surfaces come from Material Ocean, UI text and the blue accent from Tokyo
-# Night, syntax hues from Material. Every themed app is generated from this file.
+# Surfaces are a deep-sea navy (Material Ocean's ink turned towards blue, so
+# it sits between the blue accent and the lavender text), the UI text and blue
+# accent come from Tokyo Night, the syntax hues from Material. Every themed
+# app is generated from this file; neovim.lua, shell.toml, claude.json,
+# btop.theme and obsidian.css repeat its colours and change with it.
 mode = "dark"
 
 accent = "#82aaff"
-selection = "#2a2e45"
+selection = "#1b3457"
 muted = "#464b5d"
 
-background = "#0f111a"
-dark_background = "#0b0d14"
-darker_background = "#07080c"
-lighter_background = "#1f2233"
+background = "#0c1523"
+dark_background = "#09111c"
+darker_background = "#070b12"
+lighter_background = "#162740"
 
 foreground = "#a6accd"
 dark_foreground = "#525975"
