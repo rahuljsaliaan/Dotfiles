@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
@@ -84,7 +85,36 @@ Item {
   // Personal (Night Glass): the urgency colour, used by the app pill and the
   // draining line. Low is the theme's comment grey, normal the theme blue,
   // critical red.
-  readonly property color lowColor: "#565f89"
+  readonly property color lowColor: themeColor("dark_foreground", "#565f89")
+
+  // Personal: every colour of the card comes from the current theme, so it
+  // follows a theme switch. The shell's own palette (Commons.Color) carries only
+  // a few keys, so the rest are read from the theme's colors.toml, with the
+  // Tokyo Night values as fallbacks.
+  function themeColor(key, fallback) {
+    var m = String(themeFile.text() || "").match(new RegExp("^\\s*" + key + "\\s*=\\s*\"(#[0-9a-fA-F]{6})\"", "m"))
+    return m ? m[1] : fallback
+  }
+  function mixColor(a, b, t) {
+    return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)
+  }
+  FileView {
+    id: themeFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+  }
+  readonly property color themeLighter: themeColor("lighter_background", "#24283b")
+  readonly property color themeMuted: themeColor("muted", "#414868")
+  readonly property color themeDarkest: themeColor("darker_background", "#0e0e14")
+  // Shadows: the theme's darkest background, darker still, so they read as
+  // a deep tint of the desktop rather than flat black.
+  readonly property color shadowTint: Qt.darker(themeDarkest, 2.4)
+  // The slab edges under the card: the lifted surface stepping towards the
+  // theme's muted grey (on Tokyo Night #262b40 and #3b4261).
+  readonly property color slabLow: mixColor(themeLighter, themeMuted, 0.08)
+  readonly property color slabHigh: mixColor(themeLighter, themeMuted, 0.8)
   readonly property color accentColor: critical ? Commons.Color.urgent
                                                : (row.urgency === 0 ? lowColor : Commons.Color.notifications.countdown)
   readonly property bool hasBody: String(row.body || "").length > 0
@@ -246,7 +276,7 @@ Item {
                                      Math.max(1, Style.space(2)))
   }
 
-  // Personal "Night Glass" card: a lifted Tokyo Night surface (a shade lighter
+  // Personal "Night Glass" card: a lifted surface (a shade lighter
   // than any window, a little see-through so Hyprland's blur still frosts it),
   // with the focused-window gradient as its rim (theme overlay
   // [notifications]; red for critical). To stand apart from windows it also
@@ -266,6 +296,9 @@ Item {
                                    ? rimSpec.gradient.colors : [Border.color(rimSpec), Border.color(rimSpec)]
   readonly property real rimAngle: rimSpec && rimSpec.gradient && rimSpec.gradient.enabled ? (rimSpec.gradient.angle || 0) : 0
   function rimStop(i) { return i < rimColors.length ? rimColors[i] : rimColors[rimColors.length - 1] }
+  // The far (purple) end of the rim, opaque: where the draining line ends.
+  readonly property color rimEndRaw: rimStop(rimColors.length - 1)
+  readonly property color rimEnd: Qt.rgba(rimEndRaw.r, rimEndRaw.g, rimEndRaw.b, 1)
   function rimAt(i) { return rimColors.length <= 1 ? (i === 0 ? 0 : 1) : (i >= rimColors.length ? 1 : i / (rimColors.length - 1)) }
 
   // The card's outline inset by k and moved down by dy: a rounded rectangle
@@ -317,7 +350,7 @@ Item {
       ShapePath {
         strokeWidth: -1
         strokeColor: "transparent"
-        fillColor: "#05060e"
+        fillColor: card.shadowTint
         PathSvg { path: card.outline(Style.space(2), 0, body.width, body.height) }
       }
     }
@@ -347,7 +380,7 @@ Item {
     layer.effect: MultiEffect {
       autoPaddingEnabled: true
       shadowEnabled: true
-      shadowColor: "#05060e"
+      shadowColor: card.shadowTint
       shadowOpacity: 0.42
       shadowBlur: 1.0
       blurMax: 64
@@ -373,13 +406,13 @@ Item {
         ShapePath {
           strokeWidth: -1
           strokeColor: "transparent"
-          fillColor: "#262b40"
+          fillColor: card.slabLow
           PathSvg { path: card.outline(0, Style.space(4), cardShape.width, body.height) }
         }
         ShapePath {
           strokeWidth: -1
           strokeColor: "transparent"
-          fillColor: "#3b4261"
+          fillColor: card.slabHigh
           PathSvg { path: card.outline(0, Style.space(2), cardShape.width, body.height) }
         }
       }
@@ -466,7 +499,7 @@ Item {
     gradient: Gradient {
       orientation: Gradient.Horizontal
       GradientStop { position: 0; color: card.row.urgency === 0 ? card.lowColor : Commons.Color.notifications.countdown }
-      GradientStop { position: 1; color: card.row.urgency === 0 ? card.lowColor : "#bb9af7" }
+      GradientStop { position: 1; color: card.row.urgency === 0 ? card.lowColor : card.rimEnd }
     }
   }
 
@@ -762,7 +795,7 @@ Item {
                     anchors.centerIn: parent
                     textFormat: Text.PlainText
                     text: stamp.appLabel
-                    color: "#1a1b26"
+                    color: Commons.Color.background
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     font.weight: Font.Bold
