@@ -141,10 +141,24 @@ end
 
 local SYSTEM_TITLEBARS = "/usr/lib/omarchy-hyprland-titlebars/titlebars.so"
 local PERSONAL_TITLEBARS = os.getenv("HOME") .. "/.local/lib/omarchy-hyprland-titlebars/titlebars.so"
-local function personal_titlebars_present()
-  local f = io.open(PERSONAL_TITLEBARS, "r")
+local function file_exists(path)
+  local f = io.open(path, "r")
   if f then f:close() return true end
   return false
+end
+-- Use the personal build only when it was built for the installed Hyprland
+-- (built-for holds `pacman -Q hyprland` from its build); a stale build fails
+-- to load and leaves no title bars, so fall back to Omarchy's copy until
+-- omarchy-custom-check rebuilds it. Once a titlebar plugin is loaded, keep
+-- the same path on reloads rather than load a second copy.
+local function personal_titlebars_present()
+  if not file_exists(PERSONAL_TITLEBARS) then return false end
+  if hl.plugin.hyprbars then return true end
+  local f = io.open((PERSONAL_TITLEBARS:gsub("titlebars%.so$", "built-for")), "r")
+  if not f then return false end
+  local name, version = (f:read("l") or ""):match("^(%S+) (%S+)$")
+  f:close()
+  return name ~= nil and file_exists("/var/lib/pacman/local/" .. name .. "-" .. version .. "/desc")
 end
 
 local load_plugin = hl.plugin.load
