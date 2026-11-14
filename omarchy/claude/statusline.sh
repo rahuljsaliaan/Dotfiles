@@ -11,7 +11,8 @@
 #   5h   the plan's 5-hour usage, and how long until it resets
 #   wk   the plan's weekly usage
 #
-# Percentages go green, then yellow at 50 %, then red at 80 %. In a narrow
+# Percentages go green, then yellow at 50 %, then red at 80 %; those three
+# colours mean only that, so every other value (tokens, cost) is plain text. In a narrow
 # window the reset time goes first, then the model name (the effort stays),
 # then the token count. Usage limits come from Claude Code (rate_limits) after
 # a session's first reply.
@@ -81,7 +82,7 @@ render() { # render <show model name> <show tokens> <show reset>
   else
     out+="${DIM}—${R}"
   fi
-  out+="${sep}${GREEN}\$$(printf '%.2f' "$cost")${R}"
+  out+="${sep}${FG}\$$(printf '%.2f' "$cost")${R}"
   if [[ -n $five_pct ]]; then
     out+="${sep}${DIM}5h${R} $(pct "$five_pct")"
     (( $3 )) && [[ -n $five_reset ]] && out+=" ${DIM}↻$(until_reset "$five_reset")${R}"
