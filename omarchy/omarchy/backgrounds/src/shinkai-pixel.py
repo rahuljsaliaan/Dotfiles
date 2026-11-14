@@ -1,6 +1,6 @@
 # Shinkai's pixel LED-panel wallpapers: the Tokyo Night pixel-led wallpaper's
 # panel (same 25 px cells, 4 px gaps, same </> in the middle) sunk into
-# Material Ocean ink, in three scenes:
+# Shinkai's deep-sea navy, in three scenes:
 #
 #   abyss     darker panel with scattered dim "bioluminescent" cells (default)
 #   tide      a dim swell lit along the bottom of the panel, cyan -> teal
@@ -34,10 +34,12 @@ oy = (H - rows * STEP) / 2 + GAP / 2
 # Shinkai colors.toml: cyan, blue, magenta, foreground; teal is Material's.
 CYAN, BLUE, PURPLE, TEAL = '#89ddff', '#82aaff', '#c792ea', '#80cbc4'
 GRID = '#a6accd'
+# The deep-sea navy of Shinkai's surfaces (colors.toml background, dark and
+# darker backgrounds), a touch lighter at the centre; the abyss a step deeper.
 if scene == 'abyss':
-    BG, BG_OFF = ('#11131f', '#0b0d14', '#07080c'), ('#0a0c12', '#07080c')
+    BG, BG_OFF = ('#0d1727', '#09111c', '#070b12'), ('#09111c', '#070b12')
 else:
-    BG, BG_OFF = ('#151827', '#0f111a', '#090b10'), ('#0e1018', '#090b10')
+    BG, BG_OFF = ('#0f1a2b', '#0c1523', '#090f17'), ('#0c1421', '#090f17')
 
 G = {
  '<': ["00010", "00100", "01000", "10000", "01000", "00100", "00010"],
