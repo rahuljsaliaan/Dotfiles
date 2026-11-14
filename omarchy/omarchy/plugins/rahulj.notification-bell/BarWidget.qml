@@ -678,7 +678,7 @@ Panel {
 
         Text {
           width: parent.width
-          horizontalAlignment: Text.AlignHCenter
+          horizontalAlignment: Text.AlignLeft
           textFormat: Text.PlainText
           text: "↑↓ select · ↵ open · Del remove · Ctrl+C copy · Esc"
           elide: Text.ElideRight

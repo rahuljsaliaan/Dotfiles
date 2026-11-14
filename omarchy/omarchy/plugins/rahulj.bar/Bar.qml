@@ -1936,7 +1936,8 @@ Item {
           color: Commons.Color.tooltip.text
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
-          horizontalAlignment: Text.AlignHCenter
+          // Multi-line tooltips (CPU, memory, GPU, ...) read as a list: left-aligned.
+          horizontalAlignment: Text.AlignLeft
           verticalAlignment: Text.AlignVCenter
         }
       }
