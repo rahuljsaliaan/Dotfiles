@@ -53,6 +53,7 @@ done
 copy omarchy/themes/tokyo-night/shell.toml       "$HOME/.config/omarchy/themes/tokyo-night/shell.toml"
 copy omarchy/themes/tokyo-night/shell.lock.toml  "$HOME/.config/omarchy/themes/tokyo-night/shell.lock.toml"
 copy omarchy/themes/tokyo-night/icons.theme      "$HOME/.config/omarchy/themes/tokyo-night/icons.theme"
+copy omarchy/themes/shinkai                      "$HOME/.config/omarchy/themes/shinkai"
 copy omarchy/defaults/agent                       "$HOME/.config/omarchy/defaults/agent"
 copy omarchy/last-session.ini                     "$HOME/.config/omarchy/last-session.ini"
 copy omarchy/backgrounds/tokyo-night/code-brackets.png "$HOME/.config/omarchy/backgrounds/tokyo-night/code-brackets.png"
