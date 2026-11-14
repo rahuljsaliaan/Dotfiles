@@ -4,10 +4,16 @@
 #
 # Open a URL in the default browser on the same Hyprland workspace as the
 # terminal this runs in (for example Claude Code opening a Lavish page),
-# instead of wherever the browser last was:
+# instead of wherever you happen to be:
 #
-#   - a browser window already on that workspace gets the URL as a new tab;
-#   - otherwise a new browser window opens and is put on that workspace.
+#   - when you are on that workspace already, the page opens there in front;
+#   - otherwise it opens in a new browser window placed on that workspace
+#     without taking your focus, and a notification says where it is
+#     ("Lavish is ready · main screen · workspace 2") with a Go there button.
+#
+# A new window rather than a tab in a browser window already there: Chromium
+# puts a new tab in the window it last saw active, which is not reliably the
+# one on that workspace, so tabs landed wherever you were.
 #
 # The terminal is found by walking up the process tree to a window's PID
 # (inside tmux, from the tmux client's PID). If no terminal window is found,
@@ -52,27 +58,56 @@ launch() { # detached, so the browser outlives this shell
     uwsm-app -- "$browser" "$@"
 }
 
-# A browser window already on the workspace: focus it, then hand it the URL.
-# The browser opens a new tab in the window that was active last.
-win=$(jq -r --arg c "$class" --argjson ws "$ws" \
-  '[.[] | select(.class == $c and .workspace.id == $ws)] | sort_by(.focusHistoryID) | first.address // empty' <<<"$clients")
-if [[ -n $win ]]; then
-  dispatch "hl.dsp.focus({ window = \"address:$win\" })"
-  sleep 0.2
-  launch "$url"
+# Where you are now, to stay there.
+active_ws=$(hyprctl activeworkspace -j | jq -r .id)
+active_win=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
+
+# You are on that workspace: open it in front, as a tab of a browser window
+# there when there is one, or a new window.
+if [[ $ws == "$active_ws" ]]; then
+  win=$(jq -r --arg c "$class" --argjson ws "$ws" \
+    '[.[] | select(.class == $c and .workspace.id == $ws)] | sort_by(.focusHistoryID) | first.address // empty' <<<"$clients")
+  if [[ -n $win ]]; then
+    dispatch "hl.dsp.focus({ window = \"address:$win\" })"
+    sleep 0.2
+    launch "$url"
+  else
+    launch --new-window "$url"
+  fi
   exit 0
 fi
 
-# None there: open a new window, wait for it, and put it on the workspace.
+# Elsewhere: a new window, moved to that workspace the moment it appears, and
+# your focus put back where it was.
 before=$(jq -r --arg c "$class" '[.[] | select(.class == $c) | .address] | join(" ")' <<<"$clients")
 launch --new-window "$url"
-for _ in $(seq 1 50); do
-  sleep 0.1
+new=""
+for _ in $(seq 1 150); do
+  sleep 0.03
   new=$(hyprctl clients -j | jq -r --arg c "$class" --arg before " $before " \
-    'first(.[] | select(.class == $c and ($before | contains(" " + .address + " ") | not))) | .address // empty')
+    'first(.[] | select(.class == $c) | .address as $a | select($before | contains(" " + $a + " ") | not) | $a) // empty')
   [[ -n $new ]] && break
 done
-if [[ -n ${new:-} ]]; then
-  dispatch "hl.dsp.window.move({ workspace = \"$ws\", follow = false, window = \"address:$new\" })"
-  dispatch "hl.dsp.focus({ window = \"address:$new\" })"
+[[ -n $new ]] || exit 0
+dispatch "hl.dsp.window.move({ workspace = \"$ws\", follow = false, window = \"address:$new\" })"
+if [[ -n $active_win ]]; then
+  dispatch "hl.dsp.focus({ window = \"address:$active_win\" })"
+else
+  dispatch "hl.dsp.focus({ workspace = \"$active_ws\" })"
 fi
+
+# Say where it is, with a way to go there.
+monitor=$(hyprctl clients -j | jq -r --arg a "$new" 'first(.[] | select(.address == $a)) | .monitor // empty')
+mon_name=$(hyprctl monitors -j | jq -r --argjson id "${monitor:-0}" 'first(.[] | select(.id == $id)) | .name // empty')
+case $mon_name in
+  HDMI-A-1) where="main screen" ;;
+  DP-2) where="right screen" ;;
+  eDP-1) where="laptop" ;;
+  *) where=${mon_name:-another screen} ;;
+esac
+slot=$(( (ws - 1) % 10 + 1 ))
+title="Page ready"
+[[ $url == *127.0.0.1*session* || $url == *localhost*session* ]] && title="Lavish is ready"
+omarchy-notification-send -g "󰖟" "$title" "$where · workspace $slot" \
+  --action "Go there" hyprctl dispatch "hl.dsp.focus({ window = \"address:$new\" })" >/dev/null 2>&1 &
+exit 0
