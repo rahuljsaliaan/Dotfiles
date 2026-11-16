@@ -290,12 +290,16 @@ end)
 -- * With a neighbour fully on screen on that side, the edge between them moves,
 --   as a split does: the column takes width from the neighbour or gives it
 --   back, so the pair keeps its width. Resizing one alone would leave a pair
---   narrower than the screen, which Hyprland centres. Neither column goes
---   below MIN_SHARE of the screen; at that point the key does nothing.
+--   narrower than the screen, which Hyprland centres. The neighbour gives way
+--   down to MIN_SHARE of the screen; past that the column grows alone and
+--   pushes it off screen, so any column can still reach the full screen.
+--   No column shrinks below MIN_SHARE.
 -- * With no such neighbour the column resizes alone. A right-hand column (one
 --   nearer the right edge, or a full-width one with columns only to its left)
 --   then scrolls the view by the change, so its right edge stays put and the
---   column to its left comes into view.
+--   column to its left comes into view. If that would leave bare wallpaper at
+--   one screen edge while columns hide past the other, the view scrolls them
+--   in to fill it.
 --
 -- The rightmost column on screen works its left edge, every other one its
 -- right edge. Hyprland's colresize acts on the focused column only, so the
@@ -304,6 +308,10 @@ end)
 -- monitor's workspace, so nothing happens when that is not the window's own.
 local MIN_SHARE = 0.15
 local EDGE_SLACK = 40
+-- A neighbour counts as on screen only when it is wholly on it; a few pixels
+-- cover rounding. Moving the edge with one hanging off the screen kept it
+-- clipped there.
+local ON_SCREEN_SLACK = 4
 
 local function on_scrolling_column(window)
   return window ~= nil and not window.floating and (window.fullscreen or 0) == 0
@@ -336,10 +344,13 @@ local function column_place(window)
   local x, w = xy(window.at), xy(window.size)
 
   local left, right, any_left, any_right
+  -- The extent of the whole row of columns, off-screen ones included.
+  local row_left, row_right = x, x + w
   for _, other in ipairs(window.workspace:get_windows() or {}) do
     if other.address ~= window.address and not other.floating and other.mapped and not other.hidden then
       local ox, ow = xy(other.at), xy(other.size)
-      local on_screen = ox >= mx - EDGE_SLACK and ox + ow <= mx + mw + EDGE_SLACK
+      row_left, row_right = math.min(row_left, ox), math.max(row_right, ox + ow)
+      local on_screen = ox >= mx - ON_SCREEN_SLACK and ox + ow <= mx + mw + ON_SCREEN_SLACK
       -- Windows stacked in this column share its x and count as neither side.
       if ox + ow <= x + EDGE_SLACK then
         any_left = true
@@ -371,8 +382,11 @@ local function column_place(window)
 
   return {
     screen = mw,
+    screen_left = mx,
     width = w,
     right_edge = x + w,
+    row_left = row_left,
+    row_right = row_right,
     right_hand = right_hand,
     neighbour = right_hand and left or right,
   }
@@ -385,17 +399,6 @@ end
 -- The pixel change this press makes, kept so the column (and a neighbour that
 -- gives way) stay at least MIN_SHARE of the screen. Hyprland stops a column at
 -- the full screen itself.
-local function capped(px, place, giver_width)
-  local min_width = MIN_SHARE * place.screen
-  if px < 0 then
-    return math.max(px, min_width - place.width)
-  end
-  if giver_width then
-    return math.min(px, giver_width - min_width)
-  end
-  return px
-end
-
 local function resize_column(window, step)
   -- Layout messages go to the focused monitor's workspace, which is not always
   -- the focused window's; then nothing is resized rather than the wrong column.
@@ -410,12 +413,26 @@ local function resize_column(window, step)
     return
   end
 
-  local neighbour = place.neighbour
-  local px = capped(step * place.screen, place, neighbour and xy(neighbour.size))
+  -- A column never shrinks below MIN_SHARE of the screen.
+  local min_width = MIN_SHARE * place.screen
+  local px = step * place.screen
+  if px < 0 then
+    px = math.max(px, min_width - place.width)
+  end
   if math.abs(px) < 1 then
     return
   end
   local share = px / place.screen
+
+  -- The neighbour gives way only while it stays at least MIN_SHARE wide. Past
+  -- that the column grows on its own and pushes the neighbour off screen, so
+  -- it can still reach the full screen; shrinking back brings the neighbour
+  -- into view again, and once it is fully on screen the edge between them
+  -- moves again.
+  local neighbour = place.neighbour
+  if neighbour and px > 0 and xy(neighbour.size) - px < min_width then
+    neighbour = nil
+  end
 
   if neighbour then
     local no_warps = hl.get_config("cursor.no_warps")
@@ -429,15 +446,45 @@ local function resize_column(window, step)
   end
 
   colresize(share)
-  if place.right_hand then
-    local now = hl.get_active_window()
-    if now and now.address == window.address then
-      local x, w = xy(now.at), xy(now.size)
-      local shift = math.floor(place.right_edge - (x + w) + 0.5)
-      if shift ~= 0 then
-        hl.dispatch(hl.dsp.layout(string.format("move %+d", shift)))
-      end
-    end
+  local now = hl.get_active_window()
+  if not now or now.address ~= window.address then
+    return
+  end
+
+  -- Where the row lands. The column keeps its place in the row and grows or
+  -- shrinks to the right, so it and the columns right of it move by the change
+  -- and the rest stay; Hyprland may also have scrolled the view to keep it on
+  -- screen, which its new left edge shows. A right-hand column then scrolls
+  -- back to where its right edge was.
+  local x, w = xy(now.at), xy(now.size)
+  local delta = w - place.width
+  local scrolled = x - (place.right_edge - place.width)
+  local offset = place.right_hand and (place.right_edge - (x + w)) or 0
+  local row_left = place.row_left + scrolled + offset
+  local row_right = place.row_right + delta + scrolled + offset
+
+  -- Never leave bare wallpaper at one screen edge while columns hide past the
+  -- other: scroll them in to fill it. Windows sit inside the outer gap and
+  -- their border.
+  local gaps = hl.get_config("general.gaps_out")
+  local gap_left, gap_right = 0, 0
+  if type(gaps) == "table" then
+    gap_left, gap_right = gaps.left or 0, gaps.right or 0
+  elseif type(gaps) == "number" then
+    gap_left, gap_right = gaps, gaps
+  end
+  local border = tonumber(hl.get_config("general.border_size")) or 0
+  local fill_left = place.screen_left + gap_left + border
+  local fill_right = place.screen_left + place.screen - gap_right - border
+  if row_right < fill_right - 8 and row_left < fill_left - 8 then
+    offset = offset + math.min(fill_right - row_right, fill_left - row_left)
+  elseif row_left > fill_left + 8 and row_right > fill_right + 8 then
+    offset = offset - math.min(row_left - fill_left, row_right - fill_right)
+  end
+
+  offset = math.floor(offset + 0.5)
+  if offset ~= 0 then
+    hl.dispatch(hl.dsp.layout(string.format("move %+d", offset)))
   end
 end
 
