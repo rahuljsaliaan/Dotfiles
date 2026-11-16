@@ -281,20 +281,179 @@ end)
 -- (Alt for a small step, Ctrl for a big one). Hyprland keeps a column between
 -- a sliver and the full screen. Floating windows and other layouts keep
 -- Omarchy's pixel resize.
+--
+-- Hyprland sizes a column from its left edge, so a column on the right of the
+-- screen shrank away from the screen edge and left bare wallpaper there. The
+-- keys now move the edge that faces the rest of the layout, by the column's
+-- place on screen:
+--
+-- * With a neighbour fully on screen on that side, the edge between them moves,
+--   as a split does: the column takes width from the neighbour or gives it
+--   back, so the pair keeps its width. Resizing one alone would leave a pair
+--   narrower than the screen, which Hyprland centres. Neither column goes
+--   below MIN_SHARE of the screen; at that point the key does nothing.
+-- * With no such neighbour the column resizes alone. A right-hand column (one
+--   nearer the right edge, or a full-width one with columns only to its left)
+--   then scrolls the view by the change, so its right edge stays put and the
+--   column to its left comes into view.
+--
+-- The rightmost column on screen works its left edge, every other one its
+-- right edge. Hyprland's colresize acts on the focused column only, so the
+-- neighbour is focused for its half, with cursor warps off so the pointer stays
+-- where it is, and focus goes straight back. Layout messages go to the focused
+-- monitor's workspace, so nothing happens when that is not the window's own.
+local MIN_SHARE = 0.15
+local EDGE_SLACK = 40
+
 local function on_scrolling_column(window)
-  return window ~= nil and not window.floating and window.workspace ~= nil
-    and window.workspace.tiled_layout == "scrolling"
+  return window ~= nil and not window.floating and (window.fullscreen or 0) == 0
+    and window.workspace ~= nil and window.workspace.tiled_layout == "scrolling"
+end
+
+local function xy(v)
+  if type(v) ~= "table" then
+    return 0, 0
+  end
+  return v.x or v[1] or 0, v.y or v[2] or 0
+end
+
+local function screen_span(monitor)
+  local w, h = monitor.width or 0, monitor.height or 0
+  if (monitor.transform or 0) % 2 == 1 then
+    w = h
+  end
+  return monitor.x or 0, w / (monitor.scale or 1)
+end
+
+-- Where the column sits and what is beside it: the nearest column on each side
+-- (and whether it is fully on screen), and which edge it should work.
+local function column_place(window)
+  local monitor = window.monitor
+  if not monitor or not monitor.width then
+    return nil
+  end
+  local mx, mw = screen_span(monitor)
+  local x, w = xy(window.at), xy(window.size)
+
+  local left, right, any_left, any_right
+  for _, other in ipairs(window.workspace:get_windows() or {}) do
+    if other.address ~= window.address and not other.floating and other.mapped and not other.hidden then
+      local ox, ow = xy(other.at), xy(other.size)
+      local on_screen = ox >= mx - EDGE_SLACK and ox + ow <= mx + mw + EDGE_SLACK
+      -- Windows stacked in this column share its x and count as neither side.
+      if ox + ow <= x + EDGE_SLACK then
+        any_left = true
+        if on_screen and (not left or ox > xy(left.at)) then left = other end
+      elseif ox >= x + w - EDGE_SLACK then
+        any_right = true
+        if on_screen and (not right or ox < xy(right.at)) then right = other end
+      end
+    end
+  end
+
+  -- Which side works is settled by what is on screen, not by position, so a
+  -- press and its opposite always undo each other: with a neighbour on screen
+  -- on one side only, that side; on both sides, the right. Only a column with
+  -- neither falls back on its place on screen.
+  local right_hand
+  if left and not right then
+    right_hand = true
+  elseif right then
+    right_hand = false
+  else
+    local left_gap, right_gap = x - mx, (mx + mw) - (x + w)
+    if math.abs(left_gap - right_gap) > EDGE_SLACK then
+      right_hand = right_gap < left_gap
+    else
+      right_hand = any_left and not any_right
+    end
+  end
+
+  return {
+    screen = mw,
+    width = w,
+    right_edge = x + w,
+    right_hand = right_hand,
+    neighbour = right_hand and left or right,
+  }
+end
+
+local function colresize(share)
+  hl.dispatch(hl.dsp.layout(string.format("colresize %+.4f", share)))
+end
+
+-- The pixel change this press makes, kept so the column (and a neighbour that
+-- gives way) stay at least MIN_SHARE of the screen. Hyprland stops a column at
+-- the full screen itself.
+local function capped(px, place, giver_width)
+  local min_width = MIN_SHARE * place.screen
+  if px < 0 then
+    return math.max(px, min_width - place.width)
+  end
+  if giver_width then
+    return math.min(px, giver_width - min_width)
+  end
+  return px
+end
+
+local function resize_column(window, step)
+  -- Layout messages go to the focused monitor's workspace, which is not always
+  -- the focused window's; then nothing is resized rather than the wrong column.
+  local workspace = hl.get_active_workspace()
+  if not workspace or workspace.id ~= window.workspace.id then
+    return
+  end
+
+  local place = column_place(window)
+  if not place then
+    colresize(step)
+    return
+  end
+
+  local neighbour = place.neighbour
+  local px = capped(step * place.screen, place, neighbour and xy(neighbour.size))
+  if math.abs(px) < 1 then
+    return
+  end
+  local share = px / place.screen
+
+  if neighbour then
+    local no_warps = hl.get_config("cursor.no_warps")
+    hl.config({ cursor = { no_warps = true } })
+    colresize(share)
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. neighbour.address }))
+    colresize(-share)
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. window.address }))
+    hl.config({ cursor = { no_warps = no_warps == true } })
+    return
+  end
+
+  colresize(share)
+  if place.right_hand then
+    local now = hl.get_active_window()
+    if now and now.address == window.address then
+      local x, w = xy(now.at), xy(now.size)
+      local shift = math.floor(place.right_edge - (x + w) + 0.5)
+      if shift ~= 0 then
+        hl.dispatch(hl.dsp.layout(string.format("move %+d", shift)))
+      end
+    end
+  end
 end
 
 local function resize_width(step, px)
   return function()
-    if on_scrolling_column(hl.get_active_window()) then
-      hl.dispatch(hl.dsp.layout(string.format("colresize %+.2f", step)))
+    local window = hl.get_active_window()
+    if on_scrolling_column(window) then
+      resize_column(window, step)
     else
       hl.dispatch(hl.dsp.window.resize({ x = px, y = 0, relative = true }))
     end
   end
 end
+
+-- e.g. hyprctl eval 'rahulj_keys.resize_width(-0.1, -100)()'
+_G.rahulj_keys.resize_width = resize_width
 
 for _, r in ipairs({
   { mods = "SUPER", name = "", step = 0.1, px = 100 },
