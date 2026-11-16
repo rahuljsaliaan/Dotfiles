@@ -27,6 +27,7 @@ Item {
   property bool hovered: false
   property bool selected: false              // the keyboard's card
   property double now: Date.now()
+  ClockStyle { id: clockStyle }
   property real cardWidth: Style.space(380)
   property var actions: []                   // what the sender put on the wire
   // Personal: the top card points up at the bar's bell with a notch drawn as
@@ -62,7 +63,7 @@ Item {
     var then = new Date(t)
     var locale = Qt.locale(I18n.formatLocale)
     var sameDay = new Date(now).toDateString() === then.toDateString()
-    if (sameDay) return locale.toString(then, "HH:mm")
+    if (sameDay) return locale.toString(then, clockStyle.timeFormat)
     var yest = new Date(now - 86400000).toDateString() === then.toDateString()
     if (yest) return I18n.t("notifications.yesterday")
     return locale.toString(then, "ddd")

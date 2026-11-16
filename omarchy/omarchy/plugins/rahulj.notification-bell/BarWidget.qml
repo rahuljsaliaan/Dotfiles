@@ -32,6 +32,7 @@ Panel {
   readonly property int unseen: parseInt(String(unseenFile.text() || "0").trim()) || 0
   property bool dnd: false
   property var now: Date.now()
+  ClockStyle { id: clockStyle }
 
   // Panel state.
   property string query: ""
@@ -118,8 +119,8 @@ Panel {
     if (s < 60) return "now"
     if (s < 3600) return Math.round(s / 60) + "m"
     var then = new Date(ts * 1000)
-    if (then.toDateString() === new Date(root.now).toDateString()) return Qt.formatTime(then, "HH:mm")
-    return Qt.formatDate(then, "ddd d MMM") + ", " + Qt.formatTime(then, "HH:mm")
+    if (then.toDateString() === new Date(root.now).toDateString()) return Qt.formatTime(then, clockStyle.timeFormat)
+    return Qt.formatDate(then, "ddd d MMM") + ", " + Qt.formatTime(then, clockStyle.timeFormat)
   }
 
   function iconFor(row) {

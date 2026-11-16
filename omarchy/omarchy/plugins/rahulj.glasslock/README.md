@@ -52,7 +52,7 @@ To change anything, add options to Glasslock's entry under `plugins` in `~/.conf
 | `accent` | theme accent | Ring, field border, cursor and buttons (`#RRGGBB`) |
 | `text` | theme lock text | Clock and text color (`#RRGGBB`) |
 | `error` | theme error color | Wrong-password color (`#RRGGBB`) |
-| `clock24h` | `false` | `true` for a 24-hour clock |
+| `clock24h` | `true` | Only used when the top bar clock has no hour format to follow: the lock screen shows the bar clock's 12 or 24-hour choice (`ClockStyle.qml`) |
 | `weather` | `true` | `false` hides the weather |
 | `units` | from your country | `"metric"` or `"imperial"` |
 | `media` | `true` | `false` hides the mini player |
