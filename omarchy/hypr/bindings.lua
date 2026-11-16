@@ -124,8 +124,14 @@ end
 -- briefly blocked for floating windows on floating-layout workspaces as a crash
 -- precaution, but tiling a window there is a normal thing to want, the crash
 -- never reproduced with it alone, and the block took the key away.
+-- user_tiled remembers a window tiled this way, so a floating workspace's mode
+-- does not float it again when it leaves fullscreen (hypr/user-tiled.lua).
+local user_tiled = require("hypr.user-tiled")
+
 local function toggle_floating()
+  local window = hl.get_active_window()
   hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  user_tiled.remember(window)
 end
 
 -- Reachable from `hyprctl eval`, so both can be run without the keys.
