@@ -72,13 +72,21 @@ function describeMinutes(minutes) {
   return m + " min"
 }
 
-// Clock time the reminder fires: "17:58", or "tomorrow 09:00".
-function describeAt(minutes, now) {
+// Clock time the reminder fires: "17:58", or "tomorrow 09:00"; with
+// hour24 === false, "5:58 PM". Anything else keeps the 24-hour form.
+function describeAt(minutes, now, hour24) {
   now = now || new Date()
   var at = new Date(now.getTime() + minutes * 60000)
-  var hh = ("0" + at.getHours()).slice(-2), mm = ("0" + at.getMinutes()).slice(-2)
+  var mm = ("0" + at.getMinutes()).slice(-2)
   var tomorrow = at.getDate() !== now.getDate()
-  return (tomorrow ? "tomorrow " : "") + hh + ":" + mm
+  var time
+  if (hour24 === false) {
+    var h = at.getHours()
+    time = (h % 12 === 0 ? 12 : h % 12) + ":" + mm + (h < 12 ? " AM" : " PM")
+  } else {
+    time = ("0" + at.getHours()).slice(-2) + ":" + mm
+  }
+  return (tomorrow ? "tomorrow " : "") + time
 }
 
 // Put a chip's time at the start of the text, keeping the message.

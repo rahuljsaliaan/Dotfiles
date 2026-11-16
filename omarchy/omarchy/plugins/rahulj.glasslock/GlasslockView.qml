@@ -74,7 +74,13 @@ Item {
   readonly property bool showWeather: setting("weather", true) !== false
   readonly property bool showMedia: setting("media", true) !== false
   readonly property bool showStatus: setting("status", true) !== false
-  readonly property bool clock24: setting("clock24h", true) === true
+  // Follows the top bar clock's 12/24-hour choice; `clock24h` only applies
+  // when the bar clock has no hour format to follow.
+  readonly property bool clock24: clockStyle.hour24
+  ClockStyle {
+    id: clockStyle
+    fallback24: root.setting("clock24h", true) === true
+  }
 
   // ---- Colors: the theme's, unless the settings choose others ----
   readonly property color accent: colorSetting("accent", Commons.Color.accent)

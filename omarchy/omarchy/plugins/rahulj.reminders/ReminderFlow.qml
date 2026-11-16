@@ -28,6 +28,7 @@ Item {
   property bool tried: false
   property int chipIndex: -1
   property date now: new Date()
+  ClockStyle { id: clockStyle }
 
   readonly property var chips: ["5m", "10m", "15m", "30m", "1h", "2h"]
   readonly property var parsed: ReminderFlowModel.parse(root.filterText, root.now)
@@ -239,7 +240,7 @@ Item {
           text: {
             if (root.valid) {
               var when = "<font color='" + root.accent + "'>in " + ReminderFlowModel.describeMinutes(root.parsed.minutes)
-                + " · " + ReminderFlowModel.describeAt(root.parsed.minutes, root.now) + "</font>"
+                + " · " + ReminderFlowModel.describeAt(root.parsed.minutes, root.now, clockStyle.hour24) + "</font>"
               return when + (note ? "  ·  " + note : "  ·  <i>no note</i>")
             }
             if (root.filterText.trim())
