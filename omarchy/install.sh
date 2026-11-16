@@ -135,6 +135,14 @@ fi
 # Restart the portal service so the Nautilus file chooser takes effect.
 systemctl --user daemon-reload && systemctl --user restart xdg-desktop-portal && printf '  restarted xdg-desktop-portal (Nautilus file chooser)\n'
 
+# The focus sign watches the wallpaper link with inotifywait, so it steps
+# aside the moment a theme intro starts.
+if command -v inotifywait >/dev/null; then
+  printf '  ok       inotify-tools\n'
+elif command -v omarchy >/dev/null; then
+  omarchy pkg add inotify-tools >/dev/null 2>&1 && printf '  installed inotify-tools\n'
+fi
+
 # Tools from mise/config.toml (pnpm), next to Omarchy's own mise tools.
 mise install >/dev/null 2>&1 && printf '  ok       mise tools (pnpm)\n'
 
