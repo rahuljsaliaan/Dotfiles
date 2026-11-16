@@ -42,7 +42,9 @@ copy hypr/monitors.lua   "$HOME/.config/hypr/monitors.lua"
 copy hypr/bindings.lua   "$HOME/.config/hypr/bindings.lua"
 copy avatar/face.png     "$HOME/.face"
 copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
-copy hypr/keep-fullscreen.lua "$HOME/.config/hypr/keep-fullscreen.lua"
+copy hypr/keep-layout.lua "$HOME/.config/hypr/keep-layout.lua"
+# Replaced by keep-layout.lua (2026-11-16); hyprland.lua no longer loads it.
+rm -f "$HOME/.config/hypr/keep-fullscreen.lua"
 
 # Omarchy shell: settings, menu, cloned plugins, theme overlay, branding, hooks.
 copy omarchy/shell.json                          "$HOME/.config/omarchy/shell.json"
