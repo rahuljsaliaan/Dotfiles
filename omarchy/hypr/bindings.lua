@@ -265,3 +265,10 @@ o.bind("SUPER + BRACKETLEFT", "Volume down", { audio = "lower" }, { locked = tru
 o.bind("SUPER + BACKSLASH", "Mute", { audio = "mute-toggle" }, { locked = true })
 o.bind("SUPER + SHIFT + BRACKETRIGHT", "Volume up precise", "omarchy-audio-output-volume +1", { locked = true, repeating = true })
 o.bind("SUPER + SHIFT + BRACKETLEFT", "Volume down precise", "omarchy-audio-output-volume -1", { locked = true, repeating = true })
+
+-- Screen brightness on the same bracket keys with Ctrl (Alt is taken by the
+-- webcam overlay). Same commands as Omarchy's brightness keys, so the popup shows.
+o.bind("SUPER + CTRL + BRACKETRIGHT", "Brightness up", { brightness = "raise" }, { locked = true, repeating = true })
+o.bind("SUPER + CTRL + BRACKETLEFT", "Brightness down", { brightness = "lower" }, { locked = true, repeating = true })
+o.bind("SUPER + CTRL + SHIFT + BRACKETRIGHT", "Brightness up precise", "omarchy-brightness-display +1%", { locked = true, repeating = true })
+o.bind("SUPER + CTRL + SHIFT + BRACKETLEFT", "Brightness down precise", "omarchy-brightness-display 1%-", { locked = true, repeating = true })
