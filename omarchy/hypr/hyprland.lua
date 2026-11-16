@@ -21,6 +21,7 @@ require("hypr.input")
 require("hypr.gestures")
 require("hypr.bindings")
 require("hypr.looknfeel")
+require("hypr.windows")
 require("hypr.autostart")
 require("hypr.keep-fullscreen")
 
