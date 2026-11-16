@@ -49,3 +49,9 @@ if hl.plugin and hl.plugin.hyprbars then
     },
   })
 end
+
+-- A new window keeps focus on scrolling workspaces. Opening a column slides
+-- the other columns sideways, and with focus following the mouse, the window
+-- that slid under the unmoved pointer took focus back from the new one. Focus
+-- still follows the mouse whenever the pointer itself moves onto a window.
+hl.config({ input = { mouse_refocus = false } })
