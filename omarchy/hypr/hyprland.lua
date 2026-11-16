@@ -22,7 +22,7 @@ require("hypr.gestures")
 require("hypr.bindings")
 require("hypr.looknfeel")
 require("hypr.autostart")
-require("hypr.keep-fullscreen")
+require("hypr.keep-layout")
 
 -- Toggle config flags dynamically.
 require("default.hypr.toggles")
