@@ -275,6 +275,39 @@ hl.on("keybinds.submap", function(name)
   end
 end)
 
+-- Super + - / Super + = on a scrolling workspace: Omarchy's 100px resize
+-- barely moves a scrolling column, and a column holding one window cannot
+-- change height at all, so there the keys step the column width instead
+-- (Alt for a small step, Ctrl for a big one). Hyprland keeps a column between
+-- a sliver and the full screen. Floating windows and other layouts keep
+-- Omarchy's pixel resize.
+local function on_scrolling_column(window)
+  return window ~= nil and not window.floating and window.workspace ~= nil
+    and window.workspace.tiled_layout == "scrolling"
+end
+
+local function resize_width(step, px)
+  return function()
+    if on_scrolling_column(hl.get_active_window()) then
+      hl.dispatch(hl.dsp.layout(string.format("colresize %+.2f", step)))
+    else
+      hl.dispatch(hl.dsp.window.resize({ x = px, y = 0, relative = true }))
+    end
+  end
+end
+
+for _, r in ipairs({
+  { mods = "SUPER", name = "", step = 0.1, px = 100 },
+  { mods = "SUPER + ALT", name = " a little", step = 0.05, px = 25 },
+  { mods = "SUPER + CTRL", name = " a lot", step = 0.25, px = 300 },
+}) do
+  local narrower, wider = resize_width(-r.step, -r.px), resize_width(r.step, r.px)
+  o.bind_commands[narrower] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", -r.px)
+  o.bind_commands[wider] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", r.px)
+  o.rebind(r.mods .. " + code:20", "Narrower window" .. r.name .. " (scrolling: column width)", narrower)
+  o.rebind(r.mods .. " + code:21", "Wider window" .. r.name .. " (scrolling: column width)", wider)
+end
+
 -- Volume on the bracket keys: this 60% keyboard has no media keys, and keys
 -- behind Fn clash with its Fn + Super Win-key lock. Same commands as Omarchy's
 -- media keys, so the volume popup still shows.
