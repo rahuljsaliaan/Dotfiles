@@ -257,6 +257,24 @@ hl.define_submap("nav", function()
   o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
 end)
 
+-- Nav mode shows a notification card for as long as it is on, since nothing
+-- else on screen says a submap is active. The card is the usual notification
+-- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept
+-- out of history as transient. It follows Hyprland's submap event rather than
+-- the keys, so it goes however the mode ends.
+local NAV_CARD = "Navigation mode"
+local NAV_GLYPH = "\u{f0041}" -- nf-md-arrow_all
+hl.on("keybinds.submap", function(name)
+  if name == "nav" then
+    hl.exec_cmd("notify-send -a Hyprland -u normal"
+      .. " -h boolean:transient:true -h boolean:x-rahulj-resident:true"
+      .. " -h string:omarchy-glyph:" .. NAV_GLYPH
+      .. " '" .. NAV_CARD .. "' 'HJKL focus · Shift+HJKL group · Ctrl+H/L tab · Esc exits'")
+  else
+    hl.exec_cmd("omarchy-notification-dismiss '" .. NAV_CARD .. "'")
+  end
+end)
+
 -- Volume on the bracket keys: this 60% keyboard has no media keys, and keys
 -- behind Fn clash with its Fn + Super Win-key lock. Same commands as Omarchy's
 -- media keys, so the volume popup still shows.
