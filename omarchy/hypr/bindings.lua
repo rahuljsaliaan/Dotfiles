@@ -173,12 +173,210 @@ local function fit_float(address)
   size_float(window)
 end
 
+local function pair(v)
+  if type(v) ~= "table" then return 0, 0 end
+  return v.x or v[1] or 0, v.y or v[2] or 0
+end
+
+-- Super + T twice should put a window back where it was, but Hyprland tiles a
+-- window again as a brand-new one: the scrolling layout puts it after the
+-- column in the middle of the row, dwindle splits whatever the focus is on. So
+-- the window's place among its workspace's tiled windows is noted as it floats
+-- and put back as it tiles. A place is a column of the row, windows that share
+-- a column's x stacking in it, counted from the left; scrolling swaps the
+-- window's column back to it (and gives it its old width). Dwindle notes the
+-- window it was split from and which side of it it was on, and tiles it there
+-- again by preselecting that side of the old neighbour.
+local PLACE_SLACK = 20
+local places = {}
+
+local function tiled_columns(workspace)
+  local list = {}
+  for _, other in ipairs(workspace:get_windows() or {}) do
+    if not other.floating and other.mapped and not other.hidden then
+      local x, y = pair(other.at)
+      list[#list + 1] = { window = other, x = x, y = y }
+    end
+  end
+  table.sort(list, function(a, b) return a.x < b.x end)
+
+  local columns, column_x = {}, nil
+  for _, entry in ipairs(list) do
+    if not column_x or entry.x - column_x > PLACE_SLACK then
+      columns[#columns + 1] = {}
+      column_x = entry.x
+    end
+    local column = columns[#columns]
+    column[#column + 1] = entry
+  end
+  for _, column in ipairs(columns) do
+    table.sort(column, function(a, b) return a.y < b.y end)
+  end
+  return columns
+end
+
+local function column_of(columns, address)
+  for i, column in ipairs(columns) do
+    for _, entry in ipairs(column) do
+      if entry.window.address == address then return i end
+    end
+  end
+end
+
+-- The tiled window a dwindle window was split from: the one that takes over
+-- its space when it floats. It shares a whole edge with the window (same span,
+-- touching across the gap); failing that, the neighbour with the longest shared
+-- edge. Returns it and the side of it the window sat on ("l", "r", "u", "d").
+local EDGE_GAP = 40
+local EDGE_SPAN = 6
+
+local function dwindle_sibling(window)
+  local bx, by = pair(window.at)
+  local bw, bh = pair(window.size)
+  local best, best_side, best_overlap, best_exact
+
+  for _, other in ipairs(window.workspace:get_windows() or {}) do
+    if other.address ~= window.address and not other.floating and other.mapped and not other.hidden then
+      local ox, oy = pair(other.at)
+      local ow, oh = pair(other.size)
+      local side, overlap, exact
+      local x_overlap = math.min(bx + bw, ox + ow) - math.max(bx, ox)
+      local y_overlap = math.min(by + bh, oy + oh) - math.max(by, oy)
+      if math.abs(ox - (bx + bw)) <= EDGE_GAP and y_overlap > 0 then
+        side, overlap, exact = "r", y_overlap, math.abs(oy - by) <= EDGE_SPAN and math.abs(oh - bh) <= EDGE_SPAN
+      elseif math.abs((ox + ow) - bx) <= EDGE_GAP and y_overlap > 0 then
+        side, overlap, exact = "l", y_overlap, math.abs(oy - by) <= EDGE_SPAN and math.abs(oh - bh) <= EDGE_SPAN
+      elseif math.abs(oy - (by + bh)) <= EDGE_GAP and x_overlap > 0 then
+        side, overlap, exact = "d", x_overlap, math.abs(ox - bx) <= EDGE_SPAN and math.abs(ow - bw) <= EDGE_SPAN
+      elseif math.abs((oy + oh) - by) <= EDGE_GAP and x_overlap > 0 then
+        side, overlap, exact = "u", x_overlap, math.abs(ox - bx) <= EDGE_SPAN and math.abs(ow - bw) <= EDGE_SPAN
+      end
+      if side and (not best or (exact and not best_exact) or (exact == best_exact and overlap > best_overlap)) then
+        best, best_side, best_overlap, best_exact = other, side, overlap, exact
+      end
+    end
+  end
+  return best, best_side
+end
+
+local function remember_place(window)
+  -- A floating window keeps the place noted when it floated.
+  if window.floating then return end
+  places[window.address] = nil
+  if (window.fullscreen or 0) ~= 0 or not window.workspace then return end
+  if window.workspace.tiled_layout == "dwindle" then
+    local sibling, side = dwindle_sibling(window)
+    if sibling then
+      places[window.address] = { workspace = window.workspace.id, sibling = sibling.address, side = side }
+    end
+    return
+  end
+  local columns = tiled_columns(window.workspace)
+  local index = column_of(columns, window.address)
+  if not index then return end
+  -- A window that sat below others in a column comes back as its own column
+  -- next to theirs: Hyprland tiles it into a column of its own, and putting it
+  -- back in the stack is not something it offers.
+  local below = columns[index][1].window.address ~= window.address
+  places[window.address] = {
+    workspace = window.workspace.id,
+    column = below and index + 1 or index,
+    width = (pair(window.size)),
+  }
+end
+
+-- The width a column's share of the row is measured against: the screen less
+-- the outer gaps.
+local function row_width(monitor)
+  if not monitor or not monitor.width then return nil end
+  local width = monitor.width / (monitor.scale or 1)
+  if (monitor.transform or 0) % 2 == 1 then width = (monitor.height or 0) / (monitor.scale or 1) end
+  local gaps = hl.get_config("general.gaps_out")
+  if type(gaps) == "table" then
+    width = width - (gaps.left or 0) - (gaps.right or 0)
+  elseif type(gaps) == "number" then
+    width = width - 2 * gaps
+  end
+  return width
+end
+
+-- Layout messages go to the focused monitor's workspace, which is the
+-- window's own only when it is the one on screen; a special workspace (the
+-- scratchpad) counts while it is open, and the focused window is on it.
+local function messages_reach(window)
+  local active = hl.get_active_workspace()
+  if not active or not window.workspace then return false end
+  if active.id == window.workspace.id then return true end
+  local focused = hl.get_active_window()
+  return window.workspace.name:sub(1, 8) == "special:" and focused ~= nil and focused.address == window.address
+end
+
+local function restore_place(window)
+  local place = places[window.address]
+  places[window.address] = nil
+  if not place or not window.workspace or window.workspace.id ~= place.workspace then return end
+  if window.workspace.tiled_layout ~= "scrolling" then return end
+
+  if not messages_reach(window) then return end
+
+  local columns = tiled_columns(window.workspace)
+  local from = column_of(columns, window.address)
+  if not from then return end
+  local steps = math.min(place.column, #columns) - from
+  for _ = 1, math.abs(steps) do
+    hl.dispatch(hl.dsp.layout("swapcol " .. (steps < 0 and "l" or "r")))
+  end
+
+  -- A tiled window gets the default column width; give back the one it had.
+  local row = row_width(window.monitor)
+  local now = hl.get_window("address:" .. window.address)
+  if not row or not now then return end
+  local missing = place.width - (pair(now.size))
+  if math.abs(missing) > 6 then
+    hl.dispatch(hl.dsp.layout(string.format("colresize %+.4f", missing / row)))
+  end
+end
+
+-- Tile a floating dwindle window next to the window it was split from, on the
+-- side it was on: preselect that side of the old neighbour (the side of it the
+-- new window opens on is the opposite of where the neighbour was) and tile with
+-- the neighbour focused. Returns false, leaving everything as it was, when
+-- there is nothing to go back to.
+local OPENS_ON = { l = "r", r = "l", u = "d", d = "u" }
+
+local function tile_in_place(window)
+  local place = places[window.address]
+  if not place or not place.sibling or not window.workspace or window.workspace.id ~= place.workspace then return false end
+  if window.workspace.tiled_layout ~= "dwindle" then return false end
+  if not messages_reach(window) then return false end
+
+  local sibling = hl.get_window("address:" .. place.sibling)
+  if not sibling or sibling.floating or not sibling.mapped or sibling.hidden
+      or not sibling.workspace or sibling.workspace.id ~= place.workspace then
+    return false
+  end
+
+  places[window.address] = nil
+  local no_warps = hl.get_config("cursor.no_warps")
+  hl.config({ cursor = { no_warps = true } })
+  hl.dispatch(hl.dsp.focus({ window = "address:" .. sibling.address }))
+  hl.dispatch(hl.dsp.layout("preselect " .. OPENS_ON[place.side]))
+  hl.dispatch(hl.dsp.window.float({ action = "off", window = window }))
+  hl.dispatch(hl.dsp.focus({ window = "address:" .. window.address }))
+  hl.config({ cursor = { no_warps = no_warps == true } })
+  return true
+end
+
 local function toggle_floating()
   local window = hl.get_active_window()
-  hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  if window then remember_place(window) end
+  if not (window and window.floating and tile_in_place(window)) then
+    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  end
   if window then
     local now = hl.get_window("address:" .. window.address)
     if now and not now.floating then
+      restore_place(now)
       for _, tag in ipairs({ SCRATCHPAD_FLOAT, OLD_SCRATCHPAD_FILL }) do
         if has_tag(now, tag) then set_tag(now, "-" .. tag) end
       end
@@ -188,6 +386,10 @@ local function toggle_floating()
   end
   user_tiled.remember(window)
 end
+
+hl.on("window.close", function(closed)
+  if closed and closed.address then places[closed.address] = nil end
+end)
 
 hl.on("workspace.special_active", function(workspace)
   if not workspace or workspace.name ~= SCRATCHPAD then return end
@@ -209,7 +411,7 @@ _G.rahulj_keys = { pop_out = pop_out, toggle_floating = toggle_floating, fit_flo
 hl.unbind("SUPER + O")
 o.bind("SUPER + O", "Pop window out (Hyprpin or float & pin)", hyprpin_or("toggle_pop", pop_out))
 hl.unbind("SUPER + T")
-o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("toggle_dock", toggle_floating))
+o.bind("SUPER + T", "Toggle window floating/tiling (tiles back in its old place; Hyprpin dock)", hyprpin_or("toggle_dock", toggle_floating))
 hl.unbind("SUPER + P")
 o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
 o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
