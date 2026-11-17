@@ -45,6 +45,7 @@ copy avatar/face.png     "$HOME/.face"
 copy hypr/gestures.lua   "$HOME/.config/hypr/gestures.lua"
 copy hypr/keep-layout.lua "$HOME/.config/hypr/keep-layout.lua"
 copy hypr/user-tiled.lua  "$HOME/.config/hypr/user-tiled.lua"
+copy hypr/hover-scroll.lua "$HOME/.config/hypr/hover-scroll.lua"
 # Replaced by keep-layout.lua (2026-11-16); hyprland.lua no longer loads it.
 rm -f "$HOME/.config/hypr/keep-fullscreen.lua"
 
