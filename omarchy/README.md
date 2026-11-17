@@ -140,6 +140,21 @@ rebuilt. `bin/omarchy-custom-check` rebuilds it from the post-update and
 post-boot hooks; by hand, run `titlebars/build.sh` and log out and back in. To
 go back to Omarchy's plugin for good, delete that `.so` and run `hyprctl reload`.
 
+## Tracktion Waveform
+
+Waveform Free (Tracktion's DAW) runs from its official Linux `.deb`, repackaged
+for pacman by `packages/waveform14/PKGBUILD` so it installs, updates and
+uninstalls like any other package. The `.deb` itself is not tracked: it sits
+behind a free Tracktion account, so `install.sh` cannot fetch it.
+
+1. Get the `.deb` with the Tracktion Download Manager (from tracktion.com, signed
+   in; it saves to `~/Downloads`).
+2. Copy it next to the PKGBUILD, set `pkgver` and `sha256sums` to match, and run
+   `makepkg -si` there. Every library it needs is already part of Omarchy.
+
+Updating is the same steps with the newer `.deb`; `sudo pacman -R waveform14`
+removes it.
+
 ## Not tracked here
 
 - **Hyprland `input.lua`, `autostart.lua`**:
