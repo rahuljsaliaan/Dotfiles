@@ -16,6 +16,13 @@ import qs.Ui
 // scroll on it to step through its workspaces, and click another screen to
 // focus it. It replaces omarchy.workspaces in the bar, and answers its
 // refresh IPC.
+//
+// A hidden workspace open on a screen (the Super + S scratchpad, the Super + `
+// console, any other special workspace) gives that screen a dashed outline and
+// a dot in the theme's yellow, and a label follows the map: its name, the
+// screen when it is not the bar's own, and how many windows it holds. Nothing
+// else in the bar showed it, and the bar sits on one screen only. Clicking the
+// label hides it, as its key does on that screen.
 BarWidget {
   id: root
   moduleName: "rahulj.desk-map"
@@ -157,6 +164,12 @@ BarWidget {
     function onRawEvent(event) {
       var name = event ? String(event.name) : ""
       if (name === "configreloaded") root.refresh()
+      if (name === "activespecialv2") {
+        var fields = String(event.data || "").split(",")
+        if (fields.length >= 3) root.setSpecial(fields[fields.length - 1], String(fields[1]).replace(/^special:/, ""))
+        Hyprland.refreshMonitors()
+        Hyprland.refreshWorkspaces()
+      }
       if (name === "workspacev2" || name === "moveworkspacev2" || name === "changeworkspaceid" || name === "focusedmonv2") {
         Hyprland.refreshMonitors()
         Hyprland.refreshWorkspaces()
@@ -184,6 +197,107 @@ BarWidget {
       Qt.callLater(function() { root.readModes(false) })
     }
   }
+  // ---- hidden workspaces open on the screens. Hyprland reports each open and
+  // close (activespecialv2: id,name,screen, with an empty name on close), and
+  // each screen's state is read back from Hyprland at start and on every
+  // monitor refresh, so a shell restart or a screen that drops out never
+  // leaves a stale mark. Keyed by screen name, the workspace name without its
+  // "special:" prefix.
+  property var specials: ({})
+  function specialOf(screen) {
+    var ipc = screen ? screen.lastIpcObject : null
+    var special = ipc ? ipc.specialWorkspace : null
+    return special && special.name ? String(special.name).replace(/^special:/, "") : ""
+  }
+  readonly property var ipcSpecials: {
+    var found = {}
+    for (var i = 0; i < root.screens.length; i++) {
+      var name = root.specialOf(root.screens[i])
+      if (name !== "") found[String(root.screens[i].name)] = name
+    }
+    return found
+  }
+  onIpcSpecialsChanged: root.specials = root.ipcSpecials
+  function setSpecial(screenName, name) {
+    var next = {}
+    for (var k in root.specials) if (k !== screenName) next[k] = root.specials[k]
+    if (name !== "") next[screenName] = name
+    root.specials = next
+  }
+  // Left to right, as the map draws the screens.
+  readonly property var openSpecials: {
+    var list = []
+    for (var i = 0; i < root.screens.length; i++) {
+      var screenName = String(root.screens[i].name)
+      var name = root.specials[screenName]
+      if (name) list.push({ screen: screenName, name: name })
+    }
+    return list
+  }
+  function specialCount(name) {
+    var values = Hyprland.workspaces.values
+    for (var i = 0; i < values.length; i++) {
+      if (String(values[i].name) === "special:" + name) return values[i].toplevels ? values[i].toplevels.values.length : 0
+    }
+    return 0
+  }
+  function specialTitle(name) {
+    if (name === "scratchpad") return "Scratchpad"
+    if (name === "qconsole") return "Console"
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
+  // nf-fa-clone, nf-fa-terminal, nf-fa-window_restore
+  function specialGlyph(name) { return name === "scratchpad" ? "\uf24d" : (name === "qconsole" ? "\uf120" : "\uf2d2") }
+  function specialLetter(name) { return name === "qconsole" ? "C" : name.charAt(0).toUpperCase() }
+  // The screen this bar is on; a label names any other screen, in words.
+  readonly property string barScreen: QsWindow.window && QsWindow.window.screen ? String(QsWindow.window.screen.name) : ""
+  function screenWord(screenName) {
+    if (/^eDP/.test(screenName)) return "laptop"
+    for (var i = 0; i < root.screens.length; i++) {
+      if (String(root.screens[i].name) !== screenName) continue
+      if (i === 0) return "left"
+      if (i === root.screens.length - 1) return "right"
+      return "middle"
+    }
+    return screenName
+  }
+  function specialLabel(entry) {
+    var parts = [root.specialGlyph(entry.name) + "  " + root.specialTitle(entry.name)]
+    if (entry.screen !== root.barScreen) parts.push(root.screenWord(entry.screen))
+    // The console always holds its one agent; a count says nothing there.
+    if (entry.name !== "qconsole") parts.push(String(root.specialCount(entry.name)))
+    return parts.join("  \u00b7  ")
+  }
+  // Hide it as its key would on that screen: focus the screen, toggle the
+  // workspace, and focus back where you were, with pointer warps off so the
+  // pointer stays on the bar.
+  function hideSpecial(screenName, name) {
+    var safe = /^[A-Za-z0-9_.-]+$/
+    if (!safe.test(screenName) || !safe.test(name)) return
+    root.run("hyprctl eval " + Util.shellQuote(
+      "local back = hl.get_active_monitor() "
+      + "local warps = hl.get_config('cursor.no_warps') "
+      + "hl.config({ cursor = { no_warps = true } }) "
+      + "hl.dispatch(hl.dsp.focus({ monitor = '" + screenName + "' })) "
+      + "hl.dispatch(hl.dsp.workspace.toggle_special('" + name + "')) "
+      + "if back and back.name ~= '" + screenName + "' then hl.dispatch(hl.dsp.focus({ monitor = back.name })) end "
+      + "hl.config({ cursor = { no_warps = warps == true } })"))
+  }
+  // The theme's yellow, read from the theme as the net-speed widget reads its
+  // colours, so it follows a theme change.
+  property color modeColor: "#ffcb6b"
+  FileView {
+    id: themeColors
+    path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/omarchy/current/theme/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var m = String(text() || "").match(/^\s*yellow\s*=\s*"(#[0-9a-fA-F]{6})"/m)
+      if (m) root.modeColor = m[1]
+    }
+  }
+
   // Super + L and the default layout ask omarchy.workspaces to read the mode
   // again; this widget takes its place in the bar, so it answers.
   ShellIpc {
@@ -221,6 +335,7 @@ BarWidget {
         readonly property int wsId: modelData.activeWorkspace ? modelData.activeWorkspace.id : -1
         readonly property string mode: root.modeOf(wsId)
         readonly property bool triangle: mode === "floating"
+        readonly property string special: root.specials[String(modelData.name)] || ""
         readonly property color tint: focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.30)
                                               : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.13)
         readonly property color figure: focused ? Qt.lighter(root.ink, 1.14)
@@ -237,8 +352,25 @@ BarWidget {
           radius: 4
           color: "transparent"
           border.width: 1
-          border.color: cell.focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.75)
-                                     : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.22)
+          border.color: cell.special !== "" ? "transparent"
+                       : cell.focused ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.75)
+                                      : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.22)
+
+          // A hidden workspace open here: a dashed outline in the mode colour
+          // in place of the frame, and a dot with its letter on the corner.
+          Shape {
+            visible: cell.special !== ""
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+              strokeWidth: 1.5
+              strokeColor: root.modeColor
+              fillColor: Qt.rgba(root.modeColor.r, root.modeColor.g, root.modeColor.b, 0.10)
+              strokeStyle: ShapePath.DashLine
+              dashPattern: [2.4, 1.6]
+              PathRectangle { x: 0.75; y: 0.75; width: frame.width - 1.5; height: frame.height - 1.5; radius: 4 }
+            }
+          }
 
           // Its workspace: the number on the layout's shape.
           Item {
@@ -286,6 +418,29 @@ BarWidget {
             }
           }
 
+          Rectangle {
+            visible: cell.special !== ""
+            z: 2
+            width: Math.round(root.frameHeight * 0.5)
+            height: width
+            radius: width / 2
+            color: root.modeColor
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.topMargin: -Math.round(height * 0.3)
+            anchors.rightMargin: -Math.round(width * 0.35)
+            Text {
+              anchors.centerIn: parent
+              textFormat: Text.PlainText
+              text: root.specialLetter(cell.special)
+              color: Commons.Color.bar.background
+              font.family: Style.font.family
+              font.pixelSize: Math.max(6, Math.round(parent.height * 0.75))
+              font.weight: Font.Bold
+              renderType: Text.NativeRendering
+            }
+          }
+
           MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
@@ -297,6 +452,45 @@ BarWidget {
               if (!cell.focused) return
               root.scrollWorkspaces(wheel.angleDelta.y)
             }
+          }
+        }
+      }
+    }
+
+    Repeater {
+      model: root.openSpecials
+
+      Item {
+        id: tag
+        required property var modelData
+        width: pill.width
+        height: root.barSize
+
+        Rectangle {
+          id: pill
+          anchors.verticalCenter: parent.verticalCenter
+          height: root.frameHeight
+          width: label.implicitWidth + Math.round(root.frameHeight * 0.9)
+          radius: height / 2
+          color: Qt.rgba(root.modeColor.r, root.modeColor.g, root.modeColor.b, 0.13)
+          border.width: 1
+          border.color: Qt.rgba(root.modeColor.r, root.modeColor.g, root.modeColor.b, 0.35)
+
+          Text {
+            id: label
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: root.specialLabel(tag.modelData)
+            color: root.modeColor
+            font.family: Style.font.family
+            font.pixelSize: root.numberSize + 1
+            renderType: Text.NativeRendering
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.hideSpecial(String(tag.modelData.screen), String(tag.modelData.name))
           }
         }
       }
