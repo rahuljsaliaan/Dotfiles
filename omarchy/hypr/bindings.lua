@@ -128,88 +128,49 @@ end
 -- does not float it again when it leaves fullscreen (hypr/user-tiled.lua).
 local user_tiled = require("hypr.user-tiled")
 
--- Hyprland floats a window at the size it last floated at, centred on where
--- it was, and only nudges the position to fit; it never trims the size. A
--- size as big as the screen, which a fullscreen or full-size window leaves
--- behind, came out over the bar and past the top edge, and in the scratchpad
--- even off the screen: floated on the laptop it was pushed to the laptop's
--- corner, and when the scratchpad next opened on another screen Hyprland could
--- not carry it over. So a window Super + T floats always fits the screen's
--- free area (inside the bar, the outer gap, its border and its title bar):
--- the remembered size when it fits FLOAT_FIT of that area, otherwise
--- FLOAT_WIDTH x FLOAT_HEIGHT of it, and centred when Hyprland's spot spills.
-local FLOAT_FIT = 0.92
-local FLOAT_WIDTH, FLOAT_HEIGHT = 0.7, 0.75
-
-local function title_bar_height()
-  if not (hl.plugin and hl.plugin.hyprbars) then return 0 end
-  local ok, height = pcall(hl.get_config, "plugin.hyprbars.bar_height")
-  return ok and tonumber(height) or 0
-end
-
--- Where a floating window's contents may go on a monitor: x, y, width, height.
-local function float_area(monitor)
+-- Super + T floats a window at the size Omarchy gives every window on a
+-- floating workspace (default/hypr/workspace-modes.lua): min(1100, 64%) x
+-- min(760, 68%) of the screen inside the bar, centred. One size everywhere,
+-- the Super + S scratchpad included, keeps floating windows consistent.
+-- Hyprland's own choice, the size the window last floated at, varied from
+-- window to window and could be the whole screen (left by a fullscreen or
+-- full-size window): that came out over the bar and past the top edge, and in
+-- the scratchpad off the screen altogether.
+local function float_size(monitor)
   local scale = monitor.scale or 1
-  local width, height = (monitor.width or 0) / scale, (monitor.height or 0) / scale
+  local width = math.floor((monitor.width or 0) / scale)
+  local height = math.floor((monitor.height or 0) / scale)
   if (monitor.transform or 0) % 2 == 1 then width, height = height, width end
   local reserved = monitor.reserved or {}
-  local position = monitor.position or {}
-  local gaps = hl.get_config("general.gaps_out")
-  local gap = type(gaps) == "table" and (gaps.top or 0) or tonumber(gaps) or 0
-  local border = tonumber(hl.get_config("general.border_size")) or 0
-  local top = (reserved.top or 0) + gap + border + title_bar_height()
-  local left = (reserved.left or 0) + gap + border
-  local right = (reserved.right or 0) + gap + border
-  local bottom = (reserved.bottom or 0) + gap + border
-  return (position.x or monitor.x or 0) + left, (position.y or monitor.y or 0) + top,
-    math.floor(width - left - right), math.floor(height - top - bottom)
+  width = width - (reserved.left or 0) - (reserved.right or 0)
+  height = height - (reserved.top or 0) - (reserved.bottom or 0)
+  return math.min(1100, math.floor(width * 0.64)), math.min(760, math.floor(height * 0.68))
 end
 
--- The Super + S scratchpad is for working in one window over the screen, so
--- there a window Super + T floats covers the free area fully instead of the
--- smaller default, and it is fitted again when the scratchpad next opens on
--- another screen: Hyprland carries a float across at its old size, which
--- overflowed a smaller screen. Tiling it again (Super + T) drops the tag.
+-- A scratchpad float is sized again when the scratchpad next opens on another
+-- screen: Hyprland carries a float across at its old size, which is not that
+-- screen's size (and overflowed a smaller one). Tiling it drops the tag.
 local SCRATCHPAD = "special:scratchpad"
-local SCRATCHPAD_FILL = "rahulj-scratchpad-fill"
-local filled_on = {}
+local SCRATCHPAD_FLOAT = "rahulj-scratchpad-float"
+local OLD_SCRATCHPAD_FILL = "rahulj-scratchpad-fill"
+local floated_on = {}
 
-local function fill_float(window)
-  local ax, ay, aw, ah = float_area(window.monitor)
-  if aw < 200 or ah < 150 then return end
-  local selector = "address:" .. window.address
-  hl.dispatch(hl.dsp.window.resize({ window = selector, x = aw, y = ah, exact = true }))
-  hl.dispatch(hl.dsp.window.move({ window = selector, x = ax, y = ay, exact = true }))
-  filled_on[window.address] = window.monitor.name
+local function size_float(window)
+  local width, height = float_size(window.monitor)
+  if width < 200 or height < 150 then return end
+  hl.dispatch(hl.dsp.window.resize({ x = width, y = height, relative = false, window = window }))
+  hl.dispatch(hl.dsp.window.center({ window = window }))
+  floated_on[window.address] = window.monitor.name
 end
 
 local function fit_float(address)
   local window = hl.get_window("address:" .. address)
   if not window or not window.floating or not window.monitor or (window.fullscreen or 0) ~= 0 then return end
   if window.workspace and window.workspace.name == SCRATCHPAD then
-    set_tag(window, "+" .. SCRATCHPAD_FILL)
-    fill_float(window)
-    return
+    set_tag(window, "+" .. SCRATCHPAD_FLOAT)
   end
-  local ax, ay, aw, ah = float_area(window.monitor)
-  if aw < 200 or ah < 150 then return end
-  local w, h = window.size.x, window.size.y
-  local resized = false
-  if w > aw * FLOAT_FIT or h > ah * FLOAT_FIT then
-    w, h = math.floor(aw * FLOAT_WIDTH), math.floor(ah * FLOAT_HEIGHT)
-    resized = true
-  end
-  local x, y = window.at.x, window.at.y
-  if resized or x < ax or y < ay or x + w > ax + aw or y + h > ay + ah then
-    x, y = math.floor(ax + (aw - w) / 2), math.floor(ay + (ah - h) / 2)
-  else
-    return
-  end
-  local selector = "address:" .. address
-  if resized then
-    hl.dispatch(hl.dsp.window.resize({ window = selector, x = w, y = h, exact = true }))
-  end
-  hl.dispatch(hl.dsp.window.move({ window = selector, x = x, y = y, exact = true }))
+  if has_tag(window, OLD_SCRATCHPAD_FILL) then set_tag(window, "-" .. OLD_SCRATCHPAD_FILL) end
+  size_float(window)
 end
 
 local function toggle_floating()
@@ -217,30 +178,26 @@ local function toggle_floating()
   hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
   if window then
     local now = hl.get_window("address:" .. window.address)
-    if now and not now.floating and has_tag(now, SCRATCHPAD_FILL) then
-      set_tag(now, "-" .. SCRATCHPAD_FILL)
-      filled_on[now.address] = nil
+    if now and not now.floating then
+      for _, tag in ipairs({ SCRATCHPAD_FLOAT, OLD_SCRATCHPAD_FILL }) do
+        if has_tag(now, tag) then set_tag(now, "-" .. tag) end
+      end
+      floated_on[now.address] = nil
     end
     fit_float(window.address)
   end
   user_tiled.remember(window)
 end
 
--- The scratchpad opened on a screen: refit its filled floats that were filled
--- on another screen (or, after a config reload forgot that, no longer fit).
 hl.on("workspace.special_active", function(workspace)
   if not workspace or workspace.name ~= SCRATCHPAD then return end
   hl.timer(function()
-    for _, listed in ipairs(hl.get_windows({ tag = SCRATCHPAD_FILL }) or {}) do
+    for _, listed in ipairs(hl.get_windows({ tag = SCRATCHPAD_FLOAT }) or {}) do
       local window = hl.get_window("address:" .. listed.address)
       if window and window.floating and window.monitor and (window.fullscreen or 0) == 0
-          and window.workspace and window.workspace.name == SCRATCHPAD then
-        local ax, ay, aw, ah = float_area(window.monitor)
-        local spills = window.at.x < ax or window.at.y < ay
-          or window.at.x + window.size.x > ax + aw or window.at.y + window.size.y > ay + ah
-        if filled_on[window.address] ~= window.monitor.name or spills then
-          fill_float(window)
-        end
+          and window.workspace and window.workspace.name == SCRATCHPAD
+          and floated_on[window.address] ~= window.monitor.name then
+        size_float(window)
       end
     end
   end, { type = "oneshot", timeout = 60 })
