@@ -128,14 +128,76 @@ end
 -- does not float it again when it leaves fullscreen (hypr/user-tiled.lua).
 local user_tiled = require("hypr.user-tiled")
 
+-- Hyprland floats a window at the size it last floated at, centred on where
+-- it was, and only nudges the position to fit; it never trims the size. A
+-- size as big as the screen, which a fullscreen or full-size window leaves
+-- behind, came out over the bar and past the top edge, and in the scratchpad
+-- even off the screen: floated on the laptop it was pushed to the laptop's
+-- corner, and when the scratchpad next opened on another screen Hyprland could
+-- not carry it over. So a window Super + T floats always fits the screen's
+-- free area (inside the bar, the outer gap, its border and its title bar):
+-- the remembered size when it fits FLOAT_FIT of that area, otherwise
+-- FLOAT_WIDTH x FLOAT_HEIGHT of it, and centred when Hyprland's spot spills.
+local FLOAT_FIT = 0.92
+local FLOAT_WIDTH, FLOAT_HEIGHT = 0.7, 0.75
+
+local function title_bar_height()
+  if not (hl.plugin and hl.plugin.hyprbars) then return 0 end
+  local ok, height = pcall(hl.get_config, "plugin.hyprbars.bar_height")
+  return ok and tonumber(height) or 0
+end
+
+-- Where a floating window's contents may go on a monitor: x, y, width, height.
+local function float_area(monitor)
+  local scale = monitor.scale or 1
+  local width, height = (monitor.width or 0) / scale, (monitor.height or 0) / scale
+  if (monitor.transform or 0) % 2 == 1 then width, height = height, width end
+  local reserved = monitor.reserved or {}
+  local position = monitor.position or {}
+  local gaps = hl.get_config("general.gaps_out")
+  local gap = type(gaps) == "table" and (gaps.top or 0) or tonumber(gaps) or 0
+  local border = tonumber(hl.get_config("general.border_size")) or 0
+  local top = (reserved.top or 0) + gap + border + title_bar_height()
+  local left = (reserved.left or 0) + gap + border
+  local right = (reserved.right or 0) + gap + border
+  local bottom = (reserved.bottom or 0) + gap + border
+  return (position.x or monitor.x or 0) + left, (position.y or monitor.y or 0) + top,
+    math.floor(width - left - right), math.floor(height - top - bottom)
+end
+
+local function fit_float(address)
+  local window = hl.get_window("address:" .. address)
+  if not window or not window.floating or not window.monitor or (window.fullscreen or 0) ~= 0 then return end
+  local ax, ay, aw, ah = float_area(window.monitor)
+  if aw < 200 or ah < 150 then return end
+  local w, h = window.size.x, window.size.y
+  local resized = false
+  if w > aw * FLOAT_FIT or h > ah * FLOAT_FIT then
+    w, h = math.floor(aw * FLOAT_WIDTH), math.floor(ah * FLOAT_HEIGHT)
+    resized = true
+  end
+  local x, y = window.at.x, window.at.y
+  if resized or x < ax or y < ay or x + w > ax + aw or y + h > ay + ah then
+    x, y = math.floor(ax + (aw - w) / 2), math.floor(ay + (ah - h) / 2)
+  else
+    return
+  end
+  local selector = "address:" .. address
+  if resized then
+    hl.dispatch(hl.dsp.window.resize({ window = selector, x = w, y = h, exact = true }))
+  end
+  hl.dispatch(hl.dsp.window.move({ window = selector, x = x, y = y, exact = true }))
+end
+
 local function toggle_floating()
   local window = hl.get_active_window()
   hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  if window then fit_float(window.address) end
   user_tiled.remember(window)
 end
 
 -- Reachable from `hyprctl eval`, so both can be run without the keys.
-_G.rahulj_keys = { pop_out = pop_out, toggle_floating = toggle_floating }
+_G.rahulj_keys = { pop_out = pop_out, toggle_floating = toggle_floating, fit_float = fit_float }
 
 hl.unbind("SUPER + O")
 o.bind("SUPER + O", "Pop window out (Hyprpin or float & pin)", hyprpin_or("toggle_pop", pop_out))
