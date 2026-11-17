@@ -321,9 +321,58 @@ local function within_workspace(dir, dispatcher)
   end
 end
 
+-- Left/right focus wraps around: past the last window it goes back to the
+-- first, and before the first it goes on to the last. "First" and "last" are
+-- the leftmost and rightmost columns of this workspace (the topmost window of
+-- that column), so it works the same on the scrolling layout, where columns
+-- off screen still have a place in the row. Nothing wraps when every window
+-- shares one column, since there is no other side to jump to.
+local function wrap_target(dir)
+  local active = hl.get_active_window()
+  if not active or not active.workspace then
+    return nil
+  end
+
+  local cx = center(active)
+  local best, best_x, best_y
+  for _, w in ipairs(active.workspace:get_windows() or {}) do
+    if w.mapped and not w.hidden then
+      local wx, wy = center(w)
+      local better = not best
+        or (dir == "r" and wx < best_x - 1) or (dir == "l" and wx > best_x + 1)
+        or (math.abs(wx - best_x) <= 1 and wy < best_y)
+      if better then
+        best, best_x, best_y = w, wx, wy
+      end
+    end
+  end
+
+  if best and math.abs(best_x - cx) > 1 then
+    return best
+  end
+  return nil
+end
+
+local function focus_or_wrap(dir)
+  return function()
+    if has_window_towards(dir) then
+      hl.dispatch(hl.dsp.focus({ direction = dir }))
+      return
+    end
+    local target = wrap_target(dir)
+    if target then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. target.address }))
+    end
+  end
+end
+
 hl.define_submap("nav", function()
   for _, d in ipairs(vim_directions) do
-    o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", within_workspace(d.dir, hl.dsp.focus({ direction = d.dir })))
+    if d.dir == "l" or d.dir == "r" then
+      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (wraps)", focus_or_wrap(d.dir))
+    else
+      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", within_workspace(d.dir, hl.dsp.focus({ direction = d.dir })))
+    end
     o.bind("SHIFT + " .. d.key, "Nav mode: Move window to group " .. d.name, within_workspace(d.dir, hl.dsp.window.move({ into_group = d.dir })))
   end
   o.bind("CTRL + H", "Nav mode: Grouped window focus left", hl.dsp.group.prev())
