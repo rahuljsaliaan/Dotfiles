@@ -99,6 +99,8 @@ together for different monitors.
 | `mise/config.toml` | `~/.config/mise/` | Global tools installed with mise next to Omarchy's own (Node and friends): pnpm, latest |
 | `foot/foot.ini` | `~/.config/foot/` | Omarchy's terminal config, with bold text drawn in JetBrains Mono Bold, one step heavier than the SemiBold regular text, so the prompt's bold text stands out |
 | `applications/teams-for-linux.desktop` | `~/.local/share/applications/` | Launcher override for Teams for Linux that runs it natively on Wayland, not through the package's forced XWayland, so it is sharp on the scaled laptop screen |
+| `applications/waveform14.desktop` | `~/.local/share/applications/` | Launcher override for Tracktion Waveform that starts it through `waveform14-themed`, so it opens in the current theme's colours |
+| `bin/waveform-theme-sync` (run by `bin/waveform14-themed` each time Waveform starts) | `~/.local/bin/` | Colours Waveform from the current theme's `colors.toml`. Waveform 14 takes no palette, only its seven colour-scheme sliders: the panels from the background (hue, saturation, brightness), text from the foreground, the main accent (buttons, progress, the playhead) from `accent` and the second (active tabs, selected items) from `selection`, both scaled up a little because Waveform tones them down (on Shinkai the panels come out exactly `#0c1523`). Waveform rewrites its settings when it quits, so it changes them only while Waveform is closed |
 | `xdg-desktop-portal/hyprland-portals.conf` | `~/.config/xdg-desktop-portal/` | Omarchy's portal choices, plus Open/Save dialogs ("upload a file" in the browser) in Nautilus instead of the plain GTK chooser |
 | `xdg-desktop-portal/portals/nautilus.portal` | `~/.local/share/xdg-desktop-portal/portals/` | Declares Nautilus as a file-chooser backend: Nautilus serves the interface itself but ships no `.portal` file |
 | `systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf` | `~/.config/systemd/user/xdg-desktop-portal.service.d/` | Points the portal service at the user folder above, refreshed at each start with links to every system backend and to `hyprland-portals.conf` (the service reads its config only from that folder once it is set) |
@@ -139,6 +141,22 @@ Omarchy's copy is used (buttons full colour at rest) until the plugin is
 rebuilt. `bin/omarchy-custom-check` rebuilds it from the post-update and
 post-boot hooks; by hand, run `titlebars/build.sh` and log out and back in. To
 go back to Omarchy's plugin for good, delete that `.so` and run `hyprctl reload`.
+
+## Tracktion Waveform
+
+Waveform Free (Tracktion's DAW) runs from its official Linux `.deb`, repackaged
+for pacman by `packages/waveform14/PKGBUILD` so it installs, updates and
+uninstalls like any other package. The `.deb` itself is not tracked: it sits
+behind a free Tracktion account, so `install.sh` cannot fetch it.
+
+1. Get the `.deb` with the Tracktion Download Manager (from tracktion.com, signed
+   in; it saves to `~/Downloads`).
+2. Copy it next to the PKGBUILD, set `pkgver` and `sha256sums` to match, and run
+   `makepkg -si` there. Every library it needs is already part of Omarchy.
+
+Updating is the same steps with the newer `.deb`; `sudo pacman -R waveform14`
+removes it. Opened from the launcher, it takes the current theme's colours
+(see `bin/waveform-theme-sync` above).
 
 ## Not tracked here
 

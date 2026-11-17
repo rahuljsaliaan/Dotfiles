@@ -82,13 +82,16 @@ copy omarchy/hooks/post-boot.d/qrg-hyprland-guide "$HOME/.config/omarchy/hooks/p
 copy omarchy/clone-baselines                     "$HOME/.config/omarchy/clone-baselines"
 
 # Screensaver scripts, the floating tmux prompt, browser-here, and the update check.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide omarchy-lock-screens; do
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide omarchy-lock-screens waveform-theme-sync waveform14-themed; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
 
 # Teams for Linux launcher, run natively on Wayland (see the file's comment).
 copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
 copy teams-for-linux/config.json         "$HOME/.config/teams-for-linux/config.json"
+
+# Tracktion Waveform launcher that starts it in the current theme's colours.
+copy applications/waveform14.desktop "$HOME/.local/share/applications/waveform14.desktop"
 
 # Open/Save dialogs in Nautilus instead of the plain GTK chooser.
 copy xdg-desktop-portal/hyprland-portals.conf  "$HOME/.config/xdg-desktop-portal/hyprland-portals.conf"

@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Colour Tracktion Waveform 14 from the current Omarchy theme.
+
+Waveform 14's colour scheme is not a palette but seven numbers (the sliders in
+Settings > Appearance > Colour scheme), saved in Waveform.settings as the
+COLOURSETTINGS element of the colourSettings_v14 value:
+
+  hue, saturation, backgroundBrightness  the panels: HSV of the theme background
+  highlightsBrightness                   text and lines: brightness of foreground
+  primaryAccentHue                       buttons, playhead, selection: accent
+  secondaryAccentHue                     active tabs, selected items: selection
+  vividness                              how saturated the accents are
+
+Waveform tones the scheme down a little (background saturation 65.7 shows as
+57%, an accent at vividness 73.5 as 42% saturated), so both are scaled up to
+land on the theme's own colours. Factors measured on Waveform 14.1.24.
+
+They are worked out from the theme's colors.toml. Waveform writes its whole
+settings file back when it quits, so this only edits it while Waveform is
+closed; if Waveform is running, it says so and changes nothing.
+
+Usage: waveform-theme-sync [--print]   (--print shows the values, writes nothing)
+Run by waveform14-themed (the launcher's Waveform entry) each time Waveform starts.
+"""
+import colorsys
+import os
+import re
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
+COLORS = STATE / "omarchy/current/theme/colors.toml"
+SETTINGS = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "Tracktion/Waveform/Waveform.settings"
+SATURATION_GAIN = 65.7 / 57.1
+VIVIDNESS_GAIN = 1.5 * 49.0 / 42.0
+
+
+def hsv(hex_colour):
+    h = hex_colour.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return colorsys.rgb_to_hsv(r, g, b)  # all 0..1
+
+
+def scheme(colors):
+    bg_h, bg_s, bg_v = hsv(colors["background"])
+    _, _, fg_v = hsv(colors["foreground"])
+    acc_h, acc_s, _ = hsv(colors.get("accent", colors["blue"]))
+    sec_h, sec_s, _ = hsv(colors.get("selection", colors.get("accent", colors["blue"])))
+    if sec_s < 0.15:  # a grey selection colour: use the accent's hue
+        sec_h = acc_h
+    # A near-grey background has no meaningful hue: keep the accent's.
+    hue = bg_h if bg_s > 0.08 else acc_h
+    return {
+        "hue": round(hue * 360, 1),
+        "saturation": round(min(100.0, bg_s * 100 * SATURATION_GAIN), 1),
+        "backgroundBrightness": round(bg_v * 100, 1),
+        "highlightsBrightness": round(fg_v * 100, 1),
+        "vividness": round(min(100.0, acc_s * 100 * VIVIDNESS_GAIN), 1),
+        "primaryAccentHue": round(acc_h * 360, 1),
+        "secondaryAccentHue": round(sec_h * 360, 1),
+    }
+
+
+def waveform_running():
+    return subprocess.run(["pgrep", "-x", "Waveform14"], capture_output=True).returncode == 0
+
+
+def main():
+    with open(COLORS, "rb") as f:
+        values = scheme(tomllib.load(f))
+    if "--print" in sys.argv:
+        for k, v in values.items():
+            print(f"{k}={v}")
+        return 0
+    if not SETTINGS.exists():
+        return 0  # Waveform has never been run: nothing to colour yet.
+    if waveform_running():
+        print("waveform-theme-sync: Waveform is running; close it and run waveform-theme-sync again.", file=sys.stderr)
+        return 1
+
+    text = SETTINGS.read_bytes().decode("utf-8")
+    match = re.search(r"<COLOURSETTINGS\b[^>]*/>", text)
+    if not match:
+        # No scheme saved yet: add one, in the same shape Waveform writes.
+        attrs = " ".join(f'{k}="{v}"' for k, v in values.items())
+        element = f'  <VALUE name="colourSettings_v14">\r\n    <COLOURSETTINGS {attrs}/>\r\n  </VALUE>\r\n'
+        text, n = re.subn(r"(<PROPERTIES>\r?\n)", lambda m: m.group(1) + element, text, count=1)
+        if not n:
+            print("waveform-theme-sync: unrecognised Waveform.settings; left unchanged.", file=sys.stderr)
+            return 1
+    else:
+        element = match.group(0)
+        for k, v in values.items():
+            if re.search(rf'\b{k}="[^"]*"', element):
+                element = re.sub(rf'\b{k}="[^"]*"', f'{k}="{v}"', element)
+            else:
+                element = element.replace("/>", f' {k}="{v}"/>', 1)
+        text = text[:match.start()] + element + text[match.end():]
+
+    tmp = SETTINGS.with_suffix(".settings.tmp")
+    tmp.write_bytes(text.encode("utf-8"))
+    os.replace(tmp, SETTINGS)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
