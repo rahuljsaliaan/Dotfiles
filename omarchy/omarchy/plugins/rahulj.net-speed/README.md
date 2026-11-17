@@ -59,14 +59,21 @@ fine from a terminal:
 ```bash
 ./bin/net-speed --no-record            # one snapshot, without touching the usage file
 ./bin/net-speed --iface wlp0s0         # measure a named interface instead
+./bin/net-speed --no-record --watch 1000  # a snapshot per line every second, as the bar runs it
 python3 -m unittest discover -s tests  # the collector's tests, on made-up sysfs trees
 ```
 
 The collector is stateless apart from the usage file. Byte counters are
 printed raw beside a monotonic timestamp, and the bar widget turns two
-consecutive snapshots into a rate. Nothing sleeps and nothing runs a
-subprocess: one call is a pass over `/sys/class/net` and one small file, which
-is why it can run every second.
+consecutive snapshots into a rate. Nothing runs a subprocess: one snapshot is
+a pass over `/sys/class/net` and one small file.
+
+The bar widget starts the collector once, with `--watch`, and reads a snapshot
+per line from it every interval. Starting Python afresh every second, as the
+widget used to, cost about 35 ms of CPU a time, far more than the snapshot
+itself; the running collector uses about 1 ms a second. It stops by itself
+when the bar stops reading or the shell that started it goes away, and the
+widget starts it again if it ever exits.
 
 The bar widget is the only thing that runs the collector. The panel reads the
 widget's snapshot, rates and history and draws them, so the bar and the panel
@@ -141,7 +148,7 @@ stopped, or before the plugin was installed, is not in them.
 - It runs with ordinary user rights and installs nothing outside the plugin
   folder, apart from the usage file under `~/.local/state`.
 - It runs no subprocesses. The collector is Python 3 with the standard library
-  only.
+  only, and one copy of it runs for as long as the bar does.
 
 ## Settings
 

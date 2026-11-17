@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Emit one snapshot of network counters as JSON, for the
+"""Emit snapshots of network counters as JSON, for the
 brightwalker25.net-speed bar widget.
 
-Usage: net-speed [--iface auto|NAME] [--no-record]
+Usage: net-speed [--iface auto|NAME] [--no-record] [--watch MS]
 
 Design notes:
 
 - Stateless apart from the usage file. Byte counters are printed raw with a
   monotonic timestamp and the bar takes deltas between two snapshots to get
-  rates. Nothing sleeps, nothing runs a subprocess, nothing touches the
-  network, so one call costs a pass over sysfs and one small file.
+  rates. Nothing runs a subprocess and nothing touches the network, so one
+  snapshot costs a pass over sysfs and one small file.
+- With --watch MS it keeps running and prints one snapshot per line every MS
+  milliseconds. The bar runs it that way: starting Python once a second cost
+  about 35 ms of CPU each time, far more than the snapshot itself. It stops
+  when the bar stops reading (a closed pipe) or the process that started it
+  goes away.
 - The measured link is the physical interface, never the route-following
   default. VPN clients commonly install a kill-switch dummy with the lowest
   default-route metric; following the route would measure that dummy, which
@@ -289,13 +294,33 @@ def summarise(days, today):
 # Entry point ---------------------------------------------------------------
 
 
-def parse_args(argv):
-    iface, record, errors = "auto", True, []
+WATCH_MIN_MS = 200
+WATCH_MAX_MS = 60000
+
+
+def parse_watch(value, errors):
+    try:
+        ms = int(value)
+    except (TypeError, ValueError):
+        errors.append("--watch needs milliseconds: %s" % value)
+        return None
+    return max(WATCH_MIN_MS, min(WATCH_MAX_MS, ms))
+
+
+def parse_args(argv, with_watch=False):
+    iface, record, watch, errors = "auto", True, None, []
     args = list(argv)
     while args:
         arg = args.pop(0)
         if arg == "--no-record":
             record = False
+        elif arg == "--watch":
+            if args:
+                watch = parse_watch(args.pop(0), errors)
+            else:
+                errors.append("--watch needs a value")
+        elif arg.startswith("--watch="):
+            watch = parse_watch(arg.split("=", 1)[1], errors)
         elif arg == "--iface":
             if args:
                 iface = args.pop(0) or "auto"
@@ -305,6 +330,8 @@ def parse_args(argv):
             iface = arg.split("=", 1)[1] or "auto"
         else:
             errors.append("unknown argument: %s" % arg)
+    if with_watch:
+        return iface, record, watch, errors
     return iface, record, errors
 
 
@@ -367,19 +394,71 @@ def collect(argv):
     return out
 
 
-def main(argv=None):
+def snapshot_line(argv):
     try:
-        out = collect(sys.argv[1:] if argv is None else argv)
+        out = collect(argv)
     except Exception as e:  # noqa: BLE001
         out = {"v": VERSION, "mono": time.monotonic(), "link": None, "tunnel": None,
                "ifaces": [], "today": None, "days": [], "error": "failed: %s" % e}
-    sys.stdout.write(json.dumps(out, separators=(",", ":")) + "\n")
+    return json.dumps(out, separators=(",", ":")) + "\n"
+
+
+def watch(argv, interval_ms, out=None, parent=None, ticks=None):
+    """Print a snapshot every interval_ms until the reader or the parent goes.
+
+    Ticks keep to a fixed schedule rather than drifting by the time each
+    snapshot takes; after a stall longer than one interval (a suspend) the
+    schedule starts again from now instead of printing a burst.
+    """
+    out = out or sys.stdout
+    parent = os.getppid() if parent is None else parent
+    period = interval_ms / 1000.0
+    due = time.monotonic()
+    count = 0
+    while ticks is None or count < ticks:
+        try:
+            out.write(snapshot_line(argv))
+            out.flush()
+        except (BrokenPipeError, ValueError, OSError):
+            return 0
+        count += 1
+        if os.getppid() != parent:
+            return 0
+        due += period
+        delay = due - time.monotonic()
+        if delay < 0:
+            due = time.monotonic()
+            delay = period
+        time.sleep(delay)
+    return 0
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    try:
+        _, _, interval_ms, _ = parse_args(argv, with_watch=True)
+    except Exception:  # noqa: BLE001
+        interval_ms = None
+    if interval_ms:
+        watch(argv, interval_ms)
+        return 0
+    sys.stdout.write(snapshot_line(argv))
     return 0
 
 
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        pass
     except Exception:  # noqa: BLE001 - never exit non-zero
         pass
+    # A reader that already went away would make the final flush raise.
+    try:
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError, OSError):
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError:
+            pass
     sys.exit(0)

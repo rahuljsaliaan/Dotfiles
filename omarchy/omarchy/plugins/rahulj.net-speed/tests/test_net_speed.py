@@ -475,5 +475,113 @@ class AlwaysJson(Base):
         self.assertEqual(out["link"]["rx"], 0)
 
 
+class Watching(Base):
+    """--watch: one long-running collector printing a snapshot per line."""
+
+    def start(self, *args, **kw):
+        full = dict(os.environ)
+        full.update(self.fs.env())
+        proc = subprocess.Popen([sys.executable, SCRIPT, *args], env=full,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, **kw)
+        self.addCleanup(proc.stderr.close)
+        self.addCleanup(lambda: proc.stdout.closed or proc.stdout.close())
+        return proc
+
+    def setUp(self):
+        super().setUp()
+        self.fs.add("wlp0s0", physical=True, wireless=True, rx=10, tx=20)
+
+    def test_one_snapshot_per_line_on_schedule(self):
+        proc = self.start("--watch", "200", "--no-record")
+        try:
+            lines = [json.loads(proc.stdout.readline()) for _ in range(4)]
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
+        for out in lines:
+            self.assertEqual(out["v"], 1)
+            self.assertEqual(out["link"]["name"], "wlp0s0")
+            self.assertIsNone(out["error"])
+        gaps = [b["mono"] - a["mono"] for a, b in zip(lines, lines[1:])]
+        for gap in gaps:
+            self.assertGreater(gap, 0.15)
+            self.assertLess(gap, 0.6)
+
+    def test_stops_quietly_when_the_reader_goes(self):
+        proc = self.start("--watch", "200", "--no-record")
+        json.loads(proc.stdout.readline())
+        proc.stdout.close()
+        self.assertEqual(proc.wait(timeout=5), 0)
+        self.assertEqual(proc.stderr.read(), "")
+
+    def test_stops_when_the_parent_goes(self):
+        out_file = os.path.join(self.fs.root, "watch.out")
+        launcher = (
+            "import subprocess, sys, time\n"
+            "with open(sys.argv[2], 'w') as f:\n"
+            "    p = subprocess.Popen([sys.executable, sys.argv[1], '--watch', '200', '--no-record'],"
+            " stdout=f, stderr=subprocess.DEVNULL)\n"
+            "print(p.pid, flush=True)\n"
+            "time.sleep(0.5)\n"
+        )
+        full = dict(os.environ)
+        full.update(self.fs.env())
+        parent = subprocess.run([sys.executable, "-c", launcher, SCRIPT, out_file],
+                                env=full, capture_output=True, text=True, timeout=10)
+        pid = int(parent.stdout.split()[0])
+        import time
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            try:
+                if os.waitpid(pid, os.WNOHANG)[0]:
+                    break
+            except ChildProcessError:
+                pass
+            time.sleep(0.05)
+        else:
+            os.kill(pid, 9)
+            self.fail("collector outlived the process that started it")
+        with open(out_file) as f:
+            self.assertGreaterEqual(len(f.read().splitlines()), 1)
+
+    def test_records_usage_as_single_runs_do(self):
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, self.fs.env()), mock.patch("time.sleep"):
+            net_speed.watch(["--watch", "200"], 200, out=buf, ticks=3)
+        lines = [json.loads(line) for line in buf.getvalue().splitlines()]
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(os.path.exists(self.fs.usage_file))
+        self.assertEqual(lines[-1]["today"]["date"], "2026-01-10")
+
+    def test_bad_value_gives_one_snapshot_with_an_error(self):
+        full = dict(os.environ)
+        full.update(self.fs.env())
+        proc = subprocess.run([sys.executable, SCRIPT, "--watch", "soon", "--no-record"],
+                              env=full, capture_output=True, text=True, timeout=10)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(len(proc.stdout.splitlines()), 1)
+        self.assertIn("--watch", json.loads(proc.stdout)["error"])
+
+    def test_interval_is_clamped(self):
+        self.assertEqual(net_speed.parse_args(["--watch", "5"], with_watch=True)[2], 200)
+        self.assertEqual(net_speed.parse_args(["--watch=999999"], with_watch=True)[2], 60000)
+        self.assertIsNone(net_speed.parse_args(["--no-record"], with_watch=True)[2])
+
+    def test_a_stall_restarts_the_schedule_instead_of_a_burst(self):
+        clock = iter([0.0, 0.0, 9.0, 9.0, 9.0, 9.0])
+        sleeps = []
+        with mock.patch.dict(os.environ, self.fs.env()), \
+                mock.patch("time.monotonic", lambda: next(clock, 9.0)), \
+                mock.patch("time.sleep", sleeps.append):
+            net_speed.watch(["--no-record"], 1000, out=io.StringIO(), ticks=2)
+        self.assertTrue(sleeps)
+        self.assertTrue(all(0 <= d <= 1.0 for d in sleeps), sleeps)
+
+
 if __name__ == "__main__":
     unittest.main()

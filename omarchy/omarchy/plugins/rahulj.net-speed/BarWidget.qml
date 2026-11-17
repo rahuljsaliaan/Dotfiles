@@ -15,7 +15,9 @@ import qs.Ui
 // the daily totals.
 //
 // The bar widget owns the collector, not the panel: the rows are live, so
-// `bin/net-speed` runs every intervalMs whether or not the panel is open.
+// `bin/net-speed --watch` keeps running and prints a snapshot every
+// intervalMs whether or not the panel is open. Starting it once a second
+// instead cost about 35 ms of CPU a time, mostly Python starting up.
 // The panel reads everything it shows from this file (snapshot, the rates,
 // history and formatRate) and never runs the collector itself.
 BarWidget {
@@ -85,17 +87,23 @@ BarWidget {
   // file rather than through PATH, as in the other brightwalker25 plugins.
   readonly property string collector: String(Qt.resolvedUrl("bin/net-speed")).replace(/^file:\/\//, "")
 
-  readonly property var command: root.iface === "auto"
+  readonly property var command: (root.iface === "auto"
     ? [root.collector]
-    : [root.collector, "--iface", root.iface]
+    : [root.collector, "--iface", root.iface]).concat(["--watch", String(root.intervalMs)])
 
+  // Starts the collector if it is not running; it then reports by itself.
   function poll() {
     if (proc.running) return
     proc.running = true
   }
 
+  // Set while the collector is stopped on purpose: its exit then starts
+  // the new one instead of being reported as a failure.
+  property bool restarting: false
+
   // Changing the pinned interface starts the readings afresh,
-  // so no rate is ever measured across two different links.
+  // so no rate is ever measured across two different links. A new interval
+  // needs a new collector too.
   function restart() {
     root.prev = null
     root.history = []
@@ -103,10 +111,18 @@ BarWidget {
     root.linkTx = -1
     root.tunnelRx = -1
     root.tunnelTx = -1
-    Qt.callLater(root.poll)
+    if (proc.running) {
+      root.restarting = true
+      proc.running = false
+      // Should the exit never be reported, this starts it anyway.
+      revive.restart()
+    } else {
+      Qt.callLater(root.poll)
+    }
   }
 
   onIfaceChanged: restart()
+  onIntervalMsChanged: restart()
 
   function fail(message) {
     root.error = message
@@ -185,36 +201,40 @@ BarWidget {
   Process {
     id: proc
     command: root.command
-    running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var t = String(text || "").trim()
-        if (t === "") root.fail(root.error !== "" ? root.error : "Collector printed nothing")
-        else root.ingest(t)
+    running: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        var t = String(line || "").trim()
+        if (t !== "") root.ingest(t)
       }
     }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var t = String(text || "").trim()
+    stderr: SplitParser {
+      onRead: function(line) {
+        var t = String(line || "").trim()
         if (t !== "" && root.linkRx < 0) root.error = t
       }
     }
-    // The collector always exits 0 by contract, so a non-zero exit is a
-    // crash or a missing interpreter; the empty stdout above has already
-    // blanked the rates.
+    // The collector only stops when told to, so any other exit is a crash
+    // or a missing interpreter: the rates are blanked and it is started
+    // again a little later.
     onExited: function(exitCode) {
-      if (exitCode !== 0 && root.error === "") root.error = "Collector exited " + exitCode
+      if (root.restarting) {
+        root.restarting = false
+        Qt.callLater(root.poll)
+        return
+      }
+      root.fail(root.error !== "" ? root.error : "Collector stopped (exit " + exitCode + ")")
+      revive.restart()
     }
   }
 
   Timer {
-    running: true
-    interval: root.intervalMs
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: root.poll()
+    id: revive
+    interval: 3000
+    onTriggered: {
+      root.restarting = false
+      root.poll()
+    }
   }
 
   // ---- Panel hosting
