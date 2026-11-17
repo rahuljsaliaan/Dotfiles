@@ -56,3 +56,7 @@ end
 -- that slid under the unmoved pointer took focus back from the new one. Focus
 -- still follows the mouse whenever the pointer itself moves onto a window.
 hl.config({ input = { mouse_refocus = false } })
+
+-- Pointing at a half-hidden column focuses it without sliding the row over to
+-- it; clicking it or the keys still bring it into view (hypr/hover-scroll.lua).
+require("hypr.hover-scroll")
