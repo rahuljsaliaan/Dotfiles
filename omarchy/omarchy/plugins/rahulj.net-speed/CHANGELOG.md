@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 - 2026-11-17
+
+### Changed
+
+- The bar widget starts the collector once and reads a snapshot per line
+  from it (`bin/net-speed --watch MS`), instead of starting Python every
+  second. Each start cost about 35 ms of CPU, mostly Python starting up; the
+  running collector uses about 1 ms a second and the same 13 MB it briefly
+  took on every start. The rates, panel and usage file are unchanged.
+- The collector stops by itself when the bar stops reading or the shell that
+  started it goes away, and the widget starts it again three seconds after
+  any unexpected exit. Changing the interval or the pinned interface swaps it
+  for a new one without a gap.
+
 ## 0.3.1 - 2026-09-26
 
 ### Changed
