@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Waveform14
+GenericName=Waveform
+Comment=Audio and MIDI workstation
+Exec=waveform14-themed %u
+Icon=waveform14
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;AudioVideoEditing;Sequencer;Recorder;Music;
+MimeType=application/x-waveform14-project;application/x-waveform14-archive;application/x-waveform14-edit;application/x-waveform14-edit-binary;application/x-waveform14-key;
+Version=1.0
+StartupWMClass=Waveform
