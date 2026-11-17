@@ -288,30 +288,23 @@ end)
 -- a sliver and the full screen. Floating windows and other layouts keep
 -- Omarchy's pixel resize.
 --
+-- Only the focused column changes width; every other column keeps its width
+-- and slides aside, as Hyprland's own mouse resize does. A wider column pushes
+-- its neighbours off screen, and a narrower one leaves them where the row puts
+-- them. (Taking the width from the neighbour instead, as these keys once did,
+-- squeezed a window that was never touched.) No column shrinks below
+-- MIN_SHARE of the screen, and Hyprland stops one at the full screen.
+--
 -- Hyprland sizes a column from its left edge, so a column on the right of the
 -- screen shrank away from the screen edge and left bare wallpaper there. The
--- keys now move the edge that faces the rest of the layout, by the column's
--- place on screen:
---
--- * With a neighbour fully on screen on that side, the edge between them moves,
---   as a split does: the column takes width from the neighbour or gives it
---   back, so the pair keeps its width. Resizing one alone would leave a pair
---   narrower than the screen, which Hyprland centres. The neighbour gives way
---   down to MIN_SHARE of the screen; past that the column grows alone and
---   pushes it off screen, so any column can still reach the full screen.
---   No column shrinks below MIN_SHARE.
--- * With no such neighbour the column resizes alone. A right-hand column (one
---   nearer the right edge, or a full-width one with columns only to its left)
---   then scrolls the view by the change, so its right edge stays put and the
---   column to its left comes into view. If that would leave bare wallpaper at
---   one screen edge while columns hide past the other, the view scrolls them
---   in to fill it.
---
--- The rightmost column on screen works its left edge, every other one its
--- right edge. Hyprland's colresize acts on the focused column only, so the
--- neighbour is focused for its half, with cursor warps off so the pointer stays
--- where it is, and focus goes straight back. Layout messages go to the focused
--- monitor's workspace, so nothing happens when that is not the window's own.
+-- keys move the edge that faces the rest of the layout, by the column's place
+-- on screen: a right-hand column (one with a neighbour on screen to its left
+-- only, or nearer the right edge, or a full-width one with columns only to its
+-- left) scrolls the view by the change, so its right edge stays put; any
+-- other column keeps its left edge. If that would leave bare wallpaper at one
+-- screen edge while columns hide past the other, the view scrolls them in to
+-- fill it. Layout messages go to the focused monitor's workspace, so nothing
+-- happens when that is not the window's own.
 local MIN_SHARE = 0.15
 local EDGE_SLACK = 40
 -- A neighbour counts as on screen only when it is wholly on it; a few pixels
@@ -394,7 +387,6 @@ local function column_place(window)
     row_left = row_left,
     row_right = row_right,
     right_hand = right_hand,
-    neighbour = right_hand and left or right,
   }
 end
 
@@ -402,9 +394,8 @@ local function colresize(share)
   hl.dispatch(hl.dsp.layout(string.format("colresize %+.4f", share)))
 end
 
--- The pixel change this press makes, kept so the column (and a neighbour that
--- gives way) stay at least MIN_SHARE of the screen. Hyprland stops a column at
--- the full screen itself.
+-- The pixel change this press makes, kept so the column stays at least
+-- MIN_SHARE of the screen. Hyprland stops a column at the full screen itself.
 local function resize_column(window, step)
   -- Layout messages go to the focused monitor's workspace, which is not always
   -- the focused window's; then nothing is resized rather than the wrong column.
@@ -429,27 +420,6 @@ local function resize_column(window, step)
     return
   end
   local share = px / place.screen
-
-  -- The neighbour gives way only while it stays at least MIN_SHARE wide. Past
-  -- that the column grows on its own and pushes the neighbour off screen, so
-  -- it can still reach the full screen; shrinking back brings the neighbour
-  -- into view again, and once it is fully on screen the edge between them
-  -- moves again.
-  local neighbour = place.neighbour
-  if neighbour and px > 0 and xy(neighbour.size) - px < min_width then
-    neighbour = nil
-  end
-
-  if neighbour then
-    local no_warps = hl.get_config("cursor.no_warps")
-    hl.config({ cursor = { no_warps = true } })
-    colresize(share)
-    hl.dispatch(hl.dsp.focus({ window = "address:" .. neighbour.address }))
-    colresize(-share)
-    hl.dispatch(hl.dsp.focus({ window = "address:" .. window.address }))
-    hl.config({ cursor = { no_warps = no_warps == true } })
-    return
-  end
 
   colresize(share)
   local now = hl.get_active_window()
@@ -491,6 +461,17 @@ local function resize_column(window, step)
   offset = math.floor(offset + 0.5)
   if offset ~= 0 then
     hl.dispatch(hl.dsp.layout(string.format("move %+d", offset)))
+    -- Hyprland's "move" also focuses whichever column ends up in the middle
+    -- of the screen, often the neighbour, and the next press then resized
+    -- that one. Focus goes straight back, with pointer warps off so the
+    -- pointer stays where it is.
+    local after = hl.get_active_window()
+    if not after or after.address ~= window.address then
+      local no_warps = hl.get_config("cursor.no_warps")
+      hl.config({ cursor = { no_warps = true } })
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. window.address }))
+      hl.config({ cursor = { no_warps = no_warps == true } })
+    end
   end
 end
 
