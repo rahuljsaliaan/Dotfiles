@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "rahulj.desk-map",
   "name": "Desk Map",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "rahulj",
-  "description": "A tiny map of the screens as they sit on the desk, each showing the workspace it is on; the focused one is outlined.",
+  "description": "A tiny map of the screens as they sit on the desk, each showing the workspace it is on; the focused one is outlined, and a screen with the scratchpad or console open is marked, with a label naming it.",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "BarWidget.qml" },
   "barWidget": {
