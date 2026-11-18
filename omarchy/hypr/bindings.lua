@@ -682,6 +682,45 @@ o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.offic
 hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
 hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
 
+-- Ctrl + H/J/K/L in Omarchy's menus and pickers. Their search box types plain
+-- letters, so, as in fzf and Neovim's pickers, Ctrl + J/K move down/up and
+-- Ctrl + H/L go back/open (left/right in a grid). While one of these layers is
+-- open the key reaches it as the arrow key, with no modifiers (sent the way
+-- jis.lua sends its keys); otherwise it goes to the app as usual
+-- (auto_consuming passes it on), so Ctrl + H/J/K/L in a terminal or Neovim are
+-- untouched.
+local MENU_LAYERS = {
+  "omarchy-menu", "omarchy-clipboard", "omarchy-emojis", "omarchy-dock-apps",
+  "omarchy-image-selector", "timsonner-nitty-griddy", "omarchy-keyboard-panel", "omarchy-reminders",
+}
+local function menu_open()
+  for _, namespace in ipairs(MENU_LAYERS) do
+    local layers = hl.get_layers({ namespace = namespace })
+    if layers and #layers > 0 then
+      return true
+    end
+  end
+  return false
+end
+local function menu_arrow(arrow)
+  return function()
+    if not menu_open() then
+      return { ok = false }
+    end
+    hl.dispatch(hl.dsp.send_key_state({ mods = "", key = arrow, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = "", key = arrow, state = "up" }))
+    end, { timeout = 30, type = "oneshot" })
+  end
+end
+_G.rahulj_keys.menu_open = menu_open
+_G.rahulj_keys.menu_arrow = {}
+for _, m in ipairs({ { "H", "Left", "back or left" }, { "J", "Down", "down" }, { "K", "Up", "up" }, { "L", "Right", "open or right" } }) do
+  local press = menu_arrow(m[2])
+  _G.rahulj_keys.menu_arrow[m[1]] = press
+  o.bind("CTRL + " .. m[1], "Menus: " .. m[3], press, { auto_consuming = true })
+end
+
 -- Nav mode shows a notification card for as long as it is on, since nothing
 -- else on screen says a submap is active. The card is the usual notification
 -- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept
