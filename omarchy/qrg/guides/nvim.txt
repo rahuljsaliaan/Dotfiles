@@ -2,7 +2,7 @@
 This setup's Neovim: LazyVim, leader Space, explorer on the right, lines wrap
 @legend N=Normal, I=Insert, V=Visual, C=Command line, Y=This setup's own
 // Written from ~/.config/nvim (LazyVim + lua/config/keymaps.lua, options.lua,
-// lua/plugins/ui.lua, markdown.lua). Keep in step with them.
+// lua/plugins/ui.lua, markdown.lua, lazyvim.json extras). Keep in step with them.
 // Replaces the plugin's bundled nvim.txt (same file name).
 
 ## What Leader means
@@ -67,6 +67,23 @@ H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default 
 [N] Space c d | Show the full error for this line | Errors are shortened at the line end here; this shows all of it | #diagnostics #error
 [N] ] d / [ d | Next / previous error or warning | #diagnostics
 [N] Space x x | All problems in a list (Trouble) | #diagnostics #trouble
+
+## Debug (DAP)
+[N] Space d b | Breakpoint on this line on/off | Space d B sets one with a condition | #debug #breakpoint
+[N] Space d c | Start debugging / continue | Space d a asks for arguments first | #debug #run
+[N] Space d O / Space d i / Space d o | Step over / into / out | #debug #step
+[N] Space d C | Run to the cursor | #debug #run
+[N] Space d u | Debugger panels on/off | Variables / stack / breakpoints / console | #debug #ui
+[N V] Space d e | Show the value of the expression | #debug #eval
+[N] Space d t | Stop debugging | #debug #stop
+
+## Tests
+[N] Space t r | Run the test under the cursor | Space t d debugs it instead | #test #run
+[N] Space t t / Space t T | Run this file's tests / every test file | #test #run
+[N] Space t l | Run the last test again | #test #rerun
+[N] Space t s | Test tree with pass/fail on/off | #test #summary
+[N] Space t o | Output of the test under the cursor | Space t O keeps an output panel open | #test #output
+[N] Space t w | Re-run this file's tests on every save | Press again to stop watching | #test #watch
 
 ## Git
 [N] Space g g | Lazygit | #git #lazygit
