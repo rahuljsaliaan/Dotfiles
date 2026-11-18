@@ -232,7 +232,7 @@ tweaks = [
      "        open: root.opened\n        // Esc closes it, as in the stock panels.\n        focusTarget: keyCatcher\n        contentWidth: panel.fittedContentWidth(Style.space(420))"),
     ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
      "        Flickable {\n            id: scroller",
-     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close() }\n\n        Flickable {\n            id: scroller"),
+     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close()\n            // j / k (or Down / Up) scroll, as in the stock panels.\n            onMoveRequested: function(dx, dy) { if (dy !== 0) scroller.contentY = Math.max(0, Math.min(Math.max(0, scroller.contentHeight - scroller.height), scroller.contentY + dy * Style.space(48))) } }\n\n        Flickable {\n            id: scroller"),
     # Omapop: its bar icon was sized from a loader with no size yet and drew nothing.
     ("io.github.jondkinney.omapop/BarWidget.qml",
      "            BarIcon {\n                anchors.fill: parent\n                color: button.foreground",
