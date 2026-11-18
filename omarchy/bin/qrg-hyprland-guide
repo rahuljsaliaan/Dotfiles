@@ -23,7 +23,7 @@ USER_BINDINGS = os.path.join(HOME, ".config/hypr/bindings.lua")
 OUT = os.path.join(HOME, ".config/qrg/guides/hyprland.txt")
 
 # Bindings that are plumbing rather than keys to remember.
-SKIP = [r"^Omapop ", r"^Direct input for the terminal prefix$"]
+SKIP = [r"^Omapop (selection|dismiss)", r"^Direct input for the terminal prefix$"]
 
 # (section, description pattern), first match wins; order is the guide's order.
 SECTIONS = [
@@ -37,7 +37,7 @@ SECTIONS = [
     ("Screenshots, recording and zoom", r"Screenshot|Screenrecording|Color picker|Capture menu|OCR|Share|Transcode|Zoom|zoom|webcam|Download Video|Copy URL"),
     ("Clipboard and text", r"Universal|Clipboard|Emojis|Select all"),
     ("Notifications and reminders", r"otification|Dismiss|eminder"),
-    ("Bar panels and menus", r"Bar panel|^Audio$|^Bluetooth$|^Network$|^Power$|Calendar$|World clock|weather|Show time|battery|Hardware menu|Theme menu|Background switcher|Toggle menu|locking on idle|keybindings"),
+    ("Bar panels and menus", r"Bar panel|^Audio$|^Bluetooth$|^Network$|^Power$|Calendar$|World clock|weather|Show time|battery|Hardware menu|Theme menu|Background switcher|Toggle menu|locking on idle|keybindings|^AI usage$|^Quick reference guides$|^Agents panel$|^Agent skills$|^Network speed$|^Omapop panel$"),
     ("Sound, media, brightness and input", r"Volume|Mute|[Tt]rack|^Play$|^Pause$|[Bb]rightness|backlight|media source|audio output|[Tt]ouchpad|Eject|dictation|Superwhisper|input language"),
     ("Apps", r".*"),
 ]

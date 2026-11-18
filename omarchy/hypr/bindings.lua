@@ -660,6 +660,16 @@ o.bind("SUPER + CTRL + ALT + Q", "Close all windows", "omarchy-hyprland-window-c
 o.bind("SUPER + CTRL + M", "Toggle laptop display", "omarchy-hyprland-monitor-internal toggle") -- Super + Ctrl + Delete
 o.bind("SUPER + CTRL + ALT + M", "Toggle laptop display mirroring", "omarchy-hyprland-monitor-internal-mirror toggle") -- Super + Ctrl + Alt + Delete
 
+-- Bar panels by name. Super + Ctrl opens the system panels (Audio, Network...);
+-- Super + Ctrl + Alt peeks at the rest, as it shows battery, time and weather.
+o.bind("SUPER + CTRL + U", "AI usage", { panel = "jim.aiusage" })
+o.bind("SUPER + CTRL + G", "Quick reference guides", { panel = "jcmarin.qrg" })
+o.bind("SUPER + CTRL + ALT + A", "Agents panel", { panel = "omarchy.agents" })
+o.bind("SUPER + CTRL + ALT + S", "Agent skills", { panel = "oliwier.agent-skills-manager" })
+o.bind("SUPER + CTRL + ALT + N", "Network speed", { panel = "rahulj.net-speed" })
+o.bind("SUPER + CTRL + ALT + P", "Hyprpin panel", { panel = "io.github.jondkinney.hyprpin" })
+o.bind("SUPER + CTRL + ALT + O", "Omapop panel", { panel = "io.github.jondkinney.omapop" })
+
 -- Nav mode shows a notification card for as long as it is on, since nothing
 -- else on screen says a submap is active. The card is the usual notification
 -- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept
