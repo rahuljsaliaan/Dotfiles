@@ -348,6 +348,12 @@ Panel {
       anchors.fill: parent
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      // j / k (or Down / Up) scroll, as in the AI usage panel.
+      onMoveRequested: function(dx, dy) {
+        if (dy === 0) return
+        var max = Math.max(0, flick.contentHeight - flick.height)
+        flick.contentY = Math.max(0, Math.min(max, flick.contentY + dy * Style.space(48)))
+      }
 
       Flickable {
         id: flick

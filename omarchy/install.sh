@@ -102,6 +102,7 @@ copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.conf
 copy omarchy/themed/starship.toml.tpl "$HOME/.config/omarchy/themed/starship.toml.tpl"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy tmux/theme-colors.sh   "$HOME/.config/tmux/theme-colors.sh"
+copy herdr/config.toml      "$HOME/.config/herdr/config.toml"
 copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy qrg/guides/nvim.txt    "$HOME/.config/qrg/guides/nvim.txt"
 copy bash/.bashrc           "$HOME/.bashrc"
@@ -231,7 +232,7 @@ tweaks = [
      "        open: root.opened\n        // Esc closes it, as in the stock panels.\n        focusTarget: keyCatcher\n        contentWidth: panel.fittedContentWidth(Style.space(420))"),
     ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
      "        Flickable {\n            id: scroller",
-     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close() }\n\n        Flickable {\n            id: scroller"),
+     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close()\n            // j / k (or Down / Up) scroll, as in the stock panels.\n            onMoveRequested: function(dx, dy) { if (dy !== 0) scroller.contentY = Math.max(0, Math.min(Math.max(0, scroller.contentHeight - scroller.height), scroller.contentY + dy * Style.space(48))) } }\n\n        Flickable {\n            id: scroller"),
     # Omapop: its bar icon was sized from a loader with no size yet and drew nothing.
     ("io.github.jondkinney.omapop/BarWidget.qml",
      "            BarIcon {\n                anchors.fill: parent\n                color: button.foreground",

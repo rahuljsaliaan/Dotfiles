@@ -35,7 +35,7 @@ H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default 
 [N] Shift+H / Shift+L | Previous / next open file | #buffers #tabs
 [N] Space b d | Close this file (buffer) | #buffers #close
 [N] Space - / Space | | Split below / to the right | #split #window
-[N] Ctrl+H/J/K/L | Move to the window left/down/up/right | #window #focus
+[N] Ctrl+H/J/K/L | Move to the window left/down/up/right | Neovim's own splits. tmux and herdr panes are Ctrl+Alt+H/J/K/L | #window #focus #hjkl
 [N] Space w d | Close this window | #window #close
 
 ## Editing

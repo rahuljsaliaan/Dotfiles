@@ -173,12 +173,210 @@ local function fit_float(address)
   size_float(window)
 end
 
+local function pair(v)
+  if type(v) ~= "table" then return 0, 0 end
+  return v.x or v[1] or 0, v.y or v[2] or 0
+end
+
+-- Super + T twice should put a window back where it was, but Hyprland tiles a
+-- window again as a brand-new one: the scrolling layout puts it after the
+-- column in the middle of the row, dwindle splits whatever the focus is on. So
+-- the window's place among its workspace's tiled windows is noted as it floats
+-- and put back as it tiles. A place is a column of the row, windows that share
+-- a column's x stacking in it, counted from the left; scrolling swaps the
+-- window's column back to it (and gives it its old width). Dwindle notes the
+-- window it was split from and which side of it it was on, and tiles it there
+-- again by preselecting that side of the old neighbour.
+local PLACE_SLACK = 20
+local places = {}
+
+local function tiled_columns(workspace)
+  local list = {}
+  for _, other in ipairs(workspace:get_windows() or {}) do
+    if not other.floating and other.mapped and not other.hidden then
+      local x, y = pair(other.at)
+      list[#list + 1] = { window = other, x = x, y = y }
+    end
+  end
+  table.sort(list, function(a, b) return a.x < b.x end)
+
+  local columns, column_x = {}, nil
+  for _, entry in ipairs(list) do
+    if not column_x or entry.x - column_x > PLACE_SLACK then
+      columns[#columns + 1] = {}
+      column_x = entry.x
+    end
+    local column = columns[#columns]
+    column[#column + 1] = entry
+  end
+  for _, column in ipairs(columns) do
+    table.sort(column, function(a, b) return a.y < b.y end)
+  end
+  return columns
+end
+
+local function column_of(columns, address)
+  for i, column in ipairs(columns) do
+    for _, entry in ipairs(column) do
+      if entry.window.address == address then return i end
+    end
+  end
+end
+
+-- The tiled window a dwindle window was split from: the one that takes over
+-- its space when it floats. It shares a whole edge with the window (same span,
+-- touching across the gap); failing that, the neighbour with the longest shared
+-- edge. Returns it and the side of it the window sat on ("l", "r", "u", "d").
+local EDGE_GAP = 40
+local EDGE_SPAN = 6
+
+local function dwindle_sibling(window)
+  local bx, by = pair(window.at)
+  local bw, bh = pair(window.size)
+  local best, best_side, best_overlap, best_exact
+
+  for _, other in ipairs(window.workspace:get_windows() or {}) do
+    if other.address ~= window.address and not other.floating and other.mapped and not other.hidden then
+      local ox, oy = pair(other.at)
+      local ow, oh = pair(other.size)
+      local side, overlap, exact
+      local x_overlap = math.min(bx + bw, ox + ow) - math.max(bx, ox)
+      local y_overlap = math.min(by + bh, oy + oh) - math.max(by, oy)
+      if math.abs(ox - (bx + bw)) <= EDGE_GAP and y_overlap > 0 then
+        side, overlap, exact = "r", y_overlap, math.abs(oy - by) <= EDGE_SPAN and math.abs(oh - bh) <= EDGE_SPAN
+      elseif math.abs((ox + ow) - bx) <= EDGE_GAP and y_overlap > 0 then
+        side, overlap, exact = "l", y_overlap, math.abs(oy - by) <= EDGE_SPAN and math.abs(oh - bh) <= EDGE_SPAN
+      elseif math.abs(oy - (by + bh)) <= EDGE_GAP and x_overlap > 0 then
+        side, overlap, exact = "d", x_overlap, math.abs(ox - bx) <= EDGE_SPAN and math.abs(ow - bw) <= EDGE_SPAN
+      elseif math.abs((oy + oh) - by) <= EDGE_GAP and x_overlap > 0 then
+        side, overlap, exact = "u", x_overlap, math.abs(ox - bx) <= EDGE_SPAN and math.abs(ow - bw) <= EDGE_SPAN
+      end
+      if side and (not best or (exact and not best_exact) or (exact == best_exact and overlap > best_overlap)) then
+        best, best_side, best_overlap, best_exact = other, side, overlap, exact
+      end
+    end
+  end
+  return best, best_side
+end
+
+local function remember_place(window)
+  -- A floating window keeps the place noted when it floated.
+  if window.floating then return end
+  places[window.address] = nil
+  if (window.fullscreen or 0) ~= 0 or not window.workspace then return end
+  if window.workspace.tiled_layout == "dwindle" then
+    local sibling, side = dwindle_sibling(window)
+    if sibling then
+      places[window.address] = { workspace = window.workspace.id, sibling = sibling.address, side = side }
+    end
+    return
+  end
+  local columns = tiled_columns(window.workspace)
+  local index = column_of(columns, window.address)
+  if not index then return end
+  -- A window that sat below others in a column comes back as its own column
+  -- next to theirs: Hyprland tiles it into a column of its own, and putting it
+  -- back in the stack is not something it offers.
+  local below = columns[index][1].window.address ~= window.address
+  places[window.address] = {
+    workspace = window.workspace.id,
+    column = below and index + 1 or index,
+    width = (pair(window.size)),
+  }
+end
+
+-- The width a column's share of the row is measured against: the screen less
+-- the outer gaps.
+local function row_width(monitor)
+  if not monitor or not monitor.width then return nil end
+  local width = monitor.width / (monitor.scale or 1)
+  if (monitor.transform or 0) % 2 == 1 then width = (monitor.height or 0) / (monitor.scale or 1) end
+  local gaps = hl.get_config("general.gaps_out")
+  if type(gaps) == "table" then
+    width = width - (gaps.left or 0) - (gaps.right or 0)
+  elseif type(gaps) == "number" then
+    width = width - 2 * gaps
+  end
+  return width
+end
+
+-- Layout messages go to the focused monitor's workspace, which is the
+-- window's own only when it is the one on screen; a special workspace (the
+-- scratchpad) counts while it is open, and the focused window is on it.
+local function messages_reach(window)
+  local active = hl.get_active_workspace()
+  if not active or not window.workspace then return false end
+  if active.id == window.workspace.id then return true end
+  local focused = hl.get_active_window()
+  return window.workspace.name:sub(1, 8) == "special:" and focused ~= nil and focused.address == window.address
+end
+
+local function restore_place(window)
+  local place = places[window.address]
+  places[window.address] = nil
+  if not place or not window.workspace or window.workspace.id ~= place.workspace then return end
+  if window.workspace.tiled_layout ~= "scrolling" then return end
+
+  if not messages_reach(window) then return end
+
+  local columns = tiled_columns(window.workspace)
+  local from = column_of(columns, window.address)
+  if not from then return end
+  local steps = math.min(place.column, #columns) - from
+  for _ = 1, math.abs(steps) do
+    hl.dispatch(hl.dsp.layout("swapcol " .. (steps < 0 and "l" or "r")))
+  end
+
+  -- A tiled window gets the default column width; give back the one it had.
+  local row = row_width(window.monitor)
+  local now = hl.get_window("address:" .. window.address)
+  if not row or not now then return end
+  local missing = place.width - (pair(now.size))
+  if math.abs(missing) > 6 then
+    hl.dispatch(hl.dsp.layout(string.format("colresize %+.4f", missing / row)))
+  end
+end
+
+-- Tile a floating dwindle window next to the window it was split from, on the
+-- side it was on: preselect that side of the old neighbour (the side of it the
+-- new window opens on is the opposite of where the neighbour was) and tile with
+-- the neighbour focused. Returns false, leaving everything as it was, when
+-- there is nothing to go back to.
+local OPENS_ON = { l = "r", r = "l", u = "d", d = "u" }
+
+local function tile_in_place(window)
+  local place = places[window.address]
+  if not place or not place.sibling or not window.workspace or window.workspace.id ~= place.workspace then return false end
+  if window.workspace.tiled_layout ~= "dwindle" then return false end
+  if not messages_reach(window) then return false end
+
+  local sibling = hl.get_window("address:" .. place.sibling)
+  if not sibling or sibling.floating or not sibling.mapped or sibling.hidden
+      or not sibling.workspace or sibling.workspace.id ~= place.workspace then
+    return false
+  end
+
+  places[window.address] = nil
+  local no_warps = hl.get_config("cursor.no_warps")
+  hl.config({ cursor = { no_warps = true } })
+  hl.dispatch(hl.dsp.focus({ window = "address:" .. sibling.address }))
+  hl.dispatch(hl.dsp.layout("preselect " .. OPENS_ON[place.side]))
+  hl.dispatch(hl.dsp.window.float({ action = "off", window = window }))
+  hl.dispatch(hl.dsp.focus({ window = "address:" .. window.address }))
+  hl.config({ cursor = { no_warps = no_warps == true } })
+  return true
+end
+
 local function toggle_floating()
   local window = hl.get_active_window()
-  hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  if window then remember_place(window) end
+  if not (window and window.floating and tile_in_place(window)) then
+    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  end
   if window then
     local now = hl.get_window("address:" .. window.address)
     if now and not now.floating then
+      restore_place(now)
       for _, tag in ipairs({ SCRATCHPAD_FLOAT, OLD_SCRATCHPAD_FILL }) do
         if has_tag(now, tag) then set_tag(now, "-" .. tag) end
       end
@@ -188,6 +386,10 @@ local function toggle_floating()
   end
   user_tiled.remember(window)
 end
+
+hl.on("window.close", function(closed)
+  if closed and closed.address then places[closed.address] = nil end
+end)
 
 hl.on("workspace.special_active", function(workspace)
   if not workspace or workspace.name ~= SCRATCHPAD then return end
@@ -209,7 +411,7 @@ _G.rahulj_keys = { pop_out = pop_out, toggle_floating = toggle_floating, fit_flo
 hl.unbind("SUPER + O")
 o.bind("SUPER + O", "Pop window out (Hyprpin or float & pin)", hyprpin_or("toggle_pop", pop_out))
 hl.unbind("SUPER + T")
-o.bind("SUPER + T", "Toggle window floating/tiling (Hyprpin dock)", hyprpin_or("toggle_dock", toggle_floating))
+o.bind("SUPER + T", "Toggle window floating/tiling (tiles back in its old place; Hyprpin dock)", hyprpin_or("toggle_dock", toggle_floating))
 hl.unbind("SUPER + P")
 o.bind("SUPER + P", "Cycle Hyprpin placement / pseudo window", hyprpin_or("cycle", function() hl.dispatch(hl.dsp.window.pseudo()) end))
 o.bind("SUPER + Z", "Zoom Hyprpin pop-out", hyprpin_or("toggle_big"))
@@ -353,8 +555,40 @@ local function wrap_target(dir)
   return nil
 end
 
+-- Inside a window group, left/right walk the group's tabs first: the tabs sit
+-- side by side in the group bar, so H/L reach them as they read. Past the
+-- first or last tab the key goes on to the next window as usual.
+local function group_step(dir)
+  local active = hl.get_active_window()
+  local group = active and active.group
+  if not group or (group.size or 0) < 2 or type(group.members) ~= "table" then
+    return false
+  end
+  local index
+  for i, member in ipairs(group.members) do
+    if member.address == active.address then
+      index = i
+      break
+    end
+  end
+  if not index then
+    return false
+  end
+  if dir == "l" and index > 1 then
+    hl.dispatch(hl.dsp.group.prev())
+    return true
+  elseif dir == "r" and index < #group.members then
+    hl.dispatch(hl.dsp.group.next())
+    return true
+  end
+  return false
+end
+
 local function focus_or_wrap(dir)
   return function()
+    if group_step(dir) then
+      return
+    end
     if has_window_towards(dir) then
       hl.dispatch(hl.dsp.focus({ direction = dir }))
       return
@@ -369,7 +603,7 @@ end
 hl.define_submap("nav", function()
   for _, d in ipairs(vim_directions) do
     if d.dir == "l" or d.dir == "r" then
-      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (wraps)", focus_or_wrap(d.dir))
+      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (group tabs first; wraps)", focus_or_wrap(d.dir))
     else
       o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", within_workspace(d.dir, hl.dsp.focus({ direction = d.dir })))
     end
@@ -380,6 +614,118 @@ hl.define_submap("nav", function()
   o.bind("ESCAPE", "Nav mode: leave", hl.dsp.submap("reset"))
   o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
 end)
+
+-- One keyboard language. Super + H/J/K/L moves between windows and Super + Alt
+-- + H/J/K/L moves a window into a group, as Super (+ Alt) + arrows do, so
+-- nothing needs the 60% board's Fn layer. Focus behaves as in Nav mode: it
+-- stays on this screen, H/L wrap around the row and walk a group's tabs first.
+-- Omarchy's Super + arrow binds stay (they still cross to the next monitor).
+-- The descriptions are Omarchy's own, so the key list and the Quick Reference
+-- guide show each pair on one line (Super + H / Super + Left).
+local focus_word = { l = "left", r = "right", u = "above", d = "below" }
+local group_word = { l = "left", r = "right", u = "top", d = "bottom" }
+for _, d in ipairs(vim_directions) do
+  local focus = (d.dir == "l" or d.dir == "r") and focus_or_wrap(d.dir)
+    or within_workspace(d.dir, hl.dsp.focus({ direction = d.dir }))
+  o.bind_expressions[focus] = string.format('hl.dsp.focus({ direction = "%s" })', d.dir)
+  o.rebind("SUPER + " .. d.key, "Focus on " .. focus_word[d.dir] .. " window", focus)
+
+  local into = within_workspace(d.dir, hl.dsp.window.move({ into_group = d.dir }))
+  o.bind_expressions[into] = string.format('hl.dsp.window.move({ into_group = "%s" })', d.dir)
+  o.rebind("SUPER + ALT + " .. d.key, "Move window to group on " .. group_word[d.dir], into)
+end
+_G.rahulj_keys.focus_or_wrap = focus_or_wrap
+_G.rahulj_keys.group_step = group_step
+
+-- The keys that sat on J/K/L move to keys that still say what they do.
+o.bind("SUPER + Y", "Toggle window split", hl.dsp.layout("togglesplit")) -- was Super + J; Y is a fork
+o.bind("SUPER + N", "Cycle workspace layout", "omarchy-hyprland-workspace-layout-toggle") -- was Super + L
+o.bind("SUPER + ALT + N", "Cycle workspace layout back", "omarchy-hyprland-workspace-layout-toggle back") -- was Super + Alt + L
+-- The key lists sit on / (the ? key), paired the way Enter opens them: Super
+-- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr.
+o.rebind("SUPER + SLASH", "Keybindings", "omarchy-menu-keybindings") -- was monitor scaling up
+o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-menu-tmux-keybindings") -- was monitor scaling down
+o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-menu-herdr-keybindings")
+hl.unbind("SUPER + CTRL + K")
+o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
+o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
+
+-- Fn-free keys in place of Omarchy's on the 60% board's Fn layer (`, Home,
+-- Delete). Omarchy's are removed, so the key list shows one key per action.
+for _, old in ipairs({
+  "SUPER + grave", "SUPER + SHIFT + grave", "SUPER + Home", "SUPER + ALT + Home",
+  "CTRL + ALT + DELETE", "SUPER + CTRL + Delete", "SUPER + CTRL + ALT + Delete",
+}) do
+  hl.unbind(old)
+end
+o.bind("SUPER + D", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole")) -- Super + `; D for drop-down
+o.bind("SUPER + ALT + D", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false })) -- as Super + Alt + S for the scratchpad
+o.bind("SUPER + R", "Restore window width", "omarchy-hyprland-window-width restore") -- Super + Home
+o.bind("SUPER + ALT + R", "Save window width", "omarchy-hyprland-window-width save") -- Super + Alt + Home
+o.bind("SUPER + CTRL + ALT + Q", "Close all windows", "omarchy-hyprland-window-close-all") -- Ctrl + Alt + Delete
+o.bind("SUPER + CTRL + M", "Toggle laptop display", "omarchy-hyprland-monitor-internal toggle") -- Super + Ctrl + Delete
+o.bind("SUPER + CTRL + ALT + M", "Toggle laptop display mirroring", "omarchy-hyprland-monitor-internal-mirror toggle") -- Super + Ctrl + Alt + Delete
+
+-- Bar panels by name. Super + Ctrl opens the system panels (Audio, Network...);
+-- Super + Ctrl + Alt peeks at the rest, as it shows battery, time and weather.
+o.bind("SUPER + CTRL + U", "AI usage", { panel = "jim.aiusage" })
+o.bind("SUPER + CTRL + G", "Quick reference guides", { panel = "jcmarin.qrg" })
+o.bind("SUPER + CTRL + ALT + A", "Agents panel", { panel = "omarchy.agents" })
+o.bind("SUPER + CTRL + ALT + S", "Agent skills", { panel = "oliwier.agent-skills-manager" })
+o.bind("SUPER + CTRL + ALT + N", "Network speed", { panel = "rahulj.net-speed" })
+o.bind("SUPER + CTRL + ALT + P", "Hyprpin panel", { panel = "io.github.jondkinney.hyprpin" })
+o.bind("SUPER + CTRL + ALT + O", "Omapop panel", { panel = "io.github.jondkinney.omapop" })
+
+-- App keys that opened an installer or an app not used here. A web app's
+-- description is also the title it is focused by when already open.
+o.rebind("SUPER + SHIFT + M", "YouTube Music", { webapp = "https://music.youtube.com/", focus = true }) -- was Spotify
+o.rebind("SUPER + SHIFT + G", "WhatsApp", { webapp = "https://web.whatsapp.com/", focus = true }) -- was Signal
+o.rebind("SUPER + SHIFT + ALT + G", "Google Messages", { webapp = "https://messages.google.com/web/conversations", focus = true }) -- was WhatsApp
+hl.unbind("SUPER + SHIFT + CTRL + G") -- Google Messages, now on Super + Shift + Alt + G
+hl.unbind("SUPER + SHIFT + SLASH") -- 1Password, not installed
+o.rebind("SUPER + SHIFT + E", "Gmail", { webapp = "https://mail.google.com/", focus = true }) -- was HEY
+o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.office.com/mail/", focus = true }) -- was HEY new email
+hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
+hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
+
+-- Ctrl + H/J/K/L in Omarchy's menus and pickers. Their search box types plain
+-- letters, so, as in fzf and Neovim's pickers, Ctrl + J/K move down/up and
+-- Ctrl + H/L go back/open (left/right in a grid). While one of these layers is
+-- open the key reaches it as the arrow key, with no modifiers (sent the way
+-- jis.lua sends its keys); otherwise it goes to the app as usual
+-- (auto_consuming passes it on), so Ctrl + H/J/K/L in a terminal or Neovim are
+-- untouched.
+local MENU_LAYERS = {
+  "omarchy-menu", "omarchy-clipboard", "omarchy-emojis", "omarchy-dock-apps",
+  "omarchy-image-selector", "timsonner-nitty-griddy", "omarchy-keyboard-panel", "omarchy-reminders",
+}
+local function menu_open()
+  for _, namespace in ipairs(MENU_LAYERS) do
+    local layers = hl.get_layers({ namespace = namespace })
+    if layers and #layers > 0 then
+      return true
+    end
+  end
+  return false
+end
+local function menu_arrow(arrow)
+  return function()
+    if not menu_open() then
+      return { ok = false }
+    end
+    hl.dispatch(hl.dsp.send_key_state({ mods = "", key = arrow, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = "", key = arrow, state = "up" }))
+    end, { timeout = 30, type = "oneshot" })
+  end
+end
+_G.rahulj_keys.menu_open = menu_open
+_G.rahulj_keys.menu_arrow = {}
+for _, m in ipairs({ { "H", "Left", "back or left" }, { "J", "Down", "down" }, { "K", "Up", "up" }, { "L", "Right", "open or right" } }) do
+  local press = menu_arrow(m[2])
+  _G.rahulj_keys.menu_arrow[m[1]] = press
+  o.bind("CTRL + " .. m[1], "Menus: " .. m[3], press, { auto_consuming = true })
+end
 
 -- Nav mode shows a notification card for as long as it is on, since nothing
 -- else on screen says a submap is active. The card is the usual notification
