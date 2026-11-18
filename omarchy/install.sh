@@ -102,6 +102,7 @@ copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.conf
 copy omarchy/themed/starship.toml.tpl "$HOME/.config/omarchy/themed/starship.toml.tpl"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy tmux/theme-colors.sh   "$HOME/.config/tmux/theme-colors.sh"
+copy herdr/config.toml      "$HOME/.config/herdr/config.toml"
 copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy qrg/guides/nvim.txt    "$HOME/.config/qrg/guides/nvim.txt"
 copy bash/.bashrc           "$HOME/.bashrc"
