@@ -29,7 +29,6 @@ SKIP = [r"^Omapop (selection|dismiss)", r"^Direct input for the terminal prefix$
 SECTIONS = [
     ("Essentials", r"^(Keybindings|Omarchy menu|Terminal|Browser|File manager|System menu|Apps|Close window|Close all windows|Lock system|Full screen|Toggle top bar|Agent|Tmux|Power menu)$"),
     ("Hyprpin (windows that follow you)", r"Hyprpin"),
-    ("Nav mode (Super+; then H/J/K/L)", r"^Nav mode"),
     ("Windows", r"window|Window|Full width|Pop |Tiled full screen|transparency|gaps|square aspect|Minimize"),
     ("Groups (tabbed windows)", r"group"),
     ("Workspaces", r"workspace|scratchpad|Quake console|layout"),
@@ -155,7 +154,7 @@ def fold(rows, mine):
 
 # Sections whose words also appear in "Windows" descriptions ("Move window to
 # workspace 3", "... to left monitor", "... to group") are matched first.
-MATCH_FIRST = ["Essentials", "Hyprpin (windows that follow you)", "Nav mode (Super+; then H/J/K/L)",
+MATCH_FIRST = ["Essentials", "Hyprpin (windows that follow you)",
                "Groups (tabbed windows)", "Workspaces", "Monitors"]
 
 
@@ -179,7 +178,7 @@ def render(entries):
         "## What Super means",
         "Super | The Windows key: every desktop shortcut starts with it | Super+Enter = hold the Windows key, press Enter | #super #what #help",
         "Super+/ | Every key on this desktop, searchable | The full list this guide is made from (Super+Alt+/ tmux and Super+Ctrl+/ herdr) | #help #keys",
-        "H J K L | Directions everywhere: h left · j down · k up · l right | Super+H/J/K/L windows · Ctrl+Alt+H/J/K/L tmux and herdr panes · Alt+H/L their tabs · Ctrl+J/K menus | #hjkl #direction #arrows #help",
+        "H J K L | Directions everywhere: h left · j down · k up · l right | Super+H/J/K/L windows (H/L walk a window group's tabs first) · Super+Alt+H/J/K/L into a group · Ctrl+Alt+H/J/K/L tmux and herdr panes · Alt+H/L their tabs · Ctrl+J/K menus | #hjkl #direction #arrows #groups #tabs #help",
         "Fn+Super | Locks or unlocks the Super key on this keyboard | If Super shortcuts stop working, press Fn+Super once | #super #lock #keyboard",
         "",
     ]
