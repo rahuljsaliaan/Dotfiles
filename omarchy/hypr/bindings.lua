@@ -669,6 +669,11 @@ o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.offic
 hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
 hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
 
+-- Tasks: Taskwarrior's terminal UI (the to-do list). T names it, so the system
+-- task manager (btop, "Activity") moves to the Alt version of the same key.
+o.rebind("SUPER + SHIFT + T", "Tasks", { tui = "taskwarrior-tui", focus = true }) -- was Activity
+o.bind("SUPER + SHIFT + ALT + T", "Activity", { tui = "btop" })
+
 -- Ctrl + H/J/K/L in Omarchy's menus and pickers. Their search box types plain
 -- letters, so, as in fzf and Neovim's pickers, Ctrl + J/K move down/up and
 -- Ctrl + H/L go back/open (left/right in a grid). While one of these layers is
