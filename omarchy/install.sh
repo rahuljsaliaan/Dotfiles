@@ -103,8 +103,10 @@ copy omarchy/themed/starship.toml.tpl "$HOME/.config/omarchy/themed/starship.tom
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy tmux/theme-colors.sh   "$HOME/.config/tmux/theme-colors.sh"
 copy herdr/config.toml      "$HOME/.config/herdr/config.toml"
+copy task/taskrc            "$HOME/.config/task/taskrc"
 copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy qrg/guides/nvim.txt    "$HOME/.config/qrg/guides/nvim.txt"
+copy qrg/guides/taskwarrior.txt "$HOME/.config/qrg/guides/taskwarrior.txt"
 copy bash/.bashrc           "$HOME/.bashrc"
 copy foot/foot.ini          "$HOME/.config/foot/foot.ini"
 copy mise/config.toml       "$HOME/.config/mise/config.toml"
@@ -150,6 +152,13 @@ if command -v inotifywait >/dev/null; then
   printf '  ok       inotify-tools\n'
 elif command -v omarchy >/dev/null; then
   omarchy pkg add inotify-tools >/dev/null 2>&1 && printf '  installed inotify-tools\n'
+fi
+
+# Taskwarrior and its terminal UI: the local to-do list (Super + Shift + T).
+if command -v task >/dev/null && command -v taskwarrior-tui >/dev/null; then
+  printf '  ok       taskwarrior\n'
+elif command -v omarchy >/dev/null; then
+  omarchy pkg add task taskwarrior-tui >/dev/null 2>&1 && printf '  installed taskwarrior\n'
 fi
 
 # Tools from mise/config.toml (pnpm), next to Omarchy's own mise tools.
