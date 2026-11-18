@@ -178,7 +178,8 @@ def render(entries):
         "",
         "## What Super means",
         "Super | The Windows key: every desktop shortcut starts with it | Super+Enter = hold the Windows key, press Enter | #super #what #help",
-        "Super+K | Every key on this desktop, searchable | The full list this guide is made from | #help #keys",
+        "Super+/ | Every key on this desktop, searchable | The full list this guide is made from (Super+Alt+/ tmux and Super+Ctrl+/ herdr) | #help #keys",
+        "H J K L | Directions everywhere: h left · j down · k up · l right | Super+H/J/K/L windows · Ctrl+Alt+H/J/K/L tmux and herdr panes · Alt+H/L their tabs · Ctrl+J/K menus | #hjkl #direction #arrows #help",
         "Fn+Super | Locks or unlocks the Super key on this keyboard | If Super shortcuts stop working, press Fn+Super once | #super #lock #keyboard",
         "",
     ]

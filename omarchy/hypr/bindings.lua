@@ -555,8 +555,40 @@ local function wrap_target(dir)
   return nil
 end
 
+-- Inside a window group, left/right walk the group's tabs first: the tabs sit
+-- side by side in the group bar, so H/L reach them as they read. Past the
+-- first or last tab the key goes on to the next window as usual.
+local function group_step(dir)
+  local active = hl.get_active_window()
+  local group = active and active.group
+  if not group or (group.size or 0) < 2 or type(group.members) ~= "table" then
+    return false
+  end
+  local index
+  for i, member in ipairs(group.members) do
+    if member.address == active.address then
+      index = i
+      break
+    end
+  end
+  if not index then
+    return false
+  end
+  if dir == "l" and index > 1 then
+    hl.dispatch(hl.dsp.group.prev())
+    return true
+  elseif dir == "r" and index < #group.members then
+    hl.dispatch(hl.dsp.group.next())
+    return true
+  end
+  return false
+end
+
 local function focus_or_wrap(dir)
   return function()
+    if group_step(dir) then
+      return
+    end
     if has_window_towards(dir) then
       hl.dispatch(hl.dsp.focus({ direction = dir }))
       return
@@ -571,7 +603,7 @@ end
 hl.define_submap("nav", function()
   for _, d in ipairs(vim_directions) do
     if d.dir == "l" or d.dir == "r" then
-      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (wraps)", focus_or_wrap(d.dir))
+      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (group tabs first; wraps)", focus_or_wrap(d.dir))
     else
       o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", within_workspace(d.dir, hl.dsp.focus({ direction = d.dir })))
     end
@@ -582,6 +614,41 @@ hl.define_submap("nav", function()
   o.bind("ESCAPE", "Nav mode: leave", hl.dsp.submap("reset"))
   o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
 end)
+
+-- One keyboard language. Super + H/J/K/L moves between windows and Super + Alt
+-- + H/J/K/L moves a window into a group, as Super (+ Alt) + arrows do, so
+-- nothing needs the 60% board's Fn layer. Focus behaves as in Nav mode: it
+-- stays on this screen, H/L wrap around the row and walk a group's tabs first.
+-- Omarchy's Super + arrow binds stay (they still cross to the next monitor).
+-- The descriptions are Omarchy's own, so the key list and the Quick Reference
+-- guide show each pair on one line (Super + H / Super + Left).
+local focus_word = { l = "left", r = "right", u = "above", d = "below" }
+local group_word = { l = "left", r = "right", u = "top", d = "bottom" }
+for _, d in ipairs(vim_directions) do
+  local focus = (d.dir == "l" or d.dir == "r") and focus_or_wrap(d.dir)
+    or within_workspace(d.dir, hl.dsp.focus({ direction = d.dir }))
+  o.bind_expressions[focus] = string.format('hl.dsp.focus({ direction = "%s" })', d.dir)
+  o.rebind("SUPER + " .. d.key, "Focus on " .. focus_word[d.dir] .. " window", focus)
+
+  local into = within_workspace(d.dir, hl.dsp.window.move({ into_group = d.dir }))
+  o.bind_expressions[into] = string.format('hl.dsp.window.move({ into_group = "%s" })', d.dir)
+  o.rebind("SUPER + ALT + " .. d.key, "Move window to group on " .. group_word[d.dir], into)
+end
+_G.rahulj_keys.focus_or_wrap = focus_or_wrap
+_G.rahulj_keys.group_step = group_step
+
+-- The keys that sat on J/K/L move to keys that still say what they do.
+o.bind("SUPER + Y", "Toggle window split", hl.dsp.layout("togglesplit")) -- was Super + J; Y is a fork
+o.bind("SUPER + N", "Cycle workspace layout", "omarchy-hyprland-workspace-layout-toggle") -- was Super + L
+o.bind("SUPER + ALT + N", "Cycle workspace layout back", "omarchy-hyprland-workspace-layout-toggle back") -- was Super + Alt + L
+-- The key lists sit on / (the ? key), paired the way Enter opens them: Super
+-- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr.
+o.rebind("SUPER + SLASH", "Keybindings", "omarchy-menu-keybindings") -- was monitor scaling up
+o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-menu-tmux-keybindings") -- was monitor scaling down
+o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-menu-herdr-keybindings")
+hl.unbind("SUPER + CTRL + K")
+o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
+o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
 
 -- Nav mode shows a notification card for as long as it is on, since nothing
 -- else on screen says a submap is active. The card is the usual notification
