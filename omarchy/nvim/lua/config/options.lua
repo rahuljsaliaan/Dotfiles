@@ -1,8 +1,10 @@
 -- Options are automatically loaded before lazy.nvim startup.
 require("config.remote_clipboard").setup()
 
-vim.opt.relativenumber = false
-vim.g.autoformat = false
+-- Relative line numbers and format-on-save are left at LazyVim's defaults (on),
+-- as on the Zorin machine: the gutter counts lines from the cursor, so a jump
+-- to a line above or below is just the number shown and k or j (5k, 12j).
+-- Space u L / Space u f toggle them.
 
 -- LazyVim ships `wrap = false`, so a long line runs off the right edge and the
 -- rest of it can only be reached by scrolling sideways. That is worst with the

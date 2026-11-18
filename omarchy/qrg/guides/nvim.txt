@@ -54,6 +54,8 @@ H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default 
 [N] gg / G | Top / bottom of the file | #move #top #bottom
 [N] Ctrl+D / Ctrl+U | Half a page down / up | #scroll
 [N] j / k | Down / up | Moves by screen line on wrapped text here | #move #wrap
+[N] 5k / 12j | Jump that many lines up / down | The gutter shows each line's distance from the cursor (relative numbers) so read the number and press k or j | #move #line #relative #number
+[N] 42G | Go to line 42 (the real line number) | :42 does the same; the cursor line shows its real number | #move #line #goto
 
 ## Code (LSP)
 [N] gd | Go to the definition | Ctrl+O comes back | #definition #goto
@@ -61,7 +63,7 @@ H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default 
 [N] K | Show docs for the thing under the cursor | #hover #docs
 [N] Space c a | Code actions (quick fixes) | #fix #action
 [N] Space c r | Rename the symbol everywhere | #rename #refactor
-[N] Space c f | Format the file | Space u f turns format-on-save off/on | #format
+[N] Space c f | Format the file | Files are formatted on save here; Space u f turns that off/on | #format
 [N] Space c d | Show the full error for this line | Errors are shortened at the line end here; this shows all of it | #diagnostics #error
 [N] ] d / [ d | Next / previous error or warning | #diagnostics
 [N] Space x x | All problems in a list (Trouble) | #diagnostics #trouble
@@ -76,5 +78,6 @@ H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default 
 ## Toggles and views
 [Y N] Space u w | Line wrapping on/off | On by default here; wrapped lines are indented to match | #wrap
 [Y N] Space u m | Rendered Markdown on/off | #markdown #render
-[N] Space u f | Format on save on/off | #format
+[N] Space u f | Format on save on/off | On by default here | #format
+[N] Space u L / Space u l | Relative line numbers / line numbers on/off | Relative is on by default here | #number #line #relative
 [N] Space l | Plugin manager (Lazy) | #plugins #lazy
