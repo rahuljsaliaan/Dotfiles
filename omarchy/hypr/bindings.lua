@@ -475,14 +475,9 @@ for _, d in ipairs(vim_directions) do
   o.bind("SUPER + SHIFT + ALT + " .. d.key, "Move workspace to " .. d.name .. " monitor", o.workspaces.move_to_monitor(d.dir))
 end
 
--- Navigation mode: Super + ; turns it on, then plain H/J/K/L focus windows,
--- Shift + H/J/K/L move the window into a group and Ctrl + H/L move focus
--- inside a group. It stays on until Esc or Super + ; again.
-o.bind("SUPER + SEMICOLON", "Nav mode: turn on (H/J/K/L focus; Esc leaves)", hl.dsp.submap("nav"))
-
--- Nav mode stays on the current workspace: Hyprland's directional focus
--- falls through to the next monitor when nothing is left in that direction,
--- so only dispatch when this workspace has a window on that side.
+-- Super + H/J/K/L focus stays on the current workspace: Hyprland's directional
+-- focus falls through to the next monitor when nothing is left in that
+-- direction, so only dispatch when this workspace has a window on that side.
 local function vec(v)
   if type(v) ~= "table" then
     return 0, 0
@@ -600,25 +595,11 @@ local function focus_or_wrap(dir)
   end
 end
 
-hl.define_submap("nav", function()
-  for _, d in ipairs(vim_directions) do
-    if d.dir == "l" or d.dir == "r" then
-      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (group tabs first; wraps)", focus_or_wrap(d.dir))
-    else
-      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", within_workspace(d.dir, hl.dsp.focus({ direction = d.dir })))
-    end
-    o.bind("SHIFT + " .. d.key, "Nav mode: Move window to group " .. d.name, within_workspace(d.dir, hl.dsp.window.move({ into_group = d.dir })))
-  end
-  o.bind("CTRL + H", "Nav mode: Grouped window focus left", hl.dsp.group.prev())
-  o.bind("CTRL + L", "Nav mode: Grouped window focus right", hl.dsp.group.next())
-  o.bind("ESCAPE", "Nav mode: leave", hl.dsp.submap("reset"))
-  o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
-end)
-
 -- One keyboard language. Super + H/J/K/L moves between windows and Super + Alt
 -- + H/J/K/L moves a window into a group, as Super (+ Alt) + arrows do, so
--- nothing needs the 60% board's Fn layer. Focus behaves as in Nav mode: it
--- stays on this screen, H/L wrap around the row and walk a group's tabs first.
+-- nothing needs the 60% board's Fn layer. Focus stays on this screen, H/L wrap
+-- around the row and walk a group's tabs first, so there is no separate tab
+-- key (and no nav mode: these direct keys do everything it did).
 -- Omarchy's Super + arrow binds stay (they still cross to the next monitor).
 -- The descriptions are Omarchy's own, so the key list and the Quick Reference
 -- guide show each pair on one line (Super + H / Super + Left).
@@ -726,24 +707,6 @@ for _, m in ipairs({ { "H", "Left", "back or left" }, { "J", "Down", "down" }, {
   _G.rahulj_keys.menu_arrow[m[1]] = press
   o.bind("CTRL + " .. m[1], "Menus: " .. m[3], press, { auto_consuming = true })
 end
-
--- Nav mode shows a notification card for as long as it is on, since nothing
--- else on screen says a submap is active. The card is the usual notification
--- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept
--- out of history as transient. It follows Hyprland's submap event rather than
--- the keys, so it goes however the mode ends.
-local NAV_CARD = "Navigation mode"
-local NAV_GLYPH = "\u{f0041}" -- nf-md-arrow_all
-hl.on("keybinds.submap", function(name)
-  if name == "nav" then
-    hl.exec_cmd("notify-send -a Hyprland -u normal"
-      .. " -h boolean:transient:true -h boolean:x-rahulj-resident:true"
-      .. " -h string:omarchy-glyph:" .. NAV_GLYPH
-      .. " '" .. NAV_CARD .. "' 'HJKL focus · Shift+HJKL group · Ctrl+H/L tab · Esc exits'")
-  else
-    hl.exec_cmd("omarchy-notification-dismiss '" .. NAV_CARD .. "'")
-  end
-end)
 
 -- Super + - / Super + = on a scrolling workspace: Omarchy's 100px resize
 -- barely moves a scrolling column, and a column holding one window cannot
