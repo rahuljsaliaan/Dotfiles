@@ -650,8 +650,14 @@ hl.unbind("SUPER + CTRL + K")
 o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
 o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
 
--- Fn-free copies of the keys that sit on the 60% board's Fn layer (`, Home,
--- Delete). Omarchy's own keys stay for the laptop keyboard.
+-- Fn-free keys in place of Omarchy's on the 60% board's Fn layer (`, Home,
+-- Delete). Omarchy's are removed, so the key list shows one key per action.
+for _, old in ipairs({
+  "SUPER + grave", "SUPER + SHIFT + grave", "SUPER + Home", "SUPER + ALT + Home",
+  "CTRL + ALT + DELETE", "SUPER + CTRL + Delete", "SUPER + CTRL + ALT + Delete",
+}) do
+  hl.unbind(old)
+end
 o.bind("SUPER + D", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole")) -- Super + `; D for drop-down
 o.bind("SUPER + ALT + D", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false })) -- as Super + Alt + S for the scratchpad
 o.bind("SUPER + R", "Restore window width", "omarchy-hyprland-window-width restore") -- Super + Home
