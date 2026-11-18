@@ -650,6 +650,16 @@ hl.unbind("SUPER + CTRL + K")
 o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
 o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
 
+-- Fn-free copies of the keys that sit on the 60% board's Fn layer (`, Home,
+-- Delete). Omarchy's own keys stay for the laptop keyboard.
+o.bind("SUPER + D", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole")) -- Super + `; D for drop-down
+o.bind("SUPER + ALT + D", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false })) -- as Super + Alt + S for the scratchpad
+o.bind("SUPER + R", "Restore window width", "omarchy-hyprland-window-width restore") -- Super + Home
+o.bind("SUPER + ALT + R", "Save window width", "omarchy-hyprland-window-width save") -- Super + Alt + Home
+o.bind("SUPER + CTRL + ALT + Q", "Close all windows", "omarchy-hyprland-window-close-all") -- Ctrl + Alt + Delete
+o.bind("SUPER + CTRL + M", "Toggle laptop display", "omarchy-hyprland-monitor-internal toggle") -- Super + Ctrl + Delete
+o.bind("SUPER + CTRL + ALT + M", "Toggle laptop display mirroring", "omarchy-hyprland-monitor-internal-mirror toggle") -- Super + Ctrl + Alt + Delete
+
 -- Nav mode shows a notification card for as long as it is on, since nothing
 -- else on screen says a submap is active. The card is the usual notification
 -- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept

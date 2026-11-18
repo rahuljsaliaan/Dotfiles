@@ -192,7 +192,10 @@ def render(entries):
             continue
         lines.append(f"## {name}")
         for entry in items:
-            keys = pretty(" / ".join(entry["keys"])).replace("|", "¦")
+            # The 60% board's Fn layer (arrows, `, Home, Delete, Print) last,
+            # so the key that needs no Fn reads first.
+            ordered = sorted(entry["keys"], key=lambda k: bool(re.search(r"\b(LEFT|RIGHT|UP|DOWN|Home|DELETE|Delete|PRINT)\b|~|grave", k)))
+            keys = pretty(" / ".join(ordered)).replace("|", "¦")
             desc = entry["desc"].replace("|", "¦")
             mark = "[Y] " if entry["mine"] else ""
             tag = "#" + re.sub(r"[^a-z]+", "", name.split()[0].lower())
