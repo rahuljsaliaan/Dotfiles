@@ -670,6 +670,18 @@ o.bind("SUPER + CTRL + ALT + N", "Network speed", { panel = "rahulj.net-speed" }
 o.bind("SUPER + CTRL + ALT + P", "Hyprpin panel", { panel = "io.github.jondkinney.hyprpin" })
 o.bind("SUPER + CTRL + ALT + O", "Omapop panel", { panel = "io.github.jondkinney.omapop" })
 
+-- App keys that opened an installer or an app not used here. A web app's
+-- description is also the title it is focused by when already open.
+o.rebind("SUPER + SHIFT + M", "YouTube Music", { webapp = "https://music.youtube.com/", focus = true }) -- was Spotify
+o.rebind("SUPER + SHIFT + G", "WhatsApp", { webapp = "https://web.whatsapp.com/", focus = true }) -- was Signal
+o.rebind("SUPER + SHIFT + ALT + G", "Google Messages", { webapp = "https://messages.google.com/web/conversations", focus = true }) -- was WhatsApp
+hl.unbind("SUPER + SHIFT + CTRL + G") -- Google Messages, now on Super + Shift + Alt + G
+hl.unbind("SUPER + SHIFT + SLASH") -- 1Password, not installed
+o.rebind("SUPER + SHIFT + E", "Gmail", { webapp = "https://mail.google.com/", focus = true }) -- was HEY
+o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.office.com/mail/", focus = true }) -- was HEY new email
+hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
+hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
+
 -- Nav mode shows a notification card for as long as it is on, since nothing
 -- else on screen says a submap is active. The card is the usual notification
 -- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept
