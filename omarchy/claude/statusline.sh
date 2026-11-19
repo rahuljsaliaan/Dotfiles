@@ -3,9 +3,11 @@
 # Claude Code status line (settings.json → statusLine), in the Omarchy theme's colours.
 # Claude Code pipes session data in as JSON on stdin; this prints one short row:
 #
-#   󰚩 Opus 5.5 high │ ctx 68k 34% │ $4.12 │ 5h 23% ↻2h10m │ wk 41%
+#   󰚩 Opus 5.5 high │  feat/login 󰙅 login-wt │ ctx 68k 34% │ $4.12 │ 5h 23% ↻2h10m │ wk 41%
 #
 #   󰚩    the model and its reasoning effort
+#        the git branch being worked on (a short hash when detached), and, in a
+#        linked worktree, 󰙅 and the worktree's name. Hidden outside a git repo.
 #   ctx  tokens in the context window, and how full it is
 #   $    the session's estimated cost (list price, resets on /clear)
 #   5h   the plan's 5-hour usage, and how long until it resets
@@ -13,12 +15,12 @@
 #
 # Percentages go green, then yellow at 50 %, then red at 80 %; those three
 # colours mean only that, so every other value (tokens, cost) is plain text. In a narrow
-# window the reset time goes first, then the model name (the effort stays),
-# then the token count. Usage limits come from Claude Code (rate_limits) after
+# window the reset time goes first, then the worktree name, then the model name
+# (the effort stays), then the token count. Usage limits come from Claude Code (rate_limits) after
 # a session's first reply.
 set -uo pipefail
 
-IFS=$'\x1f' read -r model effort ctx_pct ctx_used cost five_pct five_reset week_pct < <(
+IFS=$'\x1f' read -r model effort ctx_pct ctx_used cost five_pct five_reset week_pct dir wt_name wt_branch < <(
   jq -r '[
     (.model.display_name // .model.id // "Claude"),
     (.effort.level // ""),
@@ -27,7 +29,10 @@ IFS=$'\x1f' read -r model effort ctx_pct ctx_used cost five_pct five_reset week_
     (.cost.total_cost_usd // 0),
     (.rate_limits.five_hour.used_percentage // ""),
     (.rate_limits.five_hour.resets_at // ""),
-    (.rate_limits.seven_day.used_percentage // "")
+    (.rate_limits.seven_day.used_percentage // ""),
+    (.workspace.current_dir // .cwd // ""),
+    (.worktree.name // ""),
+    (.worktree.branch // "")
   ] | map(tostring) | join("\u001f")'
 )
 
@@ -36,7 +41,7 @@ IFS=$'\x1f' read -r model effort ctx_pct ctx_used cost five_pct five_reset week_
 # (starship.toml.tpl); the fallbacks are Tokyo Night's.
 declare -A theme=(
   [bright_foreground]=c0caf5 [dark_foreground]=565f89 [bright_magenta]=bb9af7
-  [bright_cyan]=7dcfff [green]=9ece6a [yellow]=e0af68 [red]=f7768e
+  [bright_cyan]=7dcfff [blue]=7aa2f7 [green]=9ece6a [yellow]=e0af68 [red]=f7768e
 )
 colors_toml="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/colors.toml"
 if [[ -r $colors_toml ]]; then
@@ -47,8 +52,25 @@ if [[ -r $colors_toml ]]; then
 fi
 c() { printf '\033[38;2;%d;%d;%dm' "0x${1:0:2}" "0x${1:2:2}" "0x${1:4:2}"; }
 FG="$(c "${theme[bright_foreground]}")" DIM="$(c "${theme[dark_foreground]}")"
-MAG="$(c "${theme[bright_magenta]}")" CYAN="$(c "${theme[bright_cyan]}")"
+MAG="$(c "${theme[bright_magenta]}")" CYAN="$(c "${theme[bright_cyan]}")" BLUE="$(c "${theme[blue]}")"
 GREEN="$(c "${theme[green]}")" YELLOW="$(c "${theme[yellow]}")" RED="$(c "${theme[red]}")" R=$'\033[0m'
+
+# The git branch and worktree of the session's directory. Claude Code's own
+# worktree fields (set by --worktree) win; otherwise ask git, which also covers
+# a worktree entered with `git worktree` or `cd`.
+branch="$wt_branch" wt="$wt_name"
+if [[ -z $branch && -n $dir && -d $dir ]]; then
+  branch="$(git --no-optional-locks -C "$dir" symbolic-ref --short -q HEAD 2>/dev/null \
+    || git --no-optional-locks -C "$dir" rev-parse --short HEAD 2>/dev/null || true)"
+fi
+if [[ -n $branch && -z $wt ]]; then
+  # A linked worktree's git dir differs from the repository's common git dir.
+  { read -r gitdir; read -r common; read -r top; } < <(
+    git --no-optional-locks -C "$dir" rev-parse --absolute-git-dir --path-format=absolute --git-common-dir --show-toplevel 2>/dev/null
+  ) || true
+  [[ -n ${gitdir:-} && ${gitdir:-} != "${common:-}" ]] && wt="${top##*/}"
+fi
+(( ${#branch} > 32 )) && branch="${branch:0:31}…"
 
 pct() { # pct <percent> → 34% in green, yellow or red
   local p=${1%%.*} col=$GREEN
@@ -70,11 +92,15 @@ until_reset() { # until_reset <epoch> → 2h10m / 12m
   else printf '%dm' $(( left / 60 )); fi
 }
 
-render() { # render <show model name> <show tokens> <show reset>
+render() { # render <show model name> <show tokens> <show reset> <show worktree>
   local out="" sep=" ${DIM}│${R} "
   out+="${MAG}󰚩${R}"
   (( $1 )) && out+=" ${FG}${model}${R}"
   [[ -n $effort ]] && out+=" ${CYAN}${effort}${R}"
+  if [[ -n $branch ]]; then
+    out+="${sep}${BLUE} ${branch}${R}"
+    (( $4 )) && [[ -n $wt ]] && out+=" ${DIM}󰙅 ${wt}${R}"
+  fi
   out+="${sep}${DIM}ctx${R} "
   if [[ -n $ctx_pct ]]; then
     (( $2 )) && out+="${FG}$(tokens "$ctx_used")${R} "
@@ -94,7 +120,7 @@ render() { # render <show model name> <show tokens> <show reset>
 width=$(( ${COLUMNS:-200} - 4 ))
 visible() { local s; s="$(printf '%s' "$1" | sed $'s/\033\\[[0-9;]*m//g')"; printf '%d' "${#s}"; }
 
-for flags in "1 1 1" "1 1 0" "0 1 0" "0 0 0"; do
+for flags in "1 1 1 1" "1 1 0 1" "1 1 0 0" "0 1 0 0" "0 0 0 0"; do
   line="$(render $flags)"
   (( $(visible "$line") <= width )) && break
 done
