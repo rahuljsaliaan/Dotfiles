@@ -609,10 +609,6 @@ Item {
 
     var row = Store.snapshot(notification, key, NotificationUrgency)
     row.duration = durationFor(notification.urgency, row.expireTimeout)
-    // Personal: a mode indicator (Hyprland's nav mode) asks to stay up with the
-    // x-rahulj-resident hint; its sender takes it down when the mode ends.
-    var hints = notification.hints || {}
-    if (hints["x-rahulj-resident"] === true || hints["x-rahulj-resident"] === 1) row.duration = 0
 
     var previous = refs[key]
     refs[key] = notification

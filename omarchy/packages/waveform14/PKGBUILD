@@ -1,0 +1,21 @@
+# Local package of Tracktion's official Waveform 14 Free .deb.
+# To update: download the new .deb with the Tracktion Download Manager,
+# copy it here, bump pkgver and the sha256sum, then: makepkg -si
+pkgname=waveform14
+pkgver=14.1.24
+pkgrel=1
+pkgdesc="Tracktion Waveform 14 - audio and MIDI workstation (official .deb, repackaged)"
+arch=('x86_64')
+url="https://www.tracktion.com"
+license=('LicenseRef-Tracktion')
+depends=('lame' 'ffmpeg' 'curl' 'alsa-lib' 'gcc-libs' 'glibc' 'libglvnd'
+         'fontconfig' 'freetype2' 'glib2' 'gtk3' 'webkit2gtk-4.1' 'libsoup3' 'libusb')
+options=('!strip' '!debug')
+source=("waveform14_${pkgver}_amd64.deb")
+noextract=("waveform14_${pkgver}_amd64.deb")
+sha256sums=('bf140e492107a568a0f86dddb73ac510c9fa5d5edb4bb1f2426415683fe61af5')
+
+package() {
+  bsdtar -xOf "waveform14_${pkgver}_amd64.deb" data.tar.gz | bsdtar -xf - -C "$pkgdir"
+  chmod 755 "$pkgdir/usr/bin/Waveform14"
+}

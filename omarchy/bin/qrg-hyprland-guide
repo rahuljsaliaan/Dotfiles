@@ -23,21 +23,22 @@ USER_BINDINGS = os.path.join(HOME, ".config/hypr/bindings.lua")
 OUT = os.path.join(HOME, ".config/qrg/guides/hyprland.txt")
 
 # Bindings that are plumbing rather than keys to remember.
-SKIP = [r"^Omapop ", r"^Direct input for the terminal prefix$"]
+SKIP = [r"^Omapop (selection|dismiss)", r"^Direct input for the terminal prefix$"]
 
 # (section, description pattern), first match wins; order is the guide's order.
 SECTIONS = [
-    ("Essentials", r"^(Keybindings|Omarchy menu|Terminal|Browser|File manager|System menu|Apps|Close window|Close all windows|Lock system|Full screen|Toggle top bar|Agent|Tmux|Power menu)$"),
+    ("Essentials", r"^(Keybindings|Omarchy menu|Terminal|Browser|File manager|System menu|Apps|Close window|Close all windows|Lock system|Full screen|Toggle top bar|Agent|Tmux|Power menu|Tmux keybindings|Herdr keybindings|All quick reference guides)$"),
     ("Hyprpin (windows that follow you)", r"Hyprpin"),
-    ("Nav mode (Super+; then H/J/K/L)", r"^Nav mode"),
-    ("Windows", r"window|Window|Full width|Pop |Tiled full screen|transparency|gaps|square aspect|Minimize"),
+    ("Resize windows", r"window (width|height)|Resize window"),
+    ("Focus and move windows", r"^(Focus on|Swap window|Move window$|Reveal active)"),
+    ("Window state", r"window|Window|Full width|Pop |Tiled full screen|transparency|gaps|square aspect|Minimize"),
     ("Groups (tabbed windows)", r"group"),
     ("Workspaces", r"workspace|scratchpad|Quake console|layout"),
     ("Monitors", r"monitor|Monitor|display|Display|mirroring|full screen desktop"),
     ("Screenshots, recording and zoom", r"Screenshot|Screenrecording|Color picker|Capture menu|OCR|Share|Transcode|Zoom|zoom|webcam|Download Video|Copy URL"),
     ("Clipboard and text", r"Universal|Clipboard|Emojis|Select all"),
     ("Notifications and reminders", r"otification|Dismiss|eminder"),
-    ("Bar panels and menus", r"Bar panel|^Audio$|^Bluetooth$|^Network$|^Power$|Calendar$|World clock|weather|Show time|battery|Hardware menu|Theme menu|Background switcher|Toggle menu|locking on idle|keybindings"),
+    ("Bar panels and menus", r"Bar panel|^Audio$|^Bluetooth$|^Network$|^Power$|Calendar$|World clock|weather|Show time|battery|Hardware menu|Theme menu|Background switcher|Toggle menu|locking on idle|keybindings|^AI usage$|^Quick reference guides$|^Agents panel$|^Agent skills$|^Network speed$|^Omapop panel$|^Menus: "),
     ("Sound, media, brightness and input", r"Volume|Mute|[Tt]rack|^Play$|^Pause$|[Bb]rightness|backlight|media source|audio output|[Tt]ouchpad|Eject|dictation|Superwhisper|input language"),
     ("Apps", r".*"),
 ]
@@ -155,8 +156,8 @@ def fold(rows, mine):
 
 # Sections whose words also appear in "Windows" descriptions ("Move window to
 # workspace 3", "... to left monitor", "... to group") are matched first.
-MATCH_FIRST = ["Essentials", "Hyprpin (windows that follow you)", "Nav mode (Super+; then H/J/K/L)",
-               "Groups (tabbed windows)", "Workspaces", "Monitors"]
+MATCH_FIRST = ["Essentials", "Hyprpin (windows that follow you)", "Resize windows",
+               "Groups (tabbed windows)", "Workspaces", "Monitors", "Focus and move windows"]
 
 
 def section_of(desc):
@@ -166,6 +167,29 @@ def section_of(desc):
         if re.search(patterns[name], desc):
             return name
     return SECTIONS[-1][0]
+
+
+# Keys that live in tmux and herdr, not in Hyprland, so the live bindings never
+# list them. Kept in step with tmux.txt (the full sheets: Super+Alt+/ tmux, Super+Ctrl+/ herdr).
+TERMINAL_SECTION = [
+    "## Terminal panes and tabs (tmux and herdr)",
+    "[Y] Ctrl+Alt+H / Ctrl+Alt+J / Ctrl+Alt+K / Ctrl+Alt+L | Focus the pane left / down / up / right | #terminal #tmux #herdr #pane",
+    "[Y] Ctrl+Alt+Shift+H / J / K / L | Resize the pane | #terminal #tmux #pane #size",
+    "[Y] Alt+H / Alt+L | Previous / next tab | #terminal #tmux #herdr #tab",
+    "[Y] Alt+Enter / Alt+Shift+Enter | Split the pane below / right | #terminal #tmux #pane",
+    "[Y] Alt+Escape | Close the pane | #terminal #tmux #pane",
+    "[Y] Alt+1…9 | Go to tab 1–9 | #terminal #tmux #tab",
+    "[Y] Ctrl+Space | The tmux prefix: press it, let go, then the next key | #terminal #tmux #prefix",
+    "",
+]
+
+
+def resize_order(entry):
+    """Width, then height, then the rest; plain step, a little, a lot."""
+    desc = entry["desc"]
+    kind = 0 if "width" in desc and "Save" not in desc and "Restore" not in desc else 1 if "height" in desc else 2
+    tier = 1 if desc.endswith("a little") else 2 if desc.endswith("a lot") else 0
+    return (kind, tier, not desc.startswith("Increase"))
 
 
 def render(entries):
@@ -178,7 +202,8 @@ def render(entries):
         "",
         "## What Super means",
         "Super | The Windows key: every desktop shortcut starts with it | Super+Enter = hold the Windows key, press Enter | #super #what #help",
-        "Super+K | Every key on this desktop, searchable | The full list this guide is made from | #help #keys",
+        "Super+/ | Every key on this desktop, searchable | The full list this guide is made from (Super+Alt+/ tmux and Super+Ctrl+/ herdr) | #help #keys",
+        "H J K L | Directions everywhere: h left · j down · k up · l right | Super+H/J/K/L windows (H/L walk a window group's tabs first) · Super+Alt+H/J/K/L into a group · Ctrl+Alt+H/J/K/L tmux and herdr panes · Alt+H/L their tabs · Ctrl+J/K menus | #hjkl #direction #arrows #groups #tabs #help",
         "Fn+Super | Locks or unlocks the Super key on this keyboard | If Super shortcuts stop working, press Fn+Super once | #super #lock #keyboard",
         "",
     ]
@@ -189,12 +214,21 @@ def render(entries):
         items = by_section.get(name)
         if not items:
             continue
+        if name == "Apps":
+            lines.extend(TERMINAL_SECTION)
         lines.append(f"## {name}")
+        if name == "Resize windows":
+            items = sorted(items, key=resize_order)
         for entry in items:
-            keys = pretty(" / ".join(entry["keys"])).replace("|", "¦")
+            # The 60% board's Fn layer (arrows, `, Home, Delete, Print) last,
+            # so the key that needs no Fn reads first.
+            ordered = sorted(entry["keys"], key=lambda k: bool(re.search(r"\b(LEFT|RIGHT|UP|DOWN|Home|DELETE|Delete|PRINT)\b|~|grave", k)))
+            keys = pretty(" / ".join(ordered)).replace("|", "¦")
             desc = entry["desc"].replace("|", "¦")
             mark = "[Y] " if entry["mine"] else ""
             tag = "#" + re.sub(r"[^a-z]+", "", name.split()[0].lower())
+            if name == "Resize windows":
+                tag += " #size #bigger #smaller #wider #narrower #taller #shorter #grow #shrink"
             lines.append(f"{mark}{keys} | {desc} | {tag}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

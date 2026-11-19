@@ -475,14 +475,9 @@ for _, d in ipairs(vim_directions) do
   o.bind("SUPER + SHIFT + ALT + " .. d.key, "Move workspace to " .. d.name .. " monitor", o.workspaces.move_to_monitor(d.dir))
 end
 
--- Navigation mode: Super + ; turns it on, then plain H/J/K/L focus windows,
--- Shift + H/J/K/L move the window into a group and Ctrl + H/L move focus
--- inside a group. It stays on until Esc or Super + ; again.
-o.bind("SUPER + SEMICOLON", "Nav mode: turn on (H/J/K/L focus; Esc leaves)", hl.dsp.submap("nav"))
-
--- Nav mode stays on the current workspace: Hyprland's directional focus
--- falls through to the next monitor when nothing is left in that direction,
--- so only dispatch when this workspace has a window on that side.
+-- Super + H/J/K/L focus stays on the current workspace: Hyprland's directional
+-- focus falls through to the next monitor when nothing is left in that
+-- direction, so only dispatch when this workspace has a window on that side.
 local function vec(v)
   if type(v) ~= "table" then
     return 0, 0
@@ -555,8 +550,40 @@ local function wrap_target(dir)
   return nil
 end
 
+-- Inside a window group, left/right walk the group's tabs first: the tabs sit
+-- side by side in the group bar, so H/L reach them as they read. Past the
+-- first or last tab the key goes on to the next window as usual.
+local function group_step(dir)
+  local active = hl.get_active_window()
+  local group = active and active.group
+  if not group or (group.size or 0) < 2 or type(group.members) ~= "table" then
+    return false
+  end
+  local index
+  for i, member in ipairs(group.members) do
+    if member.address == active.address then
+      index = i
+      break
+    end
+  end
+  if not index then
+    return false
+  end
+  if dir == "l" and index > 1 then
+    hl.dispatch(hl.dsp.group.prev())
+    return true
+  elseif dir == "r" and index < #group.members then
+    hl.dispatch(hl.dsp.group.next())
+    return true
+  end
+  return false
+end
+
 local function focus_or_wrap(dir)
   return function()
+    if group_step(dir) then
+      return
+    end
     if has_window_towards(dir) then
       hl.dispatch(hl.dsp.focus({ direction = dir }))
       return
@@ -568,38 +595,124 @@ local function focus_or_wrap(dir)
   end
 end
 
-hl.define_submap("nav", function()
-  for _, d in ipairs(vim_directions) do
-    if d.dir == "l" or d.dir == "r" then
-      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window (wraps)", focus_or_wrap(d.dir))
-    else
-      o.bind(d.key, "Nav mode: Focus " .. d.name .. " window", within_workspace(d.dir, hl.dsp.focus({ direction = d.dir })))
-    end
-    o.bind("SHIFT + " .. d.key, "Nav mode: Move window to group " .. d.name, within_workspace(d.dir, hl.dsp.window.move({ into_group = d.dir })))
-  end
-  o.bind("CTRL + H", "Nav mode: Grouped window focus left", hl.dsp.group.prev())
-  o.bind("CTRL + L", "Nav mode: Grouped window focus right", hl.dsp.group.next())
-  o.bind("ESCAPE", "Nav mode: leave", hl.dsp.submap("reset"))
-  o.bind("SUPER + SEMICOLON", "Nav mode: leave", hl.dsp.submap("reset"))
-end)
+-- One keyboard language. Super + H/J/K/L moves between windows and Super + Alt
+-- + H/J/K/L moves a window into a group, as Super (+ Alt) + arrows do, so
+-- nothing needs the 60% board's Fn layer. Focus stays on this screen, H/L wrap
+-- around the row and walk a group's tabs first, so there is no separate tab
+-- key (and no nav mode: these direct keys do everything it did).
+-- Omarchy's Super + arrow binds stay (they still cross to the next monitor).
+-- The descriptions are Omarchy's own, so the key list and the Quick Reference
+-- guide show each pair on one line (Super + H / Super + Left).
+local focus_word = { l = "left", r = "right", u = "above", d = "below" }
+local group_word = { l = "left", r = "right", u = "top", d = "bottom" }
+for _, d in ipairs(vim_directions) do
+  local focus = (d.dir == "l" or d.dir == "r") and focus_or_wrap(d.dir)
+    or within_workspace(d.dir, hl.dsp.focus({ direction = d.dir }))
+  o.bind_expressions[focus] = string.format('hl.dsp.focus({ direction = "%s" })', d.dir)
+  o.rebind("SUPER + " .. d.key, "Focus on " .. focus_word[d.dir] .. " window", focus)
 
--- Nav mode shows a notification card for as long as it is on, since nothing
--- else on screen says a submap is active. The card is the usual notification
--- card (rahulj.notifications), kept up by its x-rahulj-resident hint and kept
--- out of history as transient. It follows Hyprland's submap event rather than
--- the keys, so it goes however the mode ends.
-local NAV_CARD = "Navigation mode"
-local NAV_GLYPH = "\u{f0041}" -- nf-md-arrow_all
-hl.on("keybinds.submap", function(name)
-  if name == "nav" then
-    hl.exec_cmd("notify-send -a Hyprland -u normal"
-      .. " -h boolean:transient:true -h boolean:x-rahulj-resident:true"
-      .. " -h string:omarchy-glyph:" .. NAV_GLYPH
-      .. " '" .. NAV_CARD .. "' 'HJKL focus · Shift+HJKL group · Ctrl+H/L tab · Esc exits'")
-  else
-    hl.exec_cmd("omarchy-notification-dismiss '" .. NAV_CARD .. "'")
+  local into = within_workspace(d.dir, hl.dsp.window.move({ into_group = d.dir }))
+  o.bind_expressions[into] = string.format('hl.dsp.window.move({ into_group = "%s" })', d.dir)
+  o.rebind("SUPER + ALT + " .. d.key, "Move window to group on " .. group_word[d.dir], into)
+end
+_G.rahulj_keys.focus_or_wrap = focus_or_wrap
+_G.rahulj_keys.group_step = group_step
+
+-- The keys that sat on J/K/L move to keys that still say what they do.
+o.bind("SUPER + Y", "Toggle window split", hl.dsp.layout("togglesplit")) -- was Super + J; Y is a fork
+o.bind("SUPER + N", "Cycle workspace layout", "omarchy-hyprland-workspace-layout-toggle") -- was Super + L
+o.bind("SUPER + ALT + N", "Cycle workspace layout back", "omarchy-hyprland-workspace-layout-toggle back") -- was Super + Alt + L
+-- The key lists sit on / (the ? key), paired the way Enter opens them: Super
+-- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr. All three open
+-- the Quick Reference panel on that tool's guide; Super + Ctrl + G opens it on All.
+o.rebind("SUPER + SLASH", "Keybindings", "omarchy-shell qrg toggleGuide hyprland") -- was monitor scaling up; the categorised Hyprland guide, not Omarchy's flat list
+o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-shell qrg toggleGuide tmux") -- was monitor scaling down
+o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-shell qrg toggleGuide herdr")
+hl.unbind("SUPER + CTRL + K")
+o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
+o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
+
+-- Fn-free keys in place of Omarchy's on the 60% board's Fn layer (`, Home,
+-- Delete). Omarchy's are removed, so the key list shows one key per action.
+for _, old in ipairs({
+  "SUPER + grave", "SUPER + SHIFT + grave", "SUPER + Home", "SUPER + ALT + Home",
+  "CTRL + ALT + DELETE", "SUPER + CTRL + Delete", "SUPER + CTRL + ALT + Delete",
+}) do
+  hl.unbind(old)
+end
+o.bind("SUPER + D", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole")) -- Super + `; D for drop-down
+o.bind("SUPER + ALT + D", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false })) -- as Super + Alt + S for the scratchpad
+o.bind("SUPER + R", "Restore window width", "omarchy-hyprland-window-width restore") -- Super + Home
+o.bind("SUPER + ALT + R", "Save window width", "omarchy-hyprland-window-width save") -- Super + Alt + Home
+o.bind("SUPER + CTRL + ALT + Q", "Close all windows", "omarchy-hyprland-window-close-all") -- Ctrl + Alt + Delete
+o.bind("SUPER + CTRL + M", "Toggle laptop display", "omarchy-hyprland-monitor-internal toggle") -- Super + Ctrl + Delete
+o.bind("SUPER + CTRL + ALT + M", "Toggle laptop display mirroring", "omarchy-hyprland-monitor-internal-mirror toggle") -- Super + Ctrl + Alt + Delete
+
+-- Bar panels by name. Super + Ctrl opens the system panels (Audio, Network...);
+-- Super + Ctrl + Alt peeks at the rest, as it shows battery, time and weather.
+o.bind("SUPER + CTRL + U", "AI usage", { panel = "jim.aiusage" })
+o.bind("SUPER + CTRL + G", "All quick reference guides", "omarchy-shell qrg toggleGuide all")
+o.bind("SUPER + CTRL + ALT + A", "Agents panel", { panel = "omarchy.agents" })
+o.bind("SUPER + CTRL + ALT + S", "Agent skills", { panel = "oliwier.agent-skills-manager" })
+o.bind("SUPER + CTRL + ALT + N", "Network speed", { panel = "rahulj.net-speed" })
+o.bind("SUPER + CTRL + ALT + P", "Hyprpin panel", { panel = "io.github.jondkinney.hyprpin" })
+o.bind("SUPER + CTRL + ALT + O", "Omapop panel", { panel = "io.github.jondkinney.omapop" })
+
+-- App keys that opened an installer or an app not used here. A web app's
+-- description is also the title it is focused by when already open.
+o.rebind("SUPER + SHIFT + M", "YouTube Music", { webapp = "https://music.youtube.com/", focus = true }) -- was Spotify
+o.rebind("SUPER + SHIFT + G", "WhatsApp", { webapp = "https://web.whatsapp.com/", focus = true }) -- was Signal
+o.rebind("SUPER + SHIFT + ALT + G", "Google Messages", { webapp = "https://messages.google.com/web/conversations", focus = true }) -- was WhatsApp
+hl.unbind("SUPER + SHIFT + CTRL + G") -- Google Messages, now on Super + Shift + Alt + G
+hl.unbind("SUPER + SHIFT + SLASH") -- 1Password, not installed
+o.rebind("SUPER + SHIFT + E", "Gmail", { webapp = "https://mail.google.com/", focus = true }) -- was HEY
+o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.office.com/mail/", focus = true }) -- was HEY new email
+hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
+hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
+
+-- Tasks: Taskwarrior's terminal UI (the to-do list). T names it, so the system
+-- task manager (btop, "Activity") moves to the Alt version of the same key.
+o.rebind("SUPER + SHIFT + T", "Tasks", { tui = "taskwarrior-tui", focus = true }) -- was Activity
+o.bind("SUPER + SHIFT + ALT + T", "Activity", { tui = "btop" })
+
+-- Ctrl + H/J/K/L in Omarchy's menus and pickers. Their search box types plain
+-- letters, so, as in fzf and Neovim's pickers, Ctrl + J/K move down/up and
+-- Ctrl + H/L go back/open (left/right in a grid). While one of these layers is
+-- open the key reaches it as the arrow key, with no modifiers (sent the way
+-- jis.lua sends its keys); otherwise it goes to the app as usual
+-- (auto_consuming passes it on), so Ctrl + H/J/K/L in a terminal or Neovim are
+-- untouched.
+local MENU_LAYERS = {
+  "omarchy-menu", "omarchy-clipboard", "omarchy-emojis", "omarchy-dock-apps",
+  "omarchy-image-selector", "timsonner-nitty-griddy", "omarchy-keyboard-panel", "omarchy-reminders",
+}
+local function menu_open()
+  for _, namespace in ipairs(MENU_LAYERS) do
+    local layers = hl.get_layers({ namespace = namespace })
+    if layers and #layers > 0 then
+      return true
+    end
   end
-end)
+  return false
+end
+local function menu_arrow(arrow)
+  return function()
+    if not menu_open() then
+      return { ok = false }
+    end
+    hl.dispatch(hl.dsp.send_key_state({ mods = "", key = arrow, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = "", key = arrow, state = "up" }))
+    end, { timeout = 30, type = "oneshot" })
+  end
+end
+_G.rahulj_keys.menu_open = menu_open
+_G.rahulj_keys.menu_arrow = {}
+for _, m in ipairs({ { "H", "Left", "back or left" }, { "J", "Down", "down" }, { "K", "Up", "up" }, { "L", "Right", "open or right" } }) do
+  local press = menu_arrow(m[2])
+  _G.rahulj_keys.menu_arrow[m[1]] = press
+  o.bind("CTRL + " .. m[1], "Menus: " .. m[3], press, { auto_consuming = true })
+end
 
 -- Super + - / Super + = on a scrolling workspace: Omarchy's 100px resize
 -- barely moves a scrolling column, and a column holding one window cannot
@@ -810,15 +923,19 @@ end
 _G.rahulj_keys.resize_width = resize_width
 
 for _, r in ipairs({
-  { mods = "SUPER", name = "", step = 0.1, px = 100 },
-  { mods = "SUPER + ALT", name = " a little", step = 0.05, px = 25 },
-  { mods = "SUPER + CTRL", name = " a lot", step = 0.25, px = 300 },
+  { mods = "SUPER", hmods = "SUPER + SHIFT", name = "", step = 0.1, px = 100 },
+  { mods = "SUPER + ALT", hmods = "SUPER + SHIFT + ALT", name = " a little", step = 0.05, px = 25 },
+  { mods = "SUPER + CTRL", hmods = "SUPER + CTRL + SHIFT", name = " a lot", step = 0.25, px = 300 },
 }) do
   local narrower, wider = resize_width(-r.step, -r.px), resize_width(r.step, r.px)
   o.bind_commands[narrower] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", -r.px)
   o.bind_commands[wider] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", r.px)
-  o.rebind(r.mods .. " + code:20", "Narrower window" .. r.name .. " (scrolling: column width)", narrower)
-  o.rebind(r.mods .. " + code:21", "Wider window" .. r.name .. " (scrolling: column width)", wider)
+  o.rebind(r.mods .. " + code:20", "Decrease window width" .. r.name, narrower)
+  o.rebind(r.mods .. " + code:21", "Increase window width" .. r.name, wider)
+  -- Height keeps Omarchy's resize and its modifier order (the key list matches
+  -- it as text); only the label said "Shrink window up".
+  o.rebind(r.hmods .. " + code:20", "Decrease window height" .. r.name, hl.dsp.window.resize({ x = 0, y = -r.px, relative = true }))
+  o.rebind(r.hmods .. " + code:21", "Increase window height" .. r.name, hl.dsp.window.resize({ x = 0, y = r.px, relative = true }))
 end
 
 -- Volume on the bracket keys: this 60% keyboard has no media keys, and keys

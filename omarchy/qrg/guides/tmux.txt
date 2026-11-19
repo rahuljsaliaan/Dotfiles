@@ -8,7 +8,8 @@ This setup's tmux: prefix Ctrl+Space, Alt keys without the prefix, floating prom
 Prefix = Ctrl+Space | The key that tells tmux "the next key is for you" | Without it, keys go to the program in the pane (Neovim, Claude, the shell), so tmux needs a signal first | #prefix #what #help
 Prefix c | Read it as: Ctrl+Space, let go, then c | Two steps, not held together: press Ctrl+Space, release both keys, then press c | #prefix #how #help
 PREFIX in the status bar | tmux is waiting for that next key | It appears at the top right after Ctrl+Space and goes away once you press the key | #prefix #status
-Alt+… keys | Work straight away, no prefix | Alt+Enter, Alt+1, Alt+Left …: the everyday moves were put on Alt so they need no prefix | #prefix #alt
+Alt+… keys | Work straight away, no prefix | Alt+Enter, Alt+1, Alt+H …: the everyday moves were put on Alt so they need no prefix | #prefix #alt
+H J K L | Directions, as everywhere on this desktop: h left · j down · k up · l right | Ctrl+Alt+H/J/K/L panes · Alt+H/L windows · Prefix h/j/k/l panes; the arrow versions still work | #hjkl #direction #arrows
 Ctrl+b | Not the prefix here | Stock tmux uses Ctrl+b; this setup switched it off | #prefix
 
 ## Prefix keys and help
@@ -26,26 +27,27 @@ tsl 4 claude | Swarm: N panes all running a command | #layout #ai
 ## Panes
 [P] Alt+Enter | Split, new pane below | Opens in the current folder | #split
 [P] Alt+Shift+Enter | Split, new pane right | Opens in the current folder | #split
-[P] Prefix h | Split, new pane below | Same as Alt+Enter | #split
-[P] Prefix v | Split, new pane right | Same as Alt+Shift+Enter | #split
-[P] Ctrl+Alt+Arrow | Focus the pane that way | No prefix needed | #focus #move
-[P] Ctrl+Alt+Shift+Arrow | Resize the pane by 5 | No prefix needed | #resize
+[P] Prefix - | Split, new pane below | Same as Alt+Enter and Neovim's Space - | #split
+[P] Prefix v / Prefix Shift+\ | Split, new pane right | Shift+\ is the pipe key; same as Alt+Shift+Enter and Neovim's Space pipe | #split
+[P] Ctrl+Alt+H/J/K/L | Focus the pane left / down / up / right | No prefix needed. Prefix h/j/k/l does the same | #focus #move #hjkl
+[P] Ctrl+Alt+Shift+H/J/K/L | Resize the pane by 5 | No prefix needed. Or Prefix H/J/K/L, and keep pressing to repeat | #resize #hjkl
 [P] Prefix z | Zoom the pane (again to restore) | ZOOM shows in the status bar | #zoom
 [P] Alt+Escape | Close the pane | Prefix x does the same | #kill #close
 
 ## Windows
 [W] Prefix c | New window | Opens in the current folder | #create
 [W] Alt+1 … Alt+9 | Go to window 1-9 | Windows are numbered from 1 and renumber on close | #switch
-[W] Alt+Left / Alt+Right | Previous / next window | #switch
-[W] Alt+Shift+Left / Right | Move the window left / right | #move #reorder
+[W] Alt+H / Alt+L | Previous / next window | Alt+Left / Alt+Right too | #switch #hjkl
+[W] Alt+Shift+H / Alt+Shift+L | Move the window left / right | #move #reorder #hjkl
+[W] Prefix Tab | Back to the last window | #switch #last
 [W] Prefix r | Rename the window (floating box) | Prefix , too. Pre-filled with the old name; Enter keeps, Esc cancels | #rename
-[W] Prefix k | Close the window | #kill #close
+[W] Prefix X | Close the window | x closes a pane; X the window | #kill #close
 
 ## Sessions
 [S] Prefix C | New session | Starts in the current folder | #create
-[S] Alt+Up / Alt+Down | Previous / next session | Prefix P / Prefix N too | #switch
+[S] Prefix P / Prefix N | Previous / next session | Alt+Up / Alt+Down too. Not Alt+J/K: those move lines in Neovim | #switch
 [S] Prefix R | Rename the session (floating box) | Prefix $ too | #rename
-[S] Prefix K | Close the session | You stay in tmux on another session | #kill #close
+[S] Prefix Q | Close the session (asks y/n first) | You stay in tmux on another session | #kill #close
 [S] Prefix d | Detach (tmux keeps running) | Reattach with t | #detach
 
 ## Copy and scroll

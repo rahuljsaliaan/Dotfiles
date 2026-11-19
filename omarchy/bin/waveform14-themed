@@ -1,0 +1,10 @@
+#!/bin/bash
+# Start Tracktion Waveform in the current Omarchy theme.
+#
+# Waveform reads its colour scheme only at start-up and rewrites its settings
+# when it quits, so the theme is applied here, just before it starts: whatever
+# theme is current when Waveform opens is the one it shows. The launcher entry
+# ~/.local/share/applications/waveform14.desktop runs this instead of
+# /usr/bin/Waveform14. A failed sync never stops Waveform from starting.
+"$HOME/.local/bin/waveform-theme-sync" || true
+exec /usr/bin/Waveform14 "$@"

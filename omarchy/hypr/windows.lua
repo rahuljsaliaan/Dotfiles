@@ -456,3 +456,14 @@ hl.timer(function()
   end
   o.workspace_mode = _G.rahulj_vault_workspace_mode
 end, { timeout = 1, type = "oneshot" })
+
+-- Chromium asking for the focus does not get it. Omarchy turns on
+-- misc.focus_on_activate, so any window that asks to be activated is focused,
+-- and the Claude extension working in the browser asked each time it touched a
+-- tab, pulling focus off whatever was being typed in. Only the browser's own
+-- request is ignored: it still takes focus when it opens, on a click or key,
+-- or when switched to. The cost is that a link opened from another app no
+-- longer brings the browser forward. "maximize" is repeated because a rule
+-- matching one window replaces the all-windows rule above instead of adding
+-- to it.
+o.window({ class = "^chromium$" }, { suppress_event = "maximize activatefocus" })

@@ -1,0 +1,72 @@
+# Tasks
+Taskwarrior, your to-do list: open it with Super+Shift+T, stored on this machine only
+@legend T=Task screen, C=Command line, Y=This setup's own
+// Written from ~/.config/task/taskrc, the task command and taskwarrior-tui's manual
+// (man taskwarrior-tui). Keep in step with them.
+// The task screen (taskwarrior-tui) and the task command read and write the same list.
+
+## What this is
+[Y] Super+Shift+T | Open the task screen | Opens in its own window; pressing it again jumps back to that window. Super+Shift+Alt+T is the system Activity (btop) | #open #tasks #todo
+task | The command behind the screen | Run it in any terminal. Both do the same things, so use whichever is handy | #cli #what #help
+~/.local/share/task | Where your tasks are stored | Local only: no account, no sync. Settings are in ~/.config/task/taskrc | #data #config #sync
+
+## Move around the task screen
+[T] j / k | Down / up one task | #move
+[T] J / K | Down / up a page | #move
+[T] g / G | First / last task | #move
+[T] z | Show or hide the task's details | Ctrl+E / Ctrl+Y scroll the details | #details #info
+[T] ] / [ | Next / previous view | Cycles the screen's views | #view
+[T] ? | Every key, in a popup | #help #keys
+[T] q | Quit the task screen | Esc cancels whatever you are typing | #quit #exit
+
+## Add and change tasks (task screen)
+[T] a | Add a task | Type it like on the command line: Fix login bug project:work due:friday +bug priority:H | #add #create
+[T] d | Mark the task done | d is done here and x deletes, the reverse of what you might guess | #done #complete
+[T] x | Delete the task | #delete #remove
+[T] e | Edit the task in your editor | #edit
+[T] m | Modify the task | Type changes like due:tomorrow or priority:H or +next | #modify #change
+[T] s | Start / stop the task | A started task shows as active | #start #stop #active
+[T] t | Toggle the quick tag | The tag is next unless you change it | #tag #next
+[T] A | Add a note to the task (annotate) | #annotate #note
+[T] l | Log a task you already did | #log
+[T] u | Undo the last change | #undo
+[T] v / V | Mark this task / every task in the list | Multiple selection | #select #mark
+
+## Find and filter (task screen)
+[T] / | Filter the list | Type project:work or +bug; the list narrows as you type | #filter #search
+[T] : | Jump to a task by its number | #goto #id
+[T] c | Switch context (a saved filter) | #context
+[T] R | Switch report | #report
+[T] ! | Run a shell command | #shell
+[T] 1…9 | Run your own shortcut | Defined in taskrc as uda.taskwarrior-tui.shortcuts.1 and so on | #shortcut #custom
+[T] Esc | Cancel the prompt | #cancel
+
+## Typing in a prompt (task screen)
+[T] Tab / Ctrl+N | Complete the word, then the next choice | Shift+Tab / Ctrl+P goes back | #complete #tab
+[T] Ctrl+W / Ctrl+U | Delete the previous word / to the start of the line | #delete #edit
+[T] Ctrl+A / Ctrl+E | Start / end of the line | #move #edit
+[T] Up / Down | Earlier / later entries | #history
+
+## Command line (task)
+[C] task | Your list, most urgent first | The Urg column is the score; the number on the left is the ID | #list #next
+[C] task add Fix login bug | Add a task | Add project:work due:friday priority:H +bug to set more | #add #create
+[C] task add Water plants recur:weekly due:monday | A repeating task | #recur #repeat
+[C] task add Wait for review wait:3days | Hide a task until then | It comes back on its own | #wait #hide
+[C] task 3 done | Mark task 3 done | 3 is the ID from the first column | #done #complete
+[C] task 3 modify due:tomorrow | Change task 3 | Also priority:M, project:home, +tag, -tag | #modify #change
+[C] task 3 start / task 3 stop | Mark it as being worked on / not | #start #stop #active
+[C] task 3 annotate needs a repro | Add a note to task 3 | #annotate #note
+[C] task 3 info | Everything about one task | #info #details
+[C] task 3 delete | Delete task 3 | Asks yes/no first | #delete #remove
+[C] task undo | Undo the last change | Also brings a deleted task back | #undo
+[C] task project:work list | Only one project | #filter #project
+[C] task +bug list | Only tasks with a tag | #filter #tag
+[C] task due:today list | Due today | Try due:tomorrow, due:friday, due:eow, due:2026-12-01 | #filter #due #date
+[C] task overdue | Late tasks | #overdue #due
+[C] task done:today list | Finished today | #done #today
+[C] task all | Every task, finished and deleted too | #all #history
+[C] task projects / task tags | Your projects / tags with counts | #projects #tags
+[C] task count | How many tasks are pending | #count
+[C] task calendar | A calendar with due dates | #calendar #due
+[C] task show | Every setting | task show data.location shows one | #config #settings
+[C] task news | Release notes | Hidden for this version by news.version in taskrc | #news #help

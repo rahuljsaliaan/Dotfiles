@@ -82,13 +82,23 @@ copy omarchy/hooks/post-boot.d/qrg-hyprland-guide "$HOME/.config/omarchy/hooks/p
 copy omarchy/clone-baselines                     "$HOME/.config/omarchy/clone-baselines"
 
 # Screensaver scripts, the floating tmux prompt, browser-here, and the update check.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide omarchy-lock-screens; do
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide qrg-herdr-guide omarchy-lock-screens waveform-theme-sync waveform14-themed omapop-ask; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
+
+# Omapop's "Ask agent" button: selected text goes to a coding agent. The script
+# keeps the agents in their own tmux server (config + default model here); the
+# extension is the button. Enable it once in the Omapop panel after restoring.
+copy omapop-ask/tmux.conf "$HOME/.config/omapop-ask/tmux.conf"
+copy omapop-ask/models    "$HOME/.config/omapop-ask/models"
+copy "omapop/extensions/Ask Agent.popclipext" "$HOME/.config/omapop/extensions/Ask Agent.popclipext"
 
 # Teams for Linux launcher, run natively on Wayland (see the file's comment).
 copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
 copy teams-for-linux/config.json         "$HOME/.config/teams-for-linux/config.json"
+
+# Tracktion Waveform launcher that starts it in the current theme's colours.
+copy applications/waveform14.desktop "$HOME/.local/share/applications/waveform14.desktop"
 
 # Open/Save dialogs in Nautilus instead of the plain GTK chooser.
 copy xdg-desktop-portal/hyprland-portals.conf  "$HOME/.config/xdg-desktop-portal/hyprland-portals.conf"
@@ -99,8 +109,11 @@ copy systemd/xdg-desktop-portal.service.d/nautilus-filechooser.conf "$HOME/.conf
 copy omarchy/themed/starship.toml.tpl "$HOME/.config/omarchy/themed/starship.toml.tpl"
 copy tmux/tmux.conf         "$HOME/.config/tmux/tmux.conf"
 copy tmux/theme-colors.sh   "$HOME/.config/tmux/theme-colors.sh"
+copy herdr/config.toml      "$HOME/.config/herdr/config.toml"
+copy task/taskrc            "$HOME/.config/task/taskrc"
 copy qrg/guides/tmux.txt    "$HOME/.config/qrg/guides/tmux.txt"
 copy qrg/guides/nvim.txt    "$HOME/.config/qrg/guides/nvim.txt"
+copy qrg/guides/taskwarrior.txt "$HOME/.config/qrg/guides/taskwarrior.txt"
 copy bash/.bashrc           "$HOME/.bashrc"
 copy foot/foot.ini          "$HOME/.config/foot/foot.ini"
 copy mise/config.toml       "$HOME/.config/mise/config.toml"
@@ -146,6 +159,13 @@ if command -v inotifywait >/dev/null; then
   printf '  ok       inotify-tools\n'
 elif command -v omarchy >/dev/null; then
   omarchy pkg add inotify-tools >/dev/null 2>&1 && printf '  installed inotify-tools\n'
+fi
+
+# Taskwarrior and its terminal UI: the local to-do list (Super + Shift + T).
+if command -v task >/dev/null && command -v taskwarrior-tui >/dev/null; then
+  printf '  ok       taskwarrior\n'
+elif command -v omarchy >/dev/null; then
+  omarchy pkg add task taskwarrior-tui >/dev/null 2>&1 && printf '  installed taskwarrior\n'
 fi
 
 # Tools from mise/config.toml (pnpm), next to Omarchy's own mise tools.
@@ -211,6 +231,21 @@ for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsych
   fi
 done
 
+# Quick Reference Guide: `omarchy-shell qrg toggleGuide <id|all>` opens the panel
+# on one guide: Super + / the Hyprland guide, Super + Alt + / tmux, Super + Ctrl + /
+# herdr, Super + Ctrl + G the All tab. Applied once; like the
+# edits below, `git -C <plugin> checkout .` drops it before a plugin update.
+qrg_dir="$HOME/.config/omarchy/plugins/jcmarin.qrg"
+if [[ -d $qrg_dir ]]; then
+  if grep -q toggleGuide "$qrg_dir/Panel.qml" 2>/dev/null; then
+    printf '  ok       qrg toggleGuide patch\n'
+  elif patch -d "$qrg_dir" -p1 --forward -s <"$REPO/patches/qrg-toggle-guide.patch"; then
+    printf '  patched  qrg toggleGuide\n'
+  else
+    printf '  FAILED   qrg toggleGuide patch (plugin changed upstream?)\n' >&2
+  fi
+fi
+
 # Small fixes to community plugins, kept as in-place edits: their lists' hint
 # lines were centred (every list here is left-aligned), and Hyprpin's panel
 # ignored Esc. `omarchy plugin
@@ -228,7 +263,7 @@ tweaks = [
      "        open: root.opened\n        // Esc closes it, as in the stock panels.\n        focusTarget: keyCatcher\n        contentWidth: panel.fittedContentWidth(Style.space(420))"),
     ("io.github.jondkinney.hyprpin/HyprpinPanel.qml",
      "        Flickable {\n            id: scroller",
-     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close() }\n\n        Flickable {\n            id: scroller"),
+     "        PanelKeyCatcher { id: keyCatcher; anchors.fill: parent; onCloseRequested: root.close()\n            // j / k (or Down / Up) scroll, as in the stock panels.\n            onMoveRequested: function(dx, dy) { if (dy !== 0) scroller.contentY = Math.max(0, Math.min(Math.max(0, scroller.contentHeight - scroller.height), scroller.contentY + dy * Style.space(48))) } }\n\n        Flickable {\n            id: scroller"),
     # Omapop: its bar icon was sized from a loader with no size yet and drew nothing.
     ("io.github.jondkinney.omapop/BarWidget.qml",
      "            BarIcon {\n                anchors.fill: parent\n                color: button.foreground",
@@ -273,6 +308,7 @@ done
 
 # The Hyprland search guide, built from the live bindings (also at every login).
 "$HOME/.local/bin/qrg-hyprland-guide" && printf '  guide    hyprland search guide\n'
+"$HOME/.local/bin/qrg-herdr-guide" && printf '  guide    herdr search guide\n'
 
 # Foot as the terminal (Super + Return); it is in Omarchy's base packages.
 omarchy-default-terminal foot >/dev/null && printf '  terminal foot\n'
