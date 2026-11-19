@@ -946,10 +946,32 @@ o.bind("SUPER + BRACKETLEFT", "Volume down", { audio = "lower" }, { locked = tru
 o.bind("SUPER + BACKSLASH", "Mute", { audio = "mute-toggle" }, { locked = true })
 o.bind("SUPER + SHIFT + BRACKETRIGHT", "Volume up precise", "omarchy-audio-output-volume +1", { locked = true, repeating = true })
 o.bind("SUPER + SHIFT + BRACKETLEFT", "Volume down precise", "omarchy-audio-output-volume -1", { locked = true, repeating = true })
+-- Shift on the mute key mutes the other end: the microphone.
+o.bind("SUPER + SHIFT + BACKSLASH", "Mute microphone", "omarchy-audio-input-mute", { locked = true })
 
--- Screen brightness on the same bracket keys with Ctrl (Alt is taken by the
--- webcam overlay). Same commands as Omarchy's brightness keys, so the popup shows.
+-- Music on the same row with Alt: [ previous, ] next, \ play or pause, and
+-- Shift + Alt + \ switches the player. Same actions as Omarchy's media keys.
+-- Omarchy had the webcam overlay size on Super + Alt + [ / ] (as code:34/35);
+-- it moves to Super + Ctrl + Alt + [ / ].
+o.rebind("SUPER + ALT + code:34", "Previous track", { ipc = "media.previous" }, { locked = true })
+o.rebind("SUPER + ALT + code:35", "Next track", { ipc = "media.next" }, { locked = true })
+o.bind("SUPER + ALT + BACKSLASH", "Play or pause", { ipc = "media.playPause" }, { locked = true })
+o.bind("SUPER + SHIFT + ALT + BACKSLASH", "Switch media source", "omarchy-audio-source-switch", { locked = true })
+o.bind("SUPER + CTRL + ALT + code:34", "Make webcam overlay smaller", "omarchy-capture-webcam-resize smaller")
+o.bind("SUPER + CTRL + ALT + code:35", "Make webcam overlay larger", "omarchy-capture-webcam-resize larger")
+
+-- Screen brightness on the same bracket keys with Ctrl. Same commands as
+-- Omarchy's brightness keys, so the popup shows.
 o.bind("SUPER + CTRL + BRACKETRIGHT", "Brightness up", { brightness = "raise" }, { locked = true, repeating = true })
 o.bind("SUPER + CTRL + BRACKETLEFT", "Brightness down", { brightness = "lower" }, { locked = true, repeating = true })
 o.bind("SUPER + CTRL + SHIFT + BRACKETRIGHT", "Brightness up precise", "omarchy-brightness-display +1%", { locked = true, repeating = true })
 o.bind("SUPER + CTRL + SHIFT + BRACKETLEFT", "Brightness down precise", "omarchy-brightness-display 1%-", { locked = true, repeating = true })
+
+-- Capture without the Print key (this board has none), all on C for capture:
+-- Super + Ctrl + C is Omarchy's capture menu and Super + Ctrl + Alt + C its
+-- screenshot; Shift + Ctrl records the screen, Shift + Alt picks a colour, and
+-- Shift + Ctrl + T copies text off the screen. Same commands as Omarchy's
+-- Print keys, which keep working on the laptop keyboard.
+o.bind("SUPER + SHIFT + CTRL + C", "Screenrecording", "omarchy-capture-screenrecording --stop-recording || omarchy-menu toggle trigger.capture.screenrecord")
+o.bind("SUPER + SHIFT + ALT + C", "Color picker", "pkill hyprpicker || hyprpicker -a")
+o.bind("SUPER + SHIFT + CTRL + T", "Extract text (OCR) from screenshot", "omarchy-capture-text")
