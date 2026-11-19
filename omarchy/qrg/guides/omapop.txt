@@ -1,0 +1,27 @@
+# Omapop
+Select text and a small bar appears: Copy, Search, Word Count and Ask agent
+@legend S=Selection bar, A=Ask agent, Y=This setup's own
+// Written from ~/.local/bin/omapop-ask, ~/.config/omapop-ask/ and the Ask Agent extension in ~/.config/omapop/extensions/. Keep in step with them.
+// The bar needs a drag, a double click or a triple click. In a terminal hold Shift while selecting.
+
+## Selection bar
+[S] Select text | The bar appears beside the selection | Drag or double click or triple click. In foot or tmux hold Shift from mouse down to mouse up | #select #bar #popup
+[S] Super + select | Keeps the bar away | Hold Super while selecting | #select #hide
+[S] Super+Ctrl+Alt+O | Omapop panel | Turn extensions on and off and open settings. Right click the bar icon to pause | #panel #settings
+[S] Shift or Ctrl or Alt + click a button | The button's alternate | Alt on Search is an exact phrase. For Ask agent see below | #modifier #alternate
+
+## Ask agent
+[Y] Ask agent | Paste the selection into the current agent session | Starts a session when none is running. The text is pasted and not sent so type your question and press Enter | #ask #agent #claude
+[Y] Shift + click Ask agent | Always start a new session | The new one becomes the current session | #ask #new #session
+[Y] Alt + click Ask agent | Pick a session in a floating list | Shows live sessions with a preview plus a new session for each agent. Enter pastes there | #ask #switch #session
+[Y] Agents > New session | Same as Shift + click | #ask #new #session
+[Y] Agents > Switch session | Same as Alt + click | #ask #switch #session
+[Y] Agents > Ask Codex | Paste into the Codex session | Reuses the latest Codex session or starts one | #ask #codex #agent
+[Y] Agents > Ask OpenCode | Paste into the OpenCode session | Reuses the latest OpenCode session or starts one | #ask #opencode #agent
+[Y] Agent window | Floating with the title bar controls | Close and maximise and minimise at the top right. Closing the window keeps the session so the next ask reopens it. Type exit in the agent to end it | #window #floating #close
+[Y] omapop-ask --list | Live sessions with the current one starred | Run in any terminal | #cli #session #list
+[Y] omapop-ask --use claude-2 | Make a session current and show its window | #cli #session #switch
+[Y] omapop-ask --agents | Agents that are really installed | Shims that would download on first use are left out | #cli #agent
+[Y] ~/.config/omapop-ask/models | Model each agent starts with | One agent=model per line. Claude starts on haiku. Running sessions keep their model | #model #small #haiku #config
+[Y] omarchy default agent codex | Change the default agent | The plain Ask agent button follows it | #default #agent #config
+[Y] tmux -L agents attach -t claude-1 | Attach to a session by hand | The agents live on their own tmux server and not in your normal tmux | #tmux #session #attach
