@@ -1,0 +1,6 @@
+# Model each agent starts with (one `agent=model` per line; no line = the
+# agent's own default). Read by ~/.local/bin/omapop-ask when it starts a new
+# session; running sessions keep the model they started with.
+claude=haiku
+# codex=gpt-5-mini
+# opencode=provider/model
