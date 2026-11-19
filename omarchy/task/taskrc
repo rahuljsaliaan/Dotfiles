@@ -1,0 +1,16 @@
+# Taskwarrior: local only, no sync. taskwarrior-tui reads this file too.
+# Data lives in ~/.local/share/task; this file is tracked in the Dotfiles repo.
+data.location=~/.local/share/task
+
+# Dark colours that suit the terminal's own palette.
+include /usr/share/doc/task/rc/dark-256.theme
+
+# Monday first, as the calendar in the bar shows it.
+weekstart=Monday
+
+# Keep the TUI's list readable: urgency-sorted "next" report with a due column.
+report.next.columns=id,start.age,entry.age,depends,priority,project,tags,recur,scheduled.countdown,due.relative,until.remaining,description.truncated_count,urgency
+report.next.labels=ID,Active,Age,Deps,P,Project,Tag,Recur,S,Due,Until,Description,Urg
+
+# Silence the upgrade notice (read it any time with: task news).
+news.version=3.5.0
