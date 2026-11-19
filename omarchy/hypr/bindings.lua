@@ -975,3 +975,8 @@ o.bind("SUPER + CTRL + SHIFT + BRACKETLEFT", "Brightness down precise", "omarchy
 o.bind("SUPER + SHIFT + CTRL + C", "Screenrecording", "omarchy-capture-screenrecording --stop-recording || omarchy-menu toggle trigger.capture.screenrecord")
 o.bind("SUPER + SHIFT + ALT + C", "Color picker", "pkill hyprpicker || hyprpicker -a")
 o.bind("SUPER + SHIFT + CTRL + T", "Extract text (OCR) from screenshot", "omarchy-capture-text")
+
+-- Right Alt is plain Alt here. tmux and herdr take Alt keys, and Omarchy's
+-- push-to-talk on Right Alt started a dictation whenever Right Alt was used for
+-- them. Dictation stays on Alt + Space (and Superwhisper's Ctrl + Alt + Space).
+hl.unbind("ALT + Alt_R")
