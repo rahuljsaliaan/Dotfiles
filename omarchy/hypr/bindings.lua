@@ -624,7 +624,7 @@ o.bind("SUPER + N", "Cycle workspace layout", "omarchy-hyprland-workspace-layout
 o.bind("SUPER + ALT + N", "Cycle workspace layout back", "omarchy-hyprland-workspace-layout-toggle back") -- was Super + Alt + L
 -- The key lists sit on / (the ? key), paired the way Enter opens them: Super
 -- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr.
-o.rebind("SUPER + SLASH", "Keybindings", "omarchy-menu-keybindings") -- was monitor scaling up
+o.rebind("SUPER + SLASH", "Keybindings", "omarchy-shell qrg toggleGuide hyprland") -- was monitor scaling up; the categorised Hyprland guide, not Omarchy's flat list
 o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-menu-tmux-keybindings") -- was monitor scaling down
 o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-menu-herdr-keybindings")
 hl.unbind("SUPER + CTRL + K")

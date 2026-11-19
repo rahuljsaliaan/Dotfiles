@@ -222,6 +222,20 @@ for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsych
   fi
 done
 
+# Quick Reference Guide: `omarchy-shell qrg toggleGuide <id>` opens the panel on
+# one guide, which Super + / uses for the Hyprland guide. Applied once; like the
+# edits below, `git -C <plugin> checkout .` drops it before a plugin update.
+qrg_dir="$HOME/.config/omarchy/plugins/jcmarin.qrg"
+if [[ -d $qrg_dir ]]; then
+  if grep -q toggleGuide "$qrg_dir/Panel.qml" 2>/dev/null; then
+    printf '  ok       qrg toggleGuide patch\n'
+  elif patch -d "$qrg_dir" -p1 --forward -s <"$REPO/patches/qrg-toggle-guide.patch"; then
+    printf '  patched  qrg toggleGuide\n'
+  else
+    printf '  FAILED   qrg toggleGuide patch (plugin changed upstream?)\n' >&2
+  fi
+fi
+
 # Small fixes to community plugins, kept as in-place edits: their lists' hint
 # lines were centred (every list here is left-aligned), and Hyprpin's panel
 # ignored Esc. `omarchy plugin
