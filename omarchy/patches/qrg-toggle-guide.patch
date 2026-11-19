@@ -1,26 +1,27 @@
 diff --git i/BarWidget.qml w/BarWidget.qml
-index 819f13d..ce8cc65 100644
+index 819f13d..07df0c7 100644
 --- i/BarWidget.qml
 +++ w/BarWidget.qml
 @@ -56,6 +56,8 @@ BarWidget {
          function show(): void { root.open() }
          function hide(): void { root.close() }
          function toggle(): void { root.togglePanel() }
-+        // `omarchy-shell qrg toggleGuide hyprland` opens the panel on that guide (Super + /).
++        // `omarchy-shell qrg toggleGuide hyprland|tmux|herdr|all` opens the panel on that guide (Super + / and friends).
 +        function toggleGuide(id: string): void { if (root.panelItem) root.panelItem.toggleGuide(id) }
          // `omarchy-shell qrg newGuide <name>` scaffolds ~/.config/qrg/guides/<name>.txt and opens it.
          function newGuide(name: string): void { if (root.panelItem) root.panelItem.newGuide(name) }
      }
 diff --git i/Panel.qml w/Panel.qml
-index 4eab7fb..3a29d59 100644
+index 4eab7fb..a918918 100644
 --- i/Panel.qml
 +++ w/Panel.qml
-@@ -91,6 +91,14 @@ Panel {
+@@ -91,6 +91,15 @@ Panel {
      close()
    }
  
-+  // `omarchy-shell qrg toggleGuide <id>`: open on one guide, or close if it is already showing.
++  // `omarchy-shell qrg toggleGuide <id|all>`: open on one guide (or the All tab), or close if it is already showing.
 +  function toggleGuide(id) {
++    if (id === "all") id = ""
 +    if (opened && toolId === id) { close(); return }
 +    toolId = id
 +    if (opened) setTool(id)

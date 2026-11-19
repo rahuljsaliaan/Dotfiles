@@ -623,10 +623,11 @@ o.bind("SUPER + Y", "Toggle window split", hl.dsp.layout("togglesplit")) -- was 
 o.bind("SUPER + N", "Cycle workspace layout", "omarchy-hyprland-workspace-layout-toggle") -- was Super + L
 o.bind("SUPER + ALT + N", "Cycle workspace layout back", "omarchy-hyprland-workspace-layout-toggle back") -- was Super + Alt + L
 -- The key lists sit on / (the ? key), paired the way Enter opens them: Super
--- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr.
+-- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr. All three open
+-- the Quick Reference panel on that tool's guide; Super + Ctrl + G opens it on All.
 o.rebind("SUPER + SLASH", "Keybindings", "omarchy-shell qrg toggleGuide hyprland") -- was monitor scaling up; the categorised Hyprland guide, not Omarchy's flat list
-o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-menu-tmux-keybindings") -- was monitor scaling down
-o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-menu-herdr-keybindings")
+o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-shell qrg toggleGuide tmux") -- was monitor scaling down
+o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-shell qrg toggleGuide herdr")
 hl.unbind("SUPER + CTRL + K")
 o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
 o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
@@ -650,7 +651,7 @@ o.bind("SUPER + CTRL + ALT + M", "Toggle laptop display mirroring", "omarchy-hyp
 -- Bar panels by name. Super + Ctrl opens the system panels (Audio, Network...);
 -- Super + Ctrl + Alt peeks at the rest, as it shows battery, time and weather.
 o.bind("SUPER + CTRL + U", "AI usage", { panel = "jim.aiusage" })
-o.bind("SUPER + CTRL + G", "Quick reference guides", { panel = "jcmarin.qrg" })
+o.bind("SUPER + CTRL + G", "All quick reference guides", "omarchy-shell qrg toggleGuide all")
 o.bind("SUPER + CTRL + ALT + A", "Agents panel", { panel = "omarchy.agents" })
 o.bind("SUPER + CTRL + ALT + S", "Agent skills", { panel = "oliwier.agent-skills-manager" })
 o.bind("SUPER + CTRL + ALT + N", "Network speed", { panel = "rahulj.net-speed" })

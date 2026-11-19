@@ -27,7 +27,7 @@ SKIP = [r"^Omapop (selection|dismiss)", r"^Direct input for the terminal prefix$
 
 # (section, description pattern), first match wins; order is the guide's order.
 SECTIONS = [
-    ("Essentials", r"^(Keybindings|Omarchy menu|Terminal|Browser|File manager|System menu|Apps|Close window|Close all windows|Lock system|Full screen|Toggle top bar|Agent|Tmux|Power menu)$"),
+    ("Essentials", r"^(Keybindings|Omarchy menu|Terminal|Browser|File manager|System menu|Apps|Close window|Close all windows|Lock system|Full screen|Toggle top bar|Agent|Tmux|Power menu|Tmux keybindings|Herdr keybindings|All quick reference guides)$"),
     ("Hyprpin (windows that follow you)", r"Hyprpin"),
     ("Resize windows", r"window (width|height)|Resize window"),
     ("Focus and move windows", r"^(Focus on|Swap window|Move window$|Reveal active)"),
@@ -170,7 +170,7 @@ def section_of(desc):
 
 
 # Keys that live in tmux and herdr, not in Hyprland, so the live bindings never
-# list them. Kept in step with tmux.txt (the full sheet is Super+Alt+/).
+# list them. Kept in step with tmux.txt (the full sheets: Super+Alt+/ tmux, Super+Ctrl+/ herdr).
 TERMINAL_SECTION = [
     "## Terminal panes and tabs (tmux and herdr)",
     "[Y] Ctrl+Alt+H / Ctrl+Alt+J / Ctrl+Alt+K / Ctrl+Alt+L | Focus the pane left / down / up / right | #terminal #tmux #herdr #pane",
@@ -180,8 +180,6 @@ TERMINAL_SECTION = [
     "[Y] Alt+Escape | Close the pane | #terminal #tmux #pane",
     "[Y] Alt+1…9 | Go to tab 1–9 | #terminal #tmux #tab",
     "[Y] Ctrl+Space | The tmux prefix: press it, let go, then the next key | #terminal #tmux #prefix",
-    "[Y] Super+Alt+/ | All tmux keys | #terminal #tmux #help",
-    "[Y] Super+Ctrl+/ | All herdr keys | #terminal #herdr #help",
     "",
 ]
 
