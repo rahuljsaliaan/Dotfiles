@@ -26,6 +26,12 @@
 - Keep both modes readable: color inline SVG and custom CSS through `currentColor` and DaisyUI tokens (`--color-base-100`, `--color-base-content`, …), not fixed light-only colors. Re-render any Mermaid diagram when the theme flips.
 - Open the page on the same Hyprland workspace as the terminal Claude runs in, not wherever the browser last was. Start or resume the session with `npx -y lavish-axi <file> --no-open` (add `--reopen` only when reopening is warranted), then open the `url` it prints with `browser-here <url>`. That puts it as a new tab in the browser window already on that workspace, or opens a new browser window there. If `browser-here` is missing or fails, fall back to a plain `npx -y lavish-axi <file>`.
 
+## Floating windows always get the title-bar controls
+
+- Whenever the user asks for something to be "floating" (a floating window, popup, picker or panel that opens above other windows), give it the title-bar controls Omarchy already has: × close, □ maximise, − minimise, drag by the bar. Do not ship a floating window without them.
+- The controls come from the patched `hyprbars` plugin and appear on windows carrying the tag `omarchy-floating-workspace`. A window that is floating only because of a rule (for example `TUI.float`) does not get them by itself: tag it, e.g. `hyprctl dispatch 'hl.dsp.window.tag({ tag = "+omarchy-floating-workspace", window = "address:0x…" })'` once it exists, and again after moving it to a tiled workspace, which drops the tag.
+- Prefer an app-id Omarchy already floats (`TUI.float`) over new window rules, and never call float-toggle or centre dispatches on a live session (they crashed Hyprland before; see the Hyprland float/centre crash note).
+
 ## "Quick task" — the code word for speed
 
 - When the user says "quick task", do it fast: keep reasoning short and skip build, lint, typecheck and test runs.

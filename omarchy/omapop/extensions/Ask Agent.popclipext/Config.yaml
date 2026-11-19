@@ -1,0 +1,33 @@
+#popclip
+name: Ask Agent
+identifier: local.rahulj.omapop.askagent
+description: Send the selected text to a coding agent (default agent, Claude). Click pastes into the current session and starts one if none is running. Shift starts a new session, Alt picks a session. The menu holds other agents. The text is pasted, not sent, so you type the question.
+icon: square filled AI
+requirements: [text]
+interpreter: bash
+shell mode: login
+after: show-status
+actions:
+  - title: Ask agent
+    icon: square filled AI
+    shell script: |
+      "$HOME/.local/bin/omapop-ask"
+  - title: Agents
+    icon: circle filled ▾
+    submenu:
+      - title: New session
+        icon: square filled +
+        shell script: |
+          "$HOME/.local/bin/omapop-ask" --new
+      - title: Switch session
+        icon: square filled ⇄
+        shell script: |
+          "$HOME/.local/bin/omapop-ask" --switch
+      - title: Ask Codex
+        icon: square filled Cx
+        shell script: |
+          "$HOME/.local/bin/omapop-ask" --agent codex
+      - title: Ask OpenCode
+        icon: square filled OC
+        shell script: |
+          "$HOME/.local/bin/omapop-ask" --agent opencode

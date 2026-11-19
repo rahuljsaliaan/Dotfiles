@@ -82,9 +82,16 @@ copy omarchy/hooks/post-boot.d/qrg-hyprland-guide "$HOME/.config/omarchy/hooks/p
 copy omarchy/clone-baselines                     "$HOME/.config/omarchy/clone-baselines"
 
 # Screensaver scripts, the floating tmux prompt, browser-here, and the update check.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide omarchy-lock-screens waveform-theme-sync waveform14-themed; do
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide omarchy-lock-screens waveform-theme-sync waveform14-themed omapop-ask; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
+
+# Omapop's "Ask agent" button: selected text goes to a coding agent. The script
+# keeps the agents in their own tmux server (config + default model here); the
+# extension is the button. Enable it once in the Omapop panel after restoring.
+copy omapop-ask/tmux.conf "$HOME/.config/omapop-ask/tmux.conf"
+copy omapop-ask/models    "$HOME/.config/omapop-ask/models"
+copy "omapop/extensions/Ask Agent.popclipext" "$HOME/.config/omapop/extensions/Ask Agent.popclipext"
 
 # Teams for Linux launcher, run natively on Wayland (see the file's comment).
 copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
