@@ -39,7 +39,7 @@ SECTIONS = [
     ("Clipboard and text", r"Universal|Clipboard|Emojis|Select all"),
     ("Notifications and reminders", r"otification|Dismiss|eminder"),
     ("Bar panels and menus", r"Bar panel|^Audio$|^Bluetooth$|^Network$|^Power$|Calendar$|World clock|weather|Show time|battery|Hardware menu|Theme menu|Background switcher|Toggle menu|locking on idle|keybindings|^AI usage$|^Quick reference guides$|^Agents panel$|^Agent skills$|^Network speed$|^Omapop panel$|^Menus: "),
-    ("Sound, media, brightness and input", r"Volume|Mute|[Tt]rack|^Play$|^Pause$|[Bb]rightness|backlight|media source|audio output|[Tt]ouchpad|Eject|dictation|Superwhisper|input language"),
+    ("Sound, media, brightness and input", r"Volume|Mute|[Tt]rack|^Play$|^Pause$|^Play or pause$|[Bb]rightness|backlight|media source|audio output|[Tt]ouchpad|Eject|dictation|Superwhisper|input language"),
     ("Apps", r".*"),
 ]
 
@@ -68,6 +68,11 @@ def pretty(keys):
     return " / ".join(out)
 
 
+# Keys bindings.lua names by keycode (as Omarchy does) and the key list prints
+# by name, so a code:N bind still counts as this setup's own.
+CODE_KEYS = {"code:20": "MINUS", "code:21": "EQUAL", "code:34": "BRACKETLEFT", "code:35": "BRACKETRIGHT"}
+
+
 def norm(keys):
     """A comparable form: modifiers as a sorted set, then the key."""
     keys = keys.strip()
@@ -76,6 +81,7 @@ def norm(keys):
         mods, key = parts[:-1], parts[-1]
     else:
         mods, key = [], keys
+    key = CODE_KEYS.get(key.lower(), key)
     return " ".join(sorted(m.upper() for m in mods)) + "|" + key.upper()
 
 
