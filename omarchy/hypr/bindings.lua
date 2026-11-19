@@ -623,10 +623,11 @@ o.bind("SUPER + Y", "Toggle window split", hl.dsp.layout("togglesplit")) -- was 
 o.bind("SUPER + N", "Cycle workspace layout", "omarchy-hyprland-workspace-layout-toggle") -- was Super + L
 o.bind("SUPER + ALT + N", "Cycle workspace layout back", "omarchy-hyprland-workspace-layout-toggle back") -- was Super + Alt + L
 -- The key lists sit on / (the ? key), paired the way Enter opens them: Super
--- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr.
-o.rebind("SUPER + SLASH", "Keybindings", "omarchy-menu-keybindings") -- was monitor scaling up
-o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-menu-tmux-keybindings") -- was monitor scaling down
-o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-menu-herdr-keybindings")
+-- for the desktop, Super + Alt for tmux, Super + Ctrl for herdr. All three open
+-- the Quick Reference panel on that tool's guide; Super + Ctrl + G opens it on All.
+o.rebind("SUPER + SLASH", "Keybindings", "omarchy-shell qrg toggleGuide hyprland") -- was monitor scaling up; the categorised Hyprland guide, not Omarchy's flat list
+o.rebind("SUPER + ALT + SLASH", "Tmux keybindings", "omarchy-shell qrg toggleGuide tmux") -- was monitor scaling down
+o.bind("SUPER + CTRL + SLASH", "Herdr keybindings", "omarchy-shell qrg toggleGuide herdr")
 hl.unbind("SUPER + CTRL + K")
 o.bind("SUPER + CTRL + ALT + code:21", "Monitor scaling up", "omarchy-hyprland-monitor-scaling up")
 o.bind("SUPER + CTRL + ALT + code:20", "Monitor scaling down", "omarchy-hyprland-monitor-scaling down")
@@ -650,7 +651,7 @@ o.bind("SUPER + CTRL + ALT + M", "Toggle laptop display mirroring", "omarchy-hyp
 -- Bar panels by name. Super + Ctrl opens the system panels (Audio, Network...);
 -- Super + Ctrl + Alt peeks at the rest, as it shows battery, time and weather.
 o.bind("SUPER + CTRL + U", "AI usage", { panel = "jim.aiusage" })
-o.bind("SUPER + CTRL + G", "Quick reference guides", { panel = "jcmarin.qrg" })
+o.bind("SUPER + CTRL + G", "All quick reference guides", "omarchy-shell qrg toggleGuide all")
 o.bind("SUPER + CTRL + ALT + A", "Agents panel", { panel = "omarchy.agents" })
 o.bind("SUPER + CTRL + ALT + S", "Agent skills", { panel = "oliwier.agent-skills-manager" })
 o.bind("SUPER + CTRL + ALT + N", "Network speed", { panel = "rahulj.net-speed" })
@@ -668,6 +669,11 @@ o.rebind("SUPER + SHIFT + E", "Gmail", { webapp = "https://mail.google.com/", fo
 o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.office.com/mail/", focus = true }) -- was HEY new email
 hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
 hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
+
+-- Tasks: Taskwarrior's terminal UI (the to-do list). T names it, so the system
+-- task manager (btop, "Activity") moves to the Alt version of the same key.
+o.rebind("SUPER + SHIFT + T", "Tasks", { tui = "taskwarrior-tui", focus = true }) -- was Activity
+o.bind("SUPER + SHIFT + ALT + T", "Activity", { tui = "btop" })
 
 -- Ctrl + H/J/K/L in Omarchy's menus and pickers. Their search box types plain
 -- letters, so, as in fzf and Neovim's pickers, Ctrl + J/K move down/up and
@@ -917,15 +923,19 @@ end
 _G.rahulj_keys.resize_width = resize_width
 
 for _, r in ipairs({
-  { mods = "SUPER", name = "", step = 0.1, px = 100 },
-  { mods = "SUPER + ALT", name = " a little", step = 0.05, px = 25 },
-  { mods = "SUPER + CTRL", name = " a lot", step = 0.25, px = 300 },
+  { mods = "SUPER", hmods = "SUPER + SHIFT", name = "", step = 0.1, px = 100 },
+  { mods = "SUPER + ALT", hmods = "SUPER + SHIFT + ALT", name = " a little", step = 0.05, px = 25 },
+  { mods = "SUPER + CTRL", hmods = "SUPER + CTRL + SHIFT", name = " a lot", step = 0.25, px = 300 },
 }) do
   local narrower, wider = resize_width(-r.step, -r.px), resize_width(r.step, r.px)
   o.bind_commands[narrower] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", -r.px)
   o.bind_commands[wider] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", r.px)
-  o.rebind(r.mods .. " + code:20", "Narrower window" .. r.name .. " (scrolling: column width)", narrower)
-  o.rebind(r.mods .. " + code:21", "Wider window" .. r.name .. " (scrolling: column width)", wider)
+  o.rebind(r.mods .. " + code:20", "Decrease window width" .. r.name, narrower)
+  o.rebind(r.mods .. " + code:21", "Increase window width" .. r.name, wider)
+  -- Height keeps Omarchy's resize and its modifier order (the key list matches
+  -- it as text); only the label said "Shrink window up".
+  o.rebind(r.hmods .. " + code:20", "Decrease window height" .. r.name, hl.dsp.window.resize({ x = 0, y = -r.px, relative = true }))
+  o.rebind(r.hmods .. " + code:21", "Increase window height" .. r.name, hl.dsp.window.resize({ x = 0, y = r.px, relative = true }))
 end
 
 -- Volume on the bracket keys: this 60% keyboard has no media keys, and keys
