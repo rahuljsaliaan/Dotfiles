@@ -2,7 +2,7 @@
 This setup's Neovim: LazyVim, leader Space, explorer on the right, lines wrap
 @legend N=Normal, I=Insert, V=Visual, C=Command line, Y=This setup's own
 // Written from ~/.config/nvim (LazyVim + lua/config/keymaps.lua, options.lua,
-// lua/plugins/ui.lua, markdown.lua, lazyvim.json extras). Keep in step with them.
+// lua/plugins/ui.lua, markdown.lua, select-alt-s.lua, lazyvim.json extras). Keep in step with them.
 // Replaces the plugin's bundled nvim.txt (same file name).
 
 ## What Leader means
@@ -45,6 +45,7 @@ H / I | Explorer: show/hide dotfiles / gitignored files | Both shown by default 
 [N] ciw | Change the word under the cursor | ci" changes inside quotes, ci( inside brackets | #change #word
 [N V] gcc / gc | Comment the line / the selection | #comment
 [N V] Alt+J / Alt+K | Move the line or selection down / up | #move #line
+[Y N V] Alt+S | Select the code block around the cursor; press again to grow it | Backspace shrinks it. Works inside tmux and herdr; LazyVim's Ctrl+Space does the same outside them (there it is the prefix) | #select #expand #treesitter
 [N] > / < (or >> <<) | Indent / unindent | #indent
 
 ## Search and move
