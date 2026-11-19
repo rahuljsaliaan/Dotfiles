@@ -669,6 +669,11 @@ o.rebind("SUPER + SHIFT + ALT + E", "Outlook", { webapp = "https://outlook.offic
 hl.unbind("SUPER + CTRL + SPACE") -- same as Super + Ctrl + W (Background switcher)
 hl.unbind("SUPER + SHIFT + CTRL + SPACE") -- same as Super + Ctrl + T (Theme menu)
 
+-- Tasks: Taskwarrior's terminal UI (the to-do list). T names it, so the system
+-- task manager (btop, "Activity") moves to the Alt version of the same key.
+o.rebind("SUPER + SHIFT + T", "Tasks", { tui = "taskwarrior-tui", focus = true }) -- was Activity
+o.bind("SUPER + SHIFT + ALT + T", "Activity", { tui = "btop" })
+
 -- Ctrl + H/J/K/L in Omarchy's menus and pickers. Their search box types plain
 -- letters, so, as in fzf and Neovim's pickers, Ctrl + J/K move down/up and
 -- Ctrl + H/L go back/open (left/right in a grid). While one of these layers is
@@ -917,15 +922,19 @@ end
 _G.rahulj_keys.resize_width = resize_width
 
 for _, r in ipairs({
-  { mods = "SUPER", name = "", step = 0.1, px = 100 },
-  { mods = "SUPER + ALT", name = " a little", step = 0.05, px = 25 },
-  { mods = "SUPER + CTRL", name = " a lot", step = 0.25, px = 300 },
+  { mods = "SUPER", hmods = "SUPER + SHIFT", name = "", step = 0.1, px = 100 },
+  { mods = "SUPER + ALT", hmods = "SUPER + SHIFT + ALT", name = " a little", step = 0.05, px = 25 },
+  { mods = "SUPER + CTRL", hmods = "SUPER + CTRL + SHIFT", name = " a lot", step = 0.25, px = 300 },
 }) do
   local narrower, wider = resize_width(-r.step, -r.px), resize_width(r.step, r.px)
   o.bind_commands[narrower] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", -r.px)
   o.bind_commands[wider] = string.format("hl.dsp.window.resize({ x = %d, y = 0, relative = true })", r.px)
-  o.rebind(r.mods .. " + code:20", "Narrower window" .. r.name .. " (scrolling: column width)", narrower)
-  o.rebind(r.mods .. " + code:21", "Wider window" .. r.name .. " (scrolling: column width)", wider)
+  o.rebind(r.mods .. " + code:20", "Decrease window width" .. r.name, narrower)
+  o.rebind(r.mods .. " + code:21", "Increase window width" .. r.name, wider)
+  -- Height keeps Omarchy's resize and its modifier order (the key list matches
+  -- it as text); only the label said "Shrink window up".
+  o.rebind(r.hmods .. " + code:20", "Decrease window height" .. r.name, hl.dsp.window.resize({ x = 0, y = -r.px, relative = true }))
+  o.rebind(r.hmods .. " + code:21", "Increase window height" .. r.name, hl.dsp.window.resize({ x = 0, y = r.px, relative = true }))
 end
 
 -- Volume on the bracket keys: this 60% keyboard has no media keys, and keys

@@ -29,7 +29,9 @@ SKIP = [r"^Omapop (selection|dismiss)", r"^Direct input for the terminal prefix$
 SECTIONS = [
     ("Essentials", r"^(Keybindings|Omarchy menu|Terminal|Browser|File manager|System menu|Apps|Close window|Close all windows|Lock system|Full screen|Toggle top bar|Agent|Tmux|Power menu)$"),
     ("Hyprpin (windows that follow you)", r"Hyprpin"),
-    ("Windows", r"window|Window|Full width|Pop |Tiled full screen|transparency|gaps|square aspect|Minimize"),
+    ("Resize windows", r"window (width|height)|Resize window"),
+    ("Focus and move windows", r"^(Focus on|Swap window|Move window$|Reveal active)"),
+    ("Window state", r"window|Window|Full width|Pop |Tiled full screen|transparency|gaps|square aspect|Minimize"),
     ("Groups (tabbed windows)", r"group"),
     ("Workspaces", r"workspace|scratchpad|Quake console|layout"),
     ("Monitors", r"monitor|Monitor|display|Display|mirroring|full screen desktop"),
@@ -154,8 +156,8 @@ def fold(rows, mine):
 
 # Sections whose words also appear in "Windows" descriptions ("Move window to
 # workspace 3", "... to left monitor", "... to group") are matched first.
-MATCH_FIRST = ["Essentials", "Hyprpin (windows that follow you)",
-               "Groups (tabbed windows)", "Workspaces", "Monitors"]
+MATCH_FIRST = ["Essentials", "Hyprpin (windows that follow you)", "Resize windows",
+               "Groups (tabbed windows)", "Workspaces", "Monitors", "Focus and move windows"]
 
 
 def section_of(desc):
@@ -165,6 +167,31 @@ def section_of(desc):
         if re.search(patterns[name], desc):
             return name
     return SECTIONS[-1][0]
+
+
+# Keys that live in tmux and herdr, not in Hyprland, so the live bindings never
+# list them. Kept in step with tmux.txt (the full sheet is Super+Alt+/).
+TERMINAL_SECTION = [
+    "## Terminal panes and tabs (tmux and herdr)",
+    "[Y] Ctrl+Alt+H / Ctrl+Alt+J / Ctrl+Alt+K / Ctrl+Alt+L | Focus the pane left / down / up / right | #terminal #tmux #herdr #pane",
+    "[Y] Ctrl+Alt+Shift+H / J / K / L | Resize the pane | #terminal #tmux #pane #size",
+    "[Y] Alt+H / Alt+L | Previous / next tab | #terminal #tmux #herdr #tab",
+    "[Y] Alt+Enter / Alt+Shift+Enter | Split the pane below / right | #terminal #tmux #pane",
+    "[Y] Alt+Escape | Close the pane | #terminal #tmux #pane",
+    "[Y] Alt+1…9 | Go to tab 1–9 | #terminal #tmux #tab",
+    "[Y] Ctrl+Space | The tmux prefix: press it, let go, then the next key | #terminal #tmux #prefix",
+    "[Y] Super+Alt+/ | All tmux keys | #terminal #tmux #help",
+    "[Y] Super+Ctrl+/ | All herdr keys | #terminal #herdr #help",
+    "",
+]
+
+
+def resize_order(entry):
+    """Width, then height, then the rest; plain step, a little, a lot."""
+    desc = entry["desc"]
+    kind = 0 if "width" in desc and "Save" not in desc and "Restore" not in desc else 1 if "height" in desc else 2
+    tier = 1 if desc.endswith("a little") else 2 if desc.endswith("a lot") else 0
+    return (kind, tier, not desc.startswith("Increase"))
 
 
 def render(entries):
@@ -189,7 +216,11 @@ def render(entries):
         items = by_section.get(name)
         if not items:
             continue
+        if name == "Apps":
+            lines.extend(TERMINAL_SECTION)
         lines.append(f"## {name}")
+        if name == "Resize windows":
+            items = sorted(items, key=resize_order)
         for entry in items:
             # The 60% board's Fn layer (arrows, `, Home, Delete, Print) last,
             # so the key that needs no Fn reads first.
@@ -198,6 +229,8 @@ def render(entries):
             desc = entry["desc"].replace("|", "¦")
             mark = "[Y] " if entry["mine"] else ""
             tag = "#" + re.sub(r"[^a-z]+", "", name.split()[0].lower())
+            if name == "Resize windows":
+                tag += " #size #bigger #smaller #wider #narrower #taller #shorter #grow #shrink"
             lines.append(f"{mark}{keys} | {desc} | {tag}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
