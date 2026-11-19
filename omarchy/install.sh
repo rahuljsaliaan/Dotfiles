@@ -82,9 +82,16 @@ copy omarchy/hooks/post-boot.d/qrg-hyprland-guide "$HOME/.config/omarchy/hooks/p
 copy omarchy/clone-baselines                     "$HOME/.config/omarchy/clone-baselines"
 
 # Screensaver scripts, the floating tmux prompt, browser-here, and the update check.
-for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide omarchy-lock-screens waveform-theme-sync waveform14-themed; do
+for script in omarchy-launch-screensaver-main omarchy-screensaver-tokyo screensaver-art-from-wallpaper tmux-prompt browser-here omarchy-custom-check hyprpin-toggle qrg-hyprland-guide qrg-herdr-guide omarchy-lock-screens waveform-theme-sync waveform14-themed omapop-ask; do
   copy "bin/$script" "$HOME/.local/bin/$script"
 done
+
+# Omapop's "Ask agent" button: selected text goes to a coding agent. The script
+# keeps the agents in their own tmux server (config + default model here); the
+# extension is the button. Enable it once in the Omapop panel after restoring.
+copy omapop-ask/tmux.conf "$HOME/.config/omapop-ask/tmux.conf"
+copy omapop-ask/models    "$HOME/.config/omapop-ask/models"
+copy "omapop/extensions/Ask Agent.popclipext" "$HOME/.config/omapop/extensions/Ask Agent.popclipext"
 
 # Teams for Linux launcher, run natively on Wayland (see the file's comment).
 copy applications/teams-for-linux.desktop "$HOME/.local/share/applications/teams-for-linux.desktop"
@@ -224,6 +231,21 @@ for entry in io.github.rocanrolpsycho.glasslock=https://github.com/rocanrolpsych
   fi
 done
 
+# Quick Reference Guide: `omarchy-shell qrg toggleGuide <id|all>` opens the panel
+# on one guide: Super + / the Hyprland guide, Super + Alt + / tmux, Super + Ctrl + /
+# herdr, Super + Ctrl + G the All tab. Applied once; like the
+# edits below, `git -C <plugin> checkout .` drops it before a plugin update.
+qrg_dir="$HOME/.config/omarchy/plugins/jcmarin.qrg"
+if [[ -d $qrg_dir ]]; then
+  if grep -q toggleGuide "$qrg_dir/Panel.qml" 2>/dev/null; then
+    printf '  ok       qrg toggleGuide patch\n'
+  elif patch -d "$qrg_dir" -p1 --forward -s <"$REPO/patches/qrg-toggle-guide.patch"; then
+    printf '  patched  qrg toggleGuide\n'
+  else
+    printf '  FAILED   qrg toggleGuide patch (plugin changed upstream?)\n' >&2
+  fi
+fi
+
 # Small fixes to community plugins, kept as in-place edits: their lists' hint
 # lines were centred (every list here is left-aligned), and Hyprpin's panel
 # ignored Esc. `omarchy plugin
@@ -286,6 +308,7 @@ done
 
 # The Hyprland search guide, built from the live bindings (also at every login).
 "$HOME/.local/bin/qrg-hyprland-guide" && printf '  guide    hyprland search guide\n'
+"$HOME/.local/bin/qrg-herdr-guide" && printf '  guide    herdr search guide\n'
 
 # Foot as the terminal (Super + Return); it is in Omarchy's base packages.
 omarchy-default-terminal foot >/dev/null && printf '  terminal foot\n'

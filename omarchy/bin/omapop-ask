@@ -1,0 +1,286 @@
+#!/usr/bin/env bash
+#
+# omapop-ask: send the text you selected to a coding agent (Omapop button).
+#
+# Agents run inside their own tmux server (tmux -L agents), one tmux session
+# per agent session, named <agent>-<n> (claude-1, codex-2, ...). The selection
+# is pasted into the session's input box as a bracketed paste and is never
+# submitted, so you type the question yourself.
+#
+#   omapop-ask [--agent NAME] [--new] [--switch] [--flags N]
+#   omapop-ask --list              live sessions, current one marked
+#   omapop-ask --use SESSION       make SESSION current and show its window
+#   omapop-ask --agents            installed agents, one per line
+#
+# The text comes from $POPCLIP_TEXT (Omapop) or stdin when that is empty.
+# Click      paste into the current session (start one if none is alive)
+# Shift      always start a new session
+# Alt        pick a session (or a new one) in a floating fzf list
+#
+# --flags is Omapop's $POPCLIP_MODIFIER_FLAGS: Shift 131072, Alt 524288.
+# The default agent is `omarchy default agent` (claude when unset).
+#
+set -uo pipefail
+
+SOCK=agents
+CONF=${XDG_CONFIG_HOME:-$HOME/.config}/omapop-ask/tmux.conf
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/omapop-ask
+CLASS=TUI.float   # Omarchy floats, centres and sizes this class (windows/apps/system.lua)
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+mkdir -p "$STATE"
+[[ -r $CONF ]] || CONF=/dev/null
+
+# 9>&- keeps the tmux server (and anything it starts) from inheriting the lock.
+tm() { tmux -L "$SOCK" -f "$CONF" "$@" 9>&-; }
+notify() { omarchy-notification-send "$1" "${2:-}" >/dev/null 2>&1 || true; }
+
+# ---------------------------------------------------------------- agents ----
+# Same flags as omarchy-agent, so these sessions behave like `omarchy agent`.
+ALL_AGENTS=(claude codex opencode cursor-agent qwen copilot amp agy grok)
+agent_label() {
+  case $1 in
+    claude) echo "Claude" ;; codex) echo "Codex" ;; opencode) echo "OpenCode" ;;
+    cursor-agent) echo "Cursor CLI" ;; qwen) echo "Qwen Code" ;; copilot) echo "Copilot" ;;
+    amp) echo "Amp" ;; agy) echo "Antigravity" ;; grok) echo "Grok" ;; *) echo "$1" ;;
+  esac
+}
+# Sessions start on a small model unless ~/.config/omapop-ask/models says
+# otherwise (one `agent=model` per line). Claude defaults to haiku.
+model_for() {
+  local f=${XDG_CONFIG_HOME:-$HOME/.config}/omapop-ask/models m=""
+  [[ -r $f ]] && m=$(sed -n "s/^$1[[:space:]]*=[[:space:]]*//p" "$f" | tail -1)
+  [[ -z $m && ! -r $f && $1 == claude ]] && m=haiku
+  echo "$m"
+}
+agent_command() { # sets CMD; fails for an agent we do not know
+  case $1 in
+    claude) CMD=(claude --permission-mode auto) ;;
+    codex) CMD=(codex --approve-for-me) ;;
+    opencode) CMD=(opencode --auto) ;;
+    cursor-agent) CMD=(cursor-agent --yolo --trust) ;;
+    qwen) CMD=(qwen --yolo) ;;
+    copilot) CMD=(copilot --allow-all) ;;
+    amp) CMD=(amp --dangerously-allow-all) ;;
+    agy) CMD=(agy --dangerously-skip-permissions) ;;
+    grok) CMD=(grok --permission-mode bypassPermissions) ;;
+    *) return 1 ;;
+  esac
+  local model; model=$(model_for "$1")
+  if [[ -n $model ]]; then
+    case $1 in codex) CMD+=(-m "$model") ;; *) CMD+=(--model "$model") ;; esac
+  fi
+  # A new session uses the current account selection, as omarchy-agent does.
+  local home_env="" home pin
+  case $1 in claude) home_env=CLAUDE_CONFIG_DIR ;; codex) home_env=CODEX_HOME ;; grok) home_env=GROK_HOME ;; esac
+  if [[ -n $home_env ]]; then
+    pin="OMARCHY_AGENT_${1^^}_HOME"
+    home=$(omarchy-agent-account-home "$1" 2>/dev/null || true)
+    local envs=(env -u "$home_env" "$pin=$home")
+    [[ -n $home ]] && envs+=("$home_env=$home")
+    CMD=("${envs[@]}" "${CMD[@]}")
+  fi
+}
+# A mise shim is only a promise to install on first use, so it does not count:
+# the agent must be really installed (mise, ~/.local/bin) or on PATH elsewhere.
+agent_installed() {
+  local p
+  MISE_OFFLINE=1 mise which "$1" >/dev/null 2>&1 && return 0
+  [[ -x $HOME/.local/bin/$1 ]] && ! head -c 4096 "$HOME/.local/bin/$1" | grep -qaE 'mise (use|x) ' && return 0
+  p=$(command -v "$1" 2>/dev/null) || return 1
+  [[ $p != */mise/shims/* && $p != */mise/command-wrappers/* ]]
+}
+installed_agents() { local a; for a in "${ALL_AGENTS[@]}"; do agent_installed "$a" && echo "$a"; done; }
+default_agent() {
+  local a; a=$(omarchy-default-agent 2>/dev/null || true)
+  [[ $a == claude-code ]] && a=claude
+  agent_command "$a" 2>/dev/null && agent_installed "$a" && { echo "$a"; return; }
+  echo claude
+}
+# claude's footer appears once its input box is live (its trust dialog has none),
+# and its placeholder text rotates, so "stopped changing" never holds for it.
+ready_marker() { case $1 in claude) echo 'shift\+tab to cycle|\? for shortcuts' ;; *) echo '' ;; esac; }
+
+# -------------------------------------------------------------- sessions ----
+session_agent() { echo "${1%-*}"; }
+sessions_of() { tm list-sessions -F '#S' 2>/dev/null | grep -E "^${1}-[0-9]+\$" | sort -t- -k2 -n; }
+session_alive() { tm has-session -t "=$1" 2>/dev/null; }
+current_session() { local c; c=$(cat "$STATE/current" 2>/dev/null || true); [[ -n $c ]] && session_alive "$c" && echo "$c"; }
+set_current() { printf '%s\n' "$1" >"$STATE/current"; }
+new_session_name() {
+  local n; n=$(sessions_of "$1" | sed "s/^$1-//" | tail -1)
+  echo "$1-$(( ${n:-0} + 1 ))"
+}
+start_session() { # start_session AGENT -> prints the new session name
+  local agent=$1 name dir
+  agent_command "$agent" || { notify "Ask agent" "Unknown agent: $agent"; return 1; }
+  agent_installed "$agent" || { notify "Ask agent" "$agent is not installed"; return 1; }
+  name=$(new_session_name "$agent")
+  dir=$HOME; [[ -d $HOME/Work ]] && dir=$HOME/Work   # agents will not remember trust for $HOME
+  tm new-session -d -s "$name" -c "$dir" "exec $(printf '%q ' "${CMD[@]}")" || return 1
+  echo "$name"
+}
+
+# --------------------------------------------------------------- windows ----
+find_window() {
+  hyprctl clients -j 2>/dev/null | jq -r --arg t "$1" --arg c "$CLASS" \
+    'first(.[] | select(.class == $c and .title == $t)) | .address // empty'
+}
+hypr() { hyprctl dispatch "$1" >/dev/null 2>&1; }
+# Floating windows get Omarchy's titlebar controls (x close, square maximise,
+# minus minimise). The plugin draws them on windows carrying this tag.
+add_controls() { # add_controls TITLE: wait for the window, then tag it
+  local addr i
+  for ((i = 0; i < 20; i++)); do
+    addr=$(find_window "$1"); [[ -n $addr ]] && break; sleep 0.2
+  done
+  [[ -n $addr ]] && hypr "hl.dsp.window.tag({ tag = \"+omarchy-floating-workspace\", window = \"address:$addr\" })"
+}
+show_window() { # open a window on the session, or pull the existing one here
+  local name=$1 addr ws i
+  if [[ -n $(tm list-clients -t "=$name" 2>/dev/null) ]]; then
+    addr=$(find_window "$name")
+    if [[ -n $addr ]]; then
+      ws=$(hyprctl activeworkspace -j | jq -r .id)
+      hypr "hl.dsp.window.move({ workspace = \"$ws\", follow = false, window = \"address:$addr\" })"
+      hypr "hl.dsp.focus({ window = \"address:$addr\" })"
+      sleep 0.3; add_controls "$name"   # a move to a tiled workspace drops the tag
+    fi
+    return 0
+  fi
+  # uwsm-app stays in the foreground while the window lives, so detach it.
+  setsid -f omarchy-launch-tui --app-id="$CLASS" tmux -L "$SOCK" -f "$CONF" attach -t "=$name" 9>&- >/dev/null 2>&1
+  for ((i = 0; i < 30; i++)); do
+    if [[ -n $(tm list-clients -t "=$name" 2>/dev/null) ]]; then add_controls "$name"; return 0; fi
+    sleep 0.2
+  done
+  return 1
+}
+wait_ready() { # wait until the agent's input is live (marker) or the pane stops changing
+  local name=$1 marker; marker=$(ready_marker "$(session_agent "$1")")
+  local last="" cur same=0 i
+  for ((i = 0; i < 80; i++)); do
+    cur=$(tm capture-pane -p -t "=$name:" 2>/dev/null)
+    if [[ -n $marker ]]; then
+      if grep -qE "$marker" <<<"$cur"; then sleep 1.5; return 0; fi
+    elif [[ -n ${cur//[[:space:]]/} && $cur == "$last" ]]; then
+      ((++same >= 4)) && return 0
+    else
+      same=0
+    fi
+    last=$cur
+    sleep 0.25
+  done
+  return 1
+}
+paste_text() { # paste_text SESSION FILE -> bracketed paste, no Enter
+  local name=$1 file=$2 app text payload
+  app=$(cat "$file.app" 2>/dev/null || true)
+  text=$(<"$file")
+  [[ -z ${text//[[:space:]]/} ]] && return 0
+  if [[ -n $app ]]; then payload="From $app:"$'\n'; else payload="Selected text:"$'\n'; fi
+  payload+='"""'$'\n'"$text"$'\n''"""'$'\n\n'
+  printf '%s' "$payload" | tm load-buffer -b omapop-ask - && tm paste-buffer -p -d -b omapop-ask -t "=$name:"
+}
+
+# One whole Ask: make sure the session and its window exist, then paste.
+deliver() { # deliver SESSION FILE FRESH(0|1)
+  local name=$1 file=$2 fresh=$3
+  show_window "$name" || { notify "Ask agent" "Could not open a window for $name"; return 1; }
+  [[ $fresh == 1 ]] && wait_ready "$name"
+  paste_text "$name" "$file"
+  set_current "$name"
+}
+
+# ------------------------------------------------------------------ main ----
+cmd_run() { # cmd_run AGENT NEW(0|1) SESSION FILE
+  local agent=$1 new=$2 want=$3 file=$4 name fresh=0
+  exec 9>"$STATE/lock"; flock 9
+  if [[ -n $want ]] && session_alive "$want"; then
+    name=$want
+  elif [[ $new == 1 ]]; then
+    name=$(start_session "$agent") || return 1; fresh=1
+  else
+    name=$(current_session || true)
+    if [[ -z $name || $(session_agent "$name") != "$agent" ]]; then
+      name=$(sessions_of "$agent" | tail -1)
+    fi
+    if [[ -z $name ]]; then name=$(start_session "$agent") || return 1; fresh=1; fi
+  fi
+  deliver "$name" "$file" "$fresh"
+  rm -f "$file" "$file.app"
+}
+
+cmd_pick_ui() { # runs inside the floating terminal: pick_ui AGENT FILE
+  local agent=$1 file=$2 lines name choice a
+  lines=$(
+    for name in $(tm list-sessions -F '#S' 2>/dev/null | sort); do
+      printf '%s\t%s\n' "$name" "$name   $(tm capture-pane -p -t "=$name:" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-70)"
+    done
+    for a in $(installed_agents); do printf 'new:%s\t+ new %s session\n' "$a" "$(agent_label "$a")"; done
+  )
+  choice=$(printf '%s\n' "$lines" | fzf --delimiter=$'\t' --with-nth=2 --prompt='ask which session ❯ ' \
+    --layout reverse --height 100% --no-info --border none \
+    --preview 'n={1}; [[ $n == new:* ]] && echo "Starts a fresh ${n#new:} session" || tmux -L '"$SOCK"' capture-pane -p -t "=$n:" | tail -40' \
+    --preview-window=right:55%) || { rm -f "$file" "$file.app"; return 0; }
+  choice=${choice%%$'\t'*}
+  if [[ $choice == new:* ]]; then
+    cmd_run "${choice#new:}" 1 "" "$file"
+  else
+    cmd_run "$(session_agent "$choice")" 0 "$choice" "$file"
+  fi
+}
+
+agent=""; new=0; pick=0; flags=${POPCLIP_MODIFIER_FLAGS:-0}; mode=ask; want=""; file=""
+while (($#)); do
+  case $1 in
+    --agent) agent=$2; shift 2 ;;
+    --new) new=1; shift ;;
+    --switch) pick=1; shift ;;
+    --flags) flags=$2; shift 2 ;;
+    --list) mode=list; shift ;;
+    --agents) mode=agents; shift ;;
+    --use) mode=use; want=$2; shift 2 ;;
+    --run) mode=run; shift ;;          # internal: detached worker
+    --pick-ui) mode=pickui; shift ;;   # internal: runs in the floating terminal
+    --session) want=$2; shift 2 ;;
+    --text-file) file=$2; shift 2 ;;
+    -h | --help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) echo "omapop-ask: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+[[ -z $agent ]] && agent=$(default_agent)
+((flags & 131072)) && new=1
+((flags & 524288)) && pick=1
+
+case $mode in
+  agents) installed_agents; exit 0 ;;
+  list)
+    cur=$(current_session || true)
+    for s in $(tm list-sessions -F '#S' 2>/dev/null | sort); do
+      [[ $s == "$cur" ]] && echo "* $s" || echo "  $s"
+    done
+    exit 0 ;;
+  use)
+    session_alive "$want" || { echo "no such session: $want" >&2; exit 1; }
+    show_window "$want"; set_current "$want"; exit 0 ;;
+  run) cmd_run "$agent" "$new" "$want" "$file"; exit $? ;;
+  pickui) cmd_pick_ui "$agent" "$file"; exit $? ;;
+esac
+
+# mode=ask: save the selection, then do the slow part detached so the Omapop
+# bar is not left waiting while a new agent starts.
+file=$(mktemp "$STATE/text.XXXXXX")
+chmod 600 "$file"
+if [[ -n ${POPCLIP_TEXT:-} ]]; then printf '%s' "$POPCLIP_TEXT" >"$file"; elif [[ ! -t 0 ]]; then cat >"$file"; fi
+printf '%s' "${POPCLIP_APP_NAME:-}" >"$file.app"   # the picker runs in another process
+
+if ((pick)); then
+  setsid -f uwsm-app -- xdg-terminal-exec --app-id=TUI.float --title="Ask agent" \
+    -e "$0" --pick-ui --agent "$agent" --text-file "$file" >/dev/null 2>&1
+  add_controls "Ask agent"
+else
+  args=(--run --agent "$agent" --text-file "$file")
+  ((new)) && args+=(--new)
+  setsid -f "$0" "${args[@]}" >/dev/null 2>&1
+fi
+exit 0
