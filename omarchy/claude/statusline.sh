@@ -3,10 +3,10 @@
 # Claude Code status line (settings.json → statusLine), in the Omarchy theme's colours.
 # Claude Code pipes session data in as JSON on stdin; this prints one short row:
 #
-#   󰚩 Opus 5.5 high │  feat/login 󰙅 login-wt │ ctx 68k 34% │ $4.12 │ 5h 23% ↻2h10m │ wk 41%
+#   󰚩 Opus 5.5 high │  feat/login 󰙅 login-wt │ ctx 68k 34% │ $4.12 │ 5h 23% ↻2h10m │ wk 41%
 #
 #   󰚩    the model and its reasoning effort
-#        the git branch being worked on (a short hash when detached), and, in a
+#       the git branch being worked on (a short hash when detached), and, in a
 #        linked worktree, 󰙅 and the worktree's name. Hidden outside a git repo.
 #   ctx  tokens in the context window, and how full it is
 #   $    the session's estimated cost (list price, resets on /clear)
@@ -72,6 +72,8 @@ if [[ -n $branch && -z $wt ]]; then
 fi
 (( ${#branch} > 32 )) && branch="${branch:0:31}…"
 
+branch_icon=$'\xee\x82\xa0' # nerd-font branch glyph (U+E0A0)
+
 pct() { # pct <percent> → 34% in green, yellow or red
   local p=${1%%.*} col=$GREEN
   if (( p >= 80 )); then col=$RED; elif (( p >= 50 )); then col=$YELLOW; fi
@@ -98,7 +100,7 @@ render() { # render <show model name> <show tokens> <show reset> <show worktree>
   (( $1 )) && out+=" ${FG}${model}${R}"
   [[ -n $effort ]] && out+=" ${CYAN}${effort}${R}"
   if [[ -n $branch ]]; then
-    out+="${sep}${BLUE} ${branch}${R}"
+    out+="${sep}${BLUE}${branch_icon} ${branch}${R}"
     (( $4 )) && [[ -n $wt ]] && out+=" ${DIM}󰙅 ${wt}${R}"
   fi
   out+="${sep}${DIM}ctx${R} "
