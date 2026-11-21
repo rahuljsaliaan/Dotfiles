@@ -30,6 +30,7 @@ tsl 4 claude | Swarm: N panes all running a command | #layout #ai
 [P] Prefix - | Split, new pane below | Same as Alt+Enter and Neovim's Space - | #split
 [P] Prefix v / Prefix Shift+\ | Split, new pane right | Shift+\ is the pipe key; same as Alt+Shift+Enter and Neovim's Space pipe | #split
 [P] Ctrl+Alt+H/J/K/L | Focus the pane left / down / up / right | No prefix needed. Prefix h/j/k/l does the same | #focus #move #hjkl
+[P] Alt+Shift+H/J/K/L | Move the pane left / down / up / right | Swaps it with the pane on that side and keeps focus on it; like Super+Shift+H/J/K/L on the desktop. Alt+Shift+arrows too | #move #swap #hjkl
 [P] Ctrl+Alt+Shift+H/J/K/L | Resize the pane by 5 | No prefix needed. Or Prefix H/J/K/L, and keep pressing to repeat | #resize #hjkl
 [P] Prefix z | Zoom the pane (again to restore) | ZOOM shows in the status bar | #zoom
 [P] Alt+Escape | Close the pane | Prefix x does the same | #kill #close
@@ -38,7 +39,7 @@ tsl 4 claude | Swarm: N panes all running a command | #layout #ai
 [W] Prefix c | New window | Opens in the current folder | #create
 [W] Alt+1 … Alt+9 | Go to window 1-9 | Windows are numbered from 1 and renumber on close | #switch
 [W] Alt+H / Alt+L | Previous / next window | Alt+Left / Alt+Right too | #switch #hjkl
-[W] Alt+Shift+H / Alt+Shift+L | Move the window left / right | #move #reorder #hjkl
+[W] Alt+< / Alt+> | Move the window left / right | Alt+Shift+comma / Alt+Shift+period: the brackets point the way | #move #reorder
 [W] Prefix Tab | Back to the last window | #switch #last
 [W] Prefix r | Rename the window (floating box) | Prefix , too. Pre-filled with the old name; Enter keeps, Esc cancels | #rename
 [W] Prefix X | Close the window | x closes a pane; X the window | #kill #close
