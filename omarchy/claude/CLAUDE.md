@@ -26,6 +26,12 @@
 - Keep both modes readable: color inline SVG and custom CSS through `currentColor` and DaisyUI tokens (`--color-base-100`, `--color-base-content`, …), not fixed light-only colors. Re-render any Mermaid diagram when the theme flips.
 - Open the page on the same Hyprland workspace as the terminal Claude runs in, not wherever the browser last was. Start or resume the session with `npx -y lavish-axi <file> --no-open` (add `--reopen` only when reopening is warranted), then open the `url` it prints with `browser-here <url>`. That puts it as a new tab in the browser window already on that workspace, or opens a new browser window there. If `browser-here` is missing or fails, fall back to a plain `npx -y lavish-axi <file>`.
 
+## Browser work happens in the user's own Chromium
+
+- When a task needs a browser, use the user's own Chromium in their everyday profile, where they are already signed in. That covers a web console (an admin console, GitHub settings, a dashboard) or a page to click through or check. Drive it with Claude in Chrome: the extension is installed there and its tools are `mcp__claude-in-chrome__*`. If those tools are not in the session, ask the user to type `/chrome` to connect it, and wait.
+- Never start a second Chromium with a scratch profile (`--user-data-dir` plus `--remote-debugging-port`) and drive it with Playwright `connectOverCDP`. That window is signed in to nothing, the Claude extension in it opens a claude.ai sign-in under another account, and the user must sign in all over again.
+- To only show the user a page, without driving it, open it with `browser-here <url>`, as for Lavish pages.
+
 ## Floating windows always get the title-bar controls
 
 - Whenever the user asks for something to be "floating" (a floating window, popup, picker or panel that opens above other windows), give it the title-bar controls Omarchy already has: × close, □ maximise, − minimise, drag by the bar. Do not ship a floating window without them.
