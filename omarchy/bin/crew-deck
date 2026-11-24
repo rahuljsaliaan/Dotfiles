@@ -332,6 +332,8 @@ def build():
     order = {"you": 0, "bad": 1, "ready": 2, "decide": 3, "fix": 4, "check": 5, "work": 6, "wait": 7, "muted": 8}
     deck["workers"].sort(key=lambda w: (order.get(w["badge"], 9), -(w["started"] or 0)))
     deck["boards"] = boards(deck["workers"])
+    for item in deck["waiting"]:
+        item["board"] = next((b["key"] for b in deck["boards"] if b["owner_id"] == item["id"]), None)
     for w in deck["workers"]:
         w.pop("worktree", None)
     deck["firstmate"] = firstmate_view(records, deck["workers"])
@@ -868,6 +870,16 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
 .btn-p:disabled { opacity: .5; }
 .frame { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-darker); }
 .frame iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.frame.full { position: fixed; inset: 0 0 26px 0; z-index: 30; border-radius: 0; border: 0; }
+.tbar .fv { margin-left: 10px; padding: 1px 8px; border: 1px solid var(--line-strong); border-radius: 5px; font-size: 11px; color: var(--fg); }
+.tbar .fv:hover { border-color: var(--accent); }
+.app.board-mode { grid-template-columns: 268px minmax(0, 1fr); }
+.app.board-mode .chat { position: fixed; right: 0; top: 0; bottom: 26px; width: min(400px, 100vw); z-index: 10; transform: translateX(100%); transition: transform .2s ease; box-shadow: -12px 0 32px rgba(0, 0, 0, .35); }
+.app.board-mode .chat.open { transform: none; }
+.app.board-mode .chat-h .x, .app.board-mode .icon-btn { display: inline-block; }
+.app.board-mode .mh { padding-top: 10px; padding-bottom: 10px; }
+.app.board-mode .mh h1 { font-size: 15px; margin: 2px 0 6px; }
+.app.board-mode .body { padding: 10px 12px 12px; }
 .b-plan { --c: var(--magenta); } .b-fm { --c: var(--accent); } .b-other { --c: var(--fg-dim); }
 .mh .tools { align-items: center; }
 .ferr { color: var(--red); font-size: 11.5px; }
@@ -1044,7 +1056,7 @@ function renderSide() {
   $("fmbtn").onclick = () => select(FM_ID);
   const review = liveBoards().filter((b) => b.kind === "worker" && b.status === "open");
   const needs = [
-    ...deck.waiting.map((x) => `<a class="need b-you${selNeed === "call:" + x.id ? " sel" : ""}" href="#" data-need="call:${esc(x.id)}"><span class="d"></span><span><span class="t">${esc(x.call?.title || "Decision: " + x.title)}</span><span class="s">${esc(x.call ? x.title : x.reason)}</span></span></a>`),
+    ...deck.waiting.filter((x) => !x.board).map((x) => `<a class="need b-you${selNeed === "call:" + x.id ? " sel" : ""}" href="#" data-need="call:${esc(x.id)}"><span class="d"></span><span><span class="t">${esc(x.call?.title || "Decision: " + x.title)}</span><span class="s">${esc(x.call ? x.title : x.reason)}</span></span></a>`),
     ...review.map((b) => `<a class="need b-plan" href="#" data-board="${esc(b.key)}"><span class="d"></span><span><span class="t">Plan to review</span><span class="s">${esc(b.title)} · by ${esc(b.owner)}</span></span></a>`),
     ...deck.ready.map((x) => `<a class="need b-ready${selNeed === "merge:" + x.id ? " sel" : ""}" href="#" data-need="merge:${esc(x.id)}"><span class="d"></span><span><span class="t">PR #${esc(prNum(x.pr))} ready to merge</span><span class="s">${esc(x.title)}</span></span></a>`),
   ];
@@ -1086,10 +1098,11 @@ function renderBoard(b) {
   if (!frame || frame.dataset.key !== b.key) {
     main.innerHTML = `<header class="mh b-plan" id="bhead"></header>
       <div class="body"><div class="frame">
-        <div class="tbar"><i></i><i></i><i></i><span>${esc(b.file)}</span><span class="r">preview · comment in Lavish</span></div>
+        <div class="tbar"><i></i><i></i><i></i><span>${esc(b.name)}</span><span class="r">preview · comment in Lavish</span><button class="fv" id="fullBtn" title="Full view (f) · Esc to leave">⤢ full view</button></div>
         <iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" data-key="${esc(b.key)}" data-v="${esc(v)}" src="/board/${esc(b.key)}/?v=${encodeURIComponent(v)}" title="${esc(b.title)}"></iframe>
       </div></div>`;
     frame = main.querySelector("iframe");
+    $("fullBtn").onclick = () => toggleFull();
   } else if (frame.dataset.v !== v) {
     frame.dataset.v = v; frame.src = `/board/${b.key}/?v=${encodeURIComponent(v)}`;
   }
@@ -1232,7 +1245,17 @@ function renderNeed(n) {
   bindChatBtn();
 }
 
+function toggleFull(force) {
+  const fr = document.querySelector(".frame");
+  if (!fr) return;
+  const on = force ?? !fr.classList.contains("full");
+  fr.classList.toggle("full", on);
+  const b = $("fullBtn"); if (b) b.textContent = on ? "⤡ exit full view" : "⤢ full view";
+}
+
 function renderMain() {
+  const boardMode = !selNeed && !!selBoard && (deck.boards || []).some((b) => b.key === selBoard);
+  document.querySelector(".app").classList.toggle("board-mode", boardMode);
   const need = findNeed(selNeed);
   if (selNeed && !need) { selNeed = null; store.set("crew-deck-need", ""); }
   if (need) return renderNeed(need);
@@ -1373,7 +1396,8 @@ document.addEventListener("keydown", (e) => {
   }
   else if (e.key === "l" && sel === FM_ID) { fmTab = "landed"; store.set("crew-deck-fmtab", fmTab); renderMain(); }
   else if (e.key === "/") { e.preventDefault(); openChat(); }
-  else if (e.key === "Escape") $("chat").classList.remove("open");
+  else if (e.key === "f" && document.querySelector(".frame")) toggleFull();
+  else if (e.key === "Escape") { if (document.querySelector(".frame.full")) toggleFull(false); else $("chat").classList.remove("open"); }
 });
 setInterval(() => { if (lastOk) $("live").innerHTML = `<span style="color:var(--green)">●</span> live · ${dur((Date.now() - lastOk) / 1000)} ago`; }, 1000);
 tick(); chatTick(); setInterval(tick, 4000); setInterval(chatTick, 4000);
