@@ -386,7 +386,6 @@ def firstmate_view(records, workers):
 
 # ---------------------------------------------------------------- lavish boards
 LAVISH_STATE = Path(os.environ.get("LAVISH_AXI_STATE_DIR", HOME / ".lavish-axi")) / "state.json"
-FM_SCRATCH = "/tmp/claude-%d/%s" % (os.getuid(), str(FM).replace("/", "-"))
 
 
 def lavish_sessions():
@@ -409,9 +408,9 @@ def board_title(path):
 
 
 def boards(workers):
-    """Every Lavish session, attributed to the agent whose files it lives in:
-    a worker (its worktree or its data folder, written after it started),
-    firstmate (this home or its sessions' scratchpads), or another session."""
+    """The Lavish plans live workers are putting to the owner: open sessions whose
+    file lives in a worker's worktree or data folder and was written after that
+    worker started. Every other Lavish session is left out."""
     out_ = []
     for key, s in lavish_sessions().items():
         f = s.get("file")
@@ -425,8 +424,8 @@ def boards(workers):
             if any(f.startswith(r.rstrip("/") + "/") for r in roots) and mtime >= (w.get("started") or 0):
                 owner, kind = w, "worker"
                 break
-        if kind == "other" and (f.startswith(str(FM) + "/") or f.startswith(FM_SCRATCH)):
-            kind = "firstmate"
+        if kind != "worker" or s.get("status") == "ended":
+            continue  # only plans a live worker is putting to the owner
         where = Path(f.split("/.lavish/")[0]).name if "/.lavish/" in f else Path(f).parent.name
         out_.append({"key": key, "file": f, "name": Path(f).name, "status": s.get("status"), "url": s.get("url"),
                      "rev": s.get("artifact_revision"), "mtime": mtime, "title": board_title(f) or Path(f).stem,
@@ -875,12 +874,12 @@ const VARS = { background: "--bg", dark_background: "--bg-dark", darker_backgrou
   foreground: "--fg", dark_foreground: "--fg-dim", bright_foreground: "--fg-bright", muted: "--muted", accent: "--accent",
   selection: "--selection", red: "--red", yellow: "--yellow", orange: "--orange", green: "--green", cyan: "--cyan", blue: "--blue", magenta: "--magenta" };
 let deck = null, sel = store.get("crew-deck-sel"), tab = store.get("crew-deck-tab") || "terminal", themeKey = "", lastOk = 0, chatKey = "", pending = [];
-let selBoard = store.get("crew-deck-board") || null, showOther = store.get("crew-deck-other") === "1";
+let selBoard = store.get("crew-deck-board") || null;
 let fmTab = store.get("crew-deck-fmtab") || "terminal";
 const FM_ID = "__firstmate__";
 const STATUS = { open: "open for review", feedback: "your feedback is queued", ended: "ended" };
 const liveBoards = () => (deck.boards || []).filter((b) => b.status !== "ended");
-const ownerLabel = (b) => b.kind === "worker" ? b.owner : b.kind === "firstmate" ? "firstmate" : `another session · ${b.owner}`;
+const ownerLabel = (b) => b.owner;
 
 function applyTheme(t) {
   const key = JSON.stringify(t || {});
@@ -930,19 +929,16 @@ function renderSide() {
       <span class="st">${esc(x.label)}</span>
     </button>`).join("") : `<div class="s" style="padding:8px 9px;color:var(--fg-dim)">no workers running</div>`;
   $("list").querySelectorAll(".row").forEach((b) => b.onclick = () => select(b.dataset.id));
-  const boards = liveBoards(), mine = boards.filter((b) => b.kind !== "other"), other = boards.filter((b) => b.kind === "other");
-  if (selBoard && !(deck.boards || []).some((b) => b.key === selBoard)) selBoard = null;
-  const brow = (b) => `
-    <button class="row ${b.kind === "worker" ? "b-plan" : b.kind === "firstmate" ? "b-fm" : "b-other"}${b.key === selBoard ? " sel" : ""}" data-board="${esc(b.key)}">
+  const boards = liveBoards();
+  if (selBoard && !boards.some((b) => b.key === selBoard)) selBoard = null;
+  $("plans").innerHTML = boards.length ? `<div class="grp"><span>plans to review</span><span>${boards.length}</span></div>
+    <nav class="list">${boards.map((b) => `
+    <button class="row b-plan${b.key === selBoard ? " sel" : ""}" data-board="${esc(b.key)}">
       <span class="ic"></span>
-      <span><span class="t">${esc(b.title)}</span><span class="s">by ${esc(ownerLabel(b))} · ${ago(b.mtime)}</span></span>
+      <span><span class="t">${esc(b.title)}</span><span class="s">by ${esc(b.owner)} · ${ago(b.mtime)}</span></span>
       <span class="st">${b.status === "feedback" ? "queued" : ""}</span>
-    </button>`;
-  $("plans").innerHTML = `<div class="grp"><span>plans · lavish</span><span>${mine.length}</span></div>
-    <nav class="list">${mine.map(brow).join("") || `<div class="s" style="padding:4px 9px;color:var(--fg-dim);font-size:11.5px">no plans from the crew yet</div>`}</nav>
-    ${other.length ? `<button class="more" id="toggleOther">${showOther ? "▾" : "▸"} other lavish sessions · ${other.length}</button>${showOther ? `<nav class="list">${other.map(brow).join("")}</nav>` : ""}` : ""}`;
+    </button>`).join("")}</nav>` : "";
   document.querySelectorAll("[data-board]").forEach((el) => el.onclick = (e) => { e.preventDefault(); selectBoard(el.dataset.board); });
-  const t = $("toggleOther"); if (t) t.onclick = () => { showOther = !showOther; store.set("crew-deck-other", showOther ? "1" : "0"); renderSide(); };
 }
 
 function renderBoard(b) {
