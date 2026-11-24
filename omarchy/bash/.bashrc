@@ -22,7 +22,7 @@ if [[ ${BLE_VERSION-} ]]; then
   ble-import -d integration/fzf-key-bindings
 fi
 # Ctrl+R: the same bordered dropdown as on Zorin.
-export FZF_CTRL_R_OPTS="--border --info=inline"
+export FZF_CTRL_R_OPTS="--layout=reverse --border --info=inline --delimiter='\t' --with-nth=2.."
 
 # Add your own exports, aliases, and functions here.
 #
