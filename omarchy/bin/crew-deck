@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""crew-deck - a live, read-only view of Firstmate's workers in the browser.
+"""crew-deck - a live, read-only console for Firstmate's workers, with a chat to firstmate.
 
 Usage:
   crew-deck           start the local server if it is not running, then open the page
@@ -8,10 +8,16 @@ Usage:
   crew-deck --json    print one snapshot and exit
 
 It reads Firstmate's own fleet snapshot (bin/fm-fleet-view.sh --json), each
-worker's tmux screen and the memory its processes use. It only reads: it never
-steers, stops or merges anything. The page takes its colours and font from the
-current Omarchy theme (colors.toml) on every refresh, so a theme switch shows
-up live. The server listens on 127.0.0.1 only.
+worker's status log and tmux screen, and the memory its processes use. It
+never steers, stops or merges a worker. The chat panel writes to Firstmate's
+captain inbox (bin/fm-inbox.sh note), which wakes firstmate, and shows the
+answers firstmate publishes there (bin/fm-inbox.sh reply), so replies arrive
+when firstmate next checks in rather than instantly.
+
+Colours and font follow the current Omarchy theme (colors.toml) on every
+refresh. The server listens on 127.0.0.1 only, answers only requests whose
+Host is itself, and takes chat messages only with its own request header, so
+another web page cannot read the console or post to firstmate's inbox.
 
 Environment: FM_HOME (default ~/Repository/firstmate), CREW_DECK_PORT (default 4399).
 """
@@ -25,6 +31,7 @@ import threading
 import time
 import tomllib
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -32,25 +39,36 @@ HOME = Path.home()
 FM = Path(os.environ.get("FM_HOME", HOME / "Repository/firstmate"))
 PORT = int(os.environ.get("CREW_DECK_PORT", "4399"))
 URL = f"http://127.0.0.1:{PORT}/"
+HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 STATE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
 COLORS = STATE / "omarchy/current/theme/colors.toml"
 RUN = STATE / "crew-deck"
 PIDFILE = RUN / "server.pid"
 CACHE_SECONDS = 2.5
+MAX_MESSAGE = 4000
 
 TOOL_LINE = re.compile(
     r"^(Bash|Read|Write|Update|Edit|MultiEdit|Search|Grep|Glob|Task|Agent|Fetch|Web\w*|List|Skill|"
-    r"Reading|Writing|Searching|Running|Ran|Listing|Updating|Editing|Wrote|Read \d|Called|Calling)\b"
+    r"Reading|Writing|Searching|Running|Ran|Listing|Updating|Editing|Wrote|Called|Calling)\b"
 )
 CHROME = re.compile(r"^[\s─━│╭╮╰╯▐▛▜▌▝▘█▀▙▟]*$|^\s*(⏵⏵|󰚩|❯\s*$)|esc to interrupt|shift\+tab to cycle|Update available")
+EVENT = re.compile(r"^([a-z][a-z-]*)\s*((?:\[[^\]]*\]\s*)*):\s?(.*)$")
 
 
-def sh(args, timeout=15, env=None):
+def sh(args, timeout=15, env=None, stdin=None):
     try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env)
-        return r.stdout if r.returncode == 0 else ""
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env, input=stdin)
+        return r.returncode, r.stdout
     except (OSError, subprocess.SubprocessError):
-        return ""
+        return 1, ""
+
+
+def out(args, **kw):
+    code, text = sh(args, **kw)
+    return text if code == 0 else ""
+
+
+FM_ENV = {**os.environ, "FM_HOME": str(FM)}
 
 
 # ---------------------------------------------------------------- theme
@@ -65,12 +83,11 @@ def theme():
     except (OSError, tomllib.TOMLDecodeError):
         colors = {}
     if _font is None:
-        _font = sh(["omarchy-font-current"], timeout=3).strip() or "monospace"
-    name = ""
+        _font = out(["omarchy-font-current"], timeout=3).strip() or "monospace"
     try:
         name = (STATE / "omarchy/current/theme.name").read_text().strip()
     except OSError:
-        name = sh(["omarchy-theme-current"], timeout=3).strip()
+        name = out(["omarchy-theme-current"], timeout=3).strip()
     return {"colors": colors, "font": _font, "name": name}
 
 
@@ -92,7 +109,6 @@ def meminfo():
 
 
 def process_table():
-    """pid -> (ppid, rss bytes) for every readable process."""
     page = os.sysconf("SC_PAGE_SIZE")
     table = {}
     for d in os.listdir("/proc"):
@@ -119,9 +135,9 @@ def tree_rss(root, table):
     return total
 
 
-# ---------------------------------------------------------------- screens
+# ---------------------------------------------------------------- workers
 def screen(target):
-    raw = sh(["tmux", "capture-pane", "-p", "-J", "-t", target, "-S", "-120"], timeout=5)
+    raw = out(["tmux", "capture-pane", "-p", "-J", "-t", target, "-S", "-200"], timeout=5)
     lines = [l.rstrip() for l in raw.splitlines()]
     busy = any("esc to interrupt" in l for l in lines[-8:])
     kept = [l for l in lines if l.strip() and not CHROME.search(l)]
@@ -129,7 +145,7 @@ def screen(target):
 
 
 def doing_now(lines):
-    """The worker's latest plain-language line: the last '●' paragraph that is
+    """The worker's latest plain-language paragraph: the last '●' block that is
     prose rather than a tool call."""
     blocks, cur = [], None
     for l in lines:
@@ -144,19 +160,35 @@ def doing_now(lines):
         else:
             cur = None
     for b in reversed(blocks):
-        text = " ".join(b)
+        text = re.sub(r"\s+", " ", " ".join(b)).strip()
         if not TOOL_LINE.match(text):
-            text = re.sub(r"\s+", " ", text).strip()
-            return text[:480] + ("…" if len(text) > 480 else "")
+            return text[:900] + ("…" if len(text) > 900 else "")
     return ""
 
 
+def events(path, limit=12):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 24000))
+            tail = f.read().decode("utf-8", "replace").splitlines()[-limit:]
+    except (OSError, TypeError):
+        return []
+    rows = []
+    for line in tail:
+        m = EVENT.match(line.strip())
+        if not m:
+            continue
+        at = re.search(r"\[at=(\d+)\]", m.group(2))
+        rows.append({"state": m.group(1), "at": int(at.group(1)) if at else None, "note": m.group(3)[:400]})
+    return rows[::-1]
+
+
 def pane_pid(target):
-    out = sh(["tmux", "display-message", "-p", "-t", target, "#{pane_pid}"], timeout=3).strip()
-    return int(out) if out.isdigit() else None
+    o = out(["tmux", "display-message", "-p", "-t", target, "#{pane_pid}"], timeout=3).strip()
+    return int(o) if o.isdigit() else None
 
 
-# ---------------------------------------------------------------- deck
 def badge(t, held, last):
     cs = t.get("current_state") or {}
     state = cs.get("state") or "unknown"
@@ -165,26 +197,24 @@ def badge(t, held, last):
     last_state = (last or {}).get("state")
     last_note = ((last or {}).get("note") or "").lower()
     if held:
-        return "you", "Waiting on you"
+        return "you", "needs you"
     if (t.get("endpoint") or {}).get("exists") is False:
-        return "bad", "Stopped"
-    if state == "failed":
-        return "bad", "Failed"
-    if state == "blocked":
-        return "bad", "Blocked"
+        return "bad", "stopped"
+    if state in ("failed", "blocked"):
+        return "bad", state
     if state == "parked":
-        return "decide", "Decision in progress"
+        return "decide", "deciding"
     if state == "done" or (pr and last_state == "done"):
         return "ready", "PR ready"
     if "fix" in detail or (last_state == "paused" and "fix" in last_note):
-        return "fix", "Fixing review findings"
+        return "fix", "fixing"
     if "validating" in detail or "ci" in detail.split():
-        return "check", "Reviewing & testing"
+        return "check", "reviewing"
     if state == "paused":
-        return "wait", "Waiting"
+        return "wait", "waiting"
     if state == "working":
-        return "work", "Working"
-    return "muted", "Unknown"
+        return "work", "working"
+    return "muted", "unknown"
 
 
 def title_of(t, record):
@@ -196,13 +226,12 @@ def title_of(t, record):
 
 
 def build():
-    snap = sh([str(FM / "bin/fm-fleet-view.sh"), "--json"], timeout=30, env={**os.environ, "FM_HOME": str(FM)})
+    snap = out([str(FM / "bin/fm-fleet-view.sh"), "--json"], timeout=30, env=FM_ENV)
     try:
         snap = json.loads(snap)
     except ValueError:
         snap = None
-    now = time.time()
-    deck = {"generated": now, "theme": theme(), "memory": meminfo(), "ok": snap is not None,
+    deck = {"generated": time.time(), "theme": theme(), "memory": meminfo(), "ok": snap is not None,
             "home": str(FM), "workers": [], "waiting": [], "ready": []}
     if not snap:
         return deck
@@ -211,31 +240,31 @@ def build():
     for r in records.values():
         if r.get("hold_kind") == "captain" and r.get("state") != "done":
             title, repo = title_of({"id": r.get("id")}, r)
-            deck["waiting"].append({"id": r.get("id"), "title": title, "repo": repo,
-                                    "reason": r.get("hold_reason") or ""})
+            deck["waiting"].append({"id": r.get("id"), "title": title, "repo": repo, "reason": r.get("hold_reason") or ""})
     for t in snap.get("tasks", []):
         if t.get("kind") == "secondmate":
             continue
         rec = records.get(t.get("id")) or t.get("backlog") or {}
-        held = rec.get("hold_kind") == "captain"
-        last = ((t.get("paths") or {}).get("status_log") or {}).get("last_event")
-        kind, label = badge(t, held, last)
+        status = (t.get("paths") or {}).get("status_log") or {}
+        last = status.get("last_event")
+        kind, label = badge(t, rec.get("hold_kind") == "captain", last)
         title, repo = title_of(t, rec)
-        target = (t.get("endpoint") or {}).get("target")
+        ep = t.get("endpoint") or {}
+        target = ep.get("target")
         lines, busy, rss = [], False, None
-        if t.get("backend") == "tmux" and target and (t.get("endpoint") or {}).get("exists"):
+        if t.get("backend") == "tmux" and target and ep.get("exists"):
             lines, busy = screen(target)
             pid = pane_pid(target)
             rss = tree_rss(pid, table) if pid else None
-        started = None
         m = re.match(r"s(\d+)\.", t.get("spawn_gen") or "")
-        if m:
-            started = int(m.group(1))
         pr = (t.get("pr") or {}).get("url")
+        cs = t.get("current_state") or {}
         w = {"id": t.get("id"), "title": title, "repo": repo, "badge": kind, "label": label,
-             "doing": doing_now(lines), "busy": busy, "started": started, "rss": rss, "pr": pr,
-             "last_age": (last or {}).get("age_seconds"), "screen": lines[-18:],
-             "branch": t.get("branch")}
+             "state": cs.get("state"), "detail": cs.get("detail"),
+             "doing": doing_now(lines), "busy": busy, "started": int(m.group(1)) if m else None,
+             "rss": rss, "pr": pr, "branch": t.get("branch"), "target": target,
+             "mode": t.get("mode"), "harness": t.get("harness"),
+             "screen": lines[-120:], "events": events(status.get("path"))}
         deck["workers"].append(w)
         if kind == "ready" and pr:
             deck["ready"].append({"id": w["id"], "title": title, "repo": repo, "pr": pr})
@@ -256,6 +285,38 @@ def cached_deck():
         return _cache["deck"]
 
 
+# ---------------------------------------------------------------- chat
+INBOX = str(FM / "bin/fm-inbox.sh")
+
+
+def chat_thread():
+    code, text = sh([INBOX, "receipts", "--all-pending", "--all-handled", "--all-replies"], timeout=15, env=FM_ENV)
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {"ok": False, "messages": []}
+    msgs = []
+    for n, handled in [(n, False) for n in data.get("pending", [])] + [(n, True) for n in data.get("handled", [])]:
+        reply = n.get("reply")
+        msgs.append({"id": n.get("id"), "at": n.get("at"), "body": n.get("body") or "",
+                     "state": "answered" if reply else ("seen" if handled or n.get("acknowledged") else "sent"),
+                     "reply": {"at": reply.get("at"), "body": reply.get("body") or ""} if reply else None})
+    msgs.sort(key=lambda m: str(m.get("at") or ""))
+    return {"ok": True, "messages": msgs[-80:]}
+
+
+def chat_send(text, rid):
+    code, o = sh([INBOX, "note", "--request-id", rid, "--json", "-"], timeout=20, env=FM_ENV, stdin=text)
+    try:
+        res = json.loads(o)
+    except ValueError:
+        res = {}
+    if code == 3 and res.get("id"):
+        sh([INBOX, "announce", "--json", res["id"]], timeout=20, env=FM_ENV)
+        code = 0
+    return code == 0, res
+
+
 # ---------------------------------------------------------------- server
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype):
@@ -263,20 +324,57 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
 
+    def _json(self, code, obj):
+        self._send(code, json.dumps(obj), "application/json")
+
+    def _host_ok(self):
+        if self.headers.get("Host") in HOSTS:
+            return True
+        self._send(403, "forbidden", "text/plain")
+        return False
+
     def do_GET(self):
+        if not self._host_ok():
+            return
         path = self.path.split("?", 1)[0]
         if path == "/":
             self._send(200, PAGE, "text/html; charset=utf-8")
         elif path == "/api/deck":
-            self._send(200, json.dumps(cached_deck()), "application/json")
+            self._json(200, cached_deck())
+        elif path == "/api/chat":
+            self._json(200, chat_thread())
         elif path == "/api/ping":
-            self._send(200, json.dumps({"app": "crew-deck"}), "application/json")
+            self._json(200, {"app": "crew-deck"})
         else:
             self._send(404, "not found", "text/plain")
+
+    def do_POST(self):
+        if not self._host_ok():
+            return
+        if self.path != "/api/chat" or self.headers.get("X-Crew-Deck") != "1" \
+                or not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return self._send(403, "forbidden", "text/plain")
+        origin = self.headers.get("Origin")
+        if origin and origin.split("://", 1)[-1] not in HOSTS:
+            return self._send(403, "forbidden", "text/plain")
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(min(length, 64000)) or b"{}")
+            text = str(body.get("text") or "").strip()
+            rid = re.sub(r"[^A-Za-z0-9-]", "", str(body.get("rid") or ""))[:64] or str(uuid.uuid4())
+        except (ValueError, AttributeError):
+            return self._json(400, {"ok": False, "error": "bad request"})
+        if not text:
+            return self._json(400, {"ok": False, "error": "empty message"})
+        if len(text) > MAX_MESSAGE:
+            return self._json(400, {"ok": False, "error": f"message is longer than {MAX_MESSAGE} characters"})
+        ok, res = chat_send(text, "crew-deck-" + rid)
+        self._json(200 if ok else 500, {"ok": ok, "note": res})
 
     def log_message(self, *args):
         pass
@@ -284,8 +382,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve():
     RUN.mkdir(parents=True, exist_ok=True)
-    PIDFILE.write_text(str(os.getpid()))
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    PIDFILE.write_text(str(os.getpid()))
     signal.signal(signal.SIGTERM, lambda *_: (srv.server_close(), sys.exit(0)))
     try:
         srv.serve_forever()
@@ -324,9 +422,14 @@ def stop():
             raise ValueError
     except (OSError, ValueError):
         print("crew-deck: no server running")
-        return
+        return False
     os.kill(pid, signal.SIGTERM)
+    for _ in range(30):
+        if not Path(f"/proc/{pid}").exists():
+            break
+        time.sleep(0.1)
     print(f"crew-deck: stopped server {pid}")
+    return True
 
 
 def main():
@@ -337,12 +440,17 @@ def main():
         serve()
     elif arg == "stop":
         stop()
+    elif arg == "restart":
+        stop()
+        if not start_background():
+            sys.exit(f"crew-deck: the server did not start; see {RUN / 'server.log'}")
+        print(URL)
     elif arg == "--json":
         print(json.dumps(build(), indent=1))
     elif arg == "":
         if not alive() and not start_background():
             sys.exit(f"crew-deck: the server did not start; see {RUN / 'server.log'}")
-        opener = "browser-here" if sh(["sh", "-c", "command -v browser-here"]).strip() else "xdg-open"
+        opener = "browser-here" if out(["sh", "-c", "command -v browser-here"]).strip() else "xdg-open"
         subprocess.Popen([opener, URL], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         print(URL)
     else:
@@ -354,7 +462,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crew deck</title>
+<title>crew-deck</title>
 <style>
 :root {
   --bg: #0c1523; --bg-dark: #09111c; --bg-darker: #070b12; --bg-light: #162740;
@@ -363,175 +471,354 @@ PAGE = r"""<!doctype html>
   --red: #f07178; --yellow: #ffcb6b; --orange: #f78c6c; --green: #c3e88d;
   --cyan: #89ddff; --blue: #82aaff; --magenta: #c792ea;
   --font: "JetBrainsMono Nerd Font", ui-monospace, monospace;
+  --line: color-mix(in srgb, var(--fg) 9%, transparent);
+  --line-strong: color-mix(in srgb, var(--fg) 16%, transparent);
+  --hover: color-mix(in srgb, var(--fg) 5%, transparent);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; }
-body {
-  background: var(--bg); color: var(--fg); font-family: var(--font);
-  font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
-}
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.55 var(--font); -webkit-font-smoothing: antialiased; overflow: hidden; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 24px 48px; }
-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
-h1 { margin: 0; font-size: 22px; font-weight: 700; color: var(--fg-bright); letter-spacing: .01em; display: flex; align-items: center; gap: 10px; }
-h1 svg { color: var(--accent); }
-.sub { color: var(--fg-dim); font-size: 12.5px; margin-top: 4px; }
-.live { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-dim); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); animation: ping 2.4s infinite; }
-.dot.off { background: var(--red); animation: none; }
-@keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 55%, transparent); } 70%,100% { box-shadow: 0 0 0 7px transparent; } }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
-.tile { background: var(--bg-dark); border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent); border-radius: 12px; padding: 14px 16px; }
-.tile .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-dim); }
-.tile .v { font-size: 26px; font-weight: 700; color: var(--fg-bright); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.tile .v small { font-size: 13px; font-weight: 400; color: var(--fg-dim); }
-.tile.you .v { color: var(--yellow); }
-.tile.ready .v { color: var(--green); }
-.bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--fg) 12%, transparent); margin-top: 9px; overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width .6s ease; }
-.bar.warn i { background: var(--yellow); }
-.bar.hot i { background: var(--red); }
-section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--fg-dim); font-weight: 600; margin: 0 0 10px; }
-.needs { margin-bottom: 24px; }
-.need { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 10px; background: color-mix(in srgb, var(--yellow) 7%, var(--bg-dark)); border: 1px solid color-mix(in srgb, var(--yellow) 22%, transparent); margin-bottom: 8px; }
-.need.pr { background: color-mix(in srgb, var(--green) 7%, var(--bg-dark)); border-color: color-mix(in srgb, var(--green) 22%, transparent); }
-.need .what { flex: 1; min-width: 0; }
-.need .t { color: var(--fg-bright); }
-.need .r { color: var(--fg); font-size: 12.5px; opacity: .85; }
-.btn { flex: none; font-size: 12.5px; padding: 5px 11px; border-radius: 7px; border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); color: var(--green); white-space: nowrap; }
-.btn:hover { background: color-mix(in srgb, var(--green) 12%, transparent); text-decoration: none; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
-.card { --c: var(--accent); background: var(--bg-dark); border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent); border-radius: 14px; padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden; }
-.card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c); opacity: .9; }
-.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.name { color: var(--fg-bright); font-weight: 600; font-size: 15px; line-height: 1.35; }
-.chip { display: inline-block; font-size: 11.5px; color: var(--fg-dim); margin-top: 3px; }
-.pill { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); white-space: nowrap; }
-.now { background: var(--bg); border-radius: 10px; padding: 10px 12px; color: var(--fg); font-size: 13px; min-height: 42px; }
-.now .lbl { display: flex; align-items: center; gap: 7px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-dim); margin-bottom: 4px; }
-.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--c); animation: blink 1.2s ease-in-out infinite; }
-@keyframes blink { 50% { opacity: .25; } }
-.now .empty { color: var(--fg-dim); font-style: italic; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--fg-dim); }
-.meta b { color: var(--fg); font-weight: 500; }
-details { border-top: 1px solid color-mix(in srgb, var(--fg) 8%, transparent); padding-top: 8px; }
-summary { cursor: pointer; font-size: 12px; color: var(--fg-dim); list-style: none; user-select: none; }
-summary::-webkit-details-marker { display: none; }
-summary::before { content: "▸ "; }
-details[open] summary::before { content: "▾ "; }
-summary:hover { color: var(--fg); }
-pre { margin: 8px 0 2px; background: var(--bg-darker); color: var(--fg); border-radius: 8px; padding: 10px 12px; font: 11.5px/1.45 var(--font); overflow-x: auto; white-space: pre; max-height: 300px; overflow-y: auto; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+::selection { background: var(--selection); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--fg) 14%, transparent); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; color: var(--fg); background: var(--bg-dark); }
+
+.app { height: 100vh; display: grid; grid-template-columns: 268px minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr) 26px; }
+.side { grid-row: 1; background: var(--bg-dark); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.main { grid-row: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.chat { grid-row: 1; background: var(--bg-dark); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.status { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 18px; padding: 0 12px; font-size: 11.5px; color: var(--fg-dim); background: var(--bg-darker); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.status .grow { flex: 1; }
+.status b { color: var(--fg); font-weight: 500; }
+
+.brand { display: flex; align-items: center; gap: 9px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+.brand svg { color: var(--accent); flex: none; }
+.brand .n { color: var(--fg-bright); font-weight: 700; letter-spacing: .02em; }
+.brand .h { color: var(--fg-dim); font-size: 11.5px; margin-left: auto; }
+.grp { padding: 14px 16px 6px; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-dim); display: flex; justify-content: space-between; }
+.list { overflow-y: auto; padding: 0 8px 12px; min-height: 0; }
+.need { display: flex; gap: 9px; align-items: flex-start; margin: 0 8px 4px; padding: 7px 9px; border-radius: 7px; color: var(--fg); }
+.need:hover { background: var(--hover); text-decoration: none; }
+.need .d { margin-top: 6px; }
+.need .t { color: var(--fg-bright); display: block; }
+.need .s { color: var(--fg-dim); font-size: 11.5px; display: block; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.row { width: 100%; text-align: left; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 9px; border-radius: 7px; border: 1px solid transparent; }
+.row:hover { background: var(--hover); }
+.row.sel { background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.row .t { color: var(--fg-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.row .s { color: var(--fg-dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.row .st { font-size: 11px; color: var(--c); }
+.d { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.d.live { animation: pulse 1.6s ease-in-out infinite; box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 50%, transparent); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
+
 .b-work { --c: var(--blue); } .b-check { --c: var(--cyan); } .b-fix { --c: var(--orange); }
 .b-decide { --c: var(--magenta); } .b-you { --c: var(--yellow); } .b-ready { --c: var(--green); }
 .b-bad { --c: var(--red); } .b-wait, .b-muted { --c: var(--fg-dim); }
-.empty-deck { text-align: center; padding: 64px 16px; color: var(--fg-dim); border: 1px dashed color-mix(in srgb, var(--fg) 16%, transparent); border-radius: 14px; }
-.banner { display: none; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); border: 1px solid color-mix(in srgb, var(--red) 30%, transparent); font-size: 13px; }
-.banner.show { display: block; }
-@media (max-width: 860px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 480px) { .wrap { padding: 20px 16px 40px; } .grid { grid-template-columns: 1fr; } .stats { gap: 8px; } .tile .v { font-size: 22px; } }
+
+.mh { padding: 16px 22px 14px; border-bottom: 1px solid var(--line); }
+.crumbs { font-size: 11.5px; color: var(--fg-dim); display: flex; gap: 6px; align-items: center; }
+.crumbs b { color: var(--fg); font-weight: 500; }
+.mh h1 { margin: 4px 0 10px; font-size: 18px; line-height: 1.35; color: var(--fg-bright); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 2px 9px; border-radius: 6px; border: 1px solid var(--line-strong); color: var(--fg); background: var(--bg-dark); white-space: nowrap; }
+.chip.state { color: var(--c); border-color: color-mix(in srgb, var(--c) 35%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.chip.link:hover { border-color: var(--accent); text-decoration: none; }
+.chip .k { color: var(--fg-dim); }
+.mh .tools { float: right; display: flex; gap: 6px; }
+.icon-btn { display: none; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 6px; font-size: 11.5px; }
+.icon-btn:hover { border-color: var(--accent); }
+
+.body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 22px 18px; gap: 14px; }
+.latest { border: 1px solid var(--line); border-radius: 10px; background: var(--bg-dark); padding: 12px 14px; max-height: 32%; overflow-y: auto; flex: none; }
+.lh { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+.latest p { margin: 0; color: var(--fg-bright); white-space: pre-wrap; word-wrap: break-word; }
+.latest .none { color: var(--fg-dim); font-style: italic; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); flex: none; }
+.tab { padding: 6px 12px; font-size: 12px; color: var(--fg-dim); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab:hover { color: var(--fg); }
+.tab.on { color: var(--fg-bright); border-bottom-color: var(--accent); }
+.tab .n { color: var(--fg-dim); margin-left: 4px; }
+.pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.term { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-darker); }
+.tbar { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--fg-dim); background: color-mix(in srgb, var(--bg-dark) 70%, var(--bg-darker)); }
+.tbar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.tbar span { margin-left: 6px; }
+.tbar .r { margin-left: auto; }
+.term pre { flex: 1; margin: 0; padding: 10px 14px; overflow: auto; font: 12px/1.5 var(--font); color: var(--fg); white-space: pre; }
+.ev { flex: 1; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+.ev-row { display: grid; grid-template-columns: 64px 112px minmax(0, 1fr); gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.ev-row:last-child { border-bottom: 0; }
+.ev-row time { color: var(--fg-dim); }
+.ev-row .tag { color: var(--c); }
+.ev-row .note { color: var(--fg); word-wrap: break-word; }
+.t-done { --c: var(--green); } .t-working { --c: var(--blue); } .t-paused { --c: var(--fg-dim); }
+.t-needs-decision { --c: var(--magenta); } .t-resolved { --c: var(--cyan); } .t-blocked, .t-failed { --c: var(--red); }
+.empty { margin: auto; text-align: center; color: var(--fg-dim); max-width: 380px; padding: 24px; }
+.empty b { color: var(--fg); display: block; font-size: 14px; margin-bottom: 6px; }
+
+.chat-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.av { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--bg); background: var(--accent); flex: none; }
+.chat-h .n { color: var(--fg-bright); font-weight: 600; display: block; line-height: 1.2; }
+.chat-h .s { color: var(--fg-dim); font-size: 11px; display: block; }
+.chat-h .x { margin-left: auto; display: none; }
+.msgs { flex: 1; overflow-y: auto; padding: 14px 14px 8px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.m { display: flex; flex-direction: column; max-width: 92%; }
+.m.me { align-self: flex-end; align-items: flex-end; }
+.m.fm { align-self: flex-start; }
+.bub { padding: 8px 11px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; color: var(--fg-bright); }
+.me .bub { background: color-mix(in srgb, var(--accent) 16%, var(--bg-dark)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-bottom-right-radius: 3px; }
+.fm .bub { background: var(--bg); border: 1px solid var(--line-strong); border-bottom-left-radius: 3px; }
+.meta { font-size: 10.5px; color: var(--fg-dim); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
+.meta .ok { color: var(--green); } .meta .wait { color: var(--yellow); }
+.typing { align-self: flex-start; display: flex; gap: 8px; align-items: center; color: var(--fg-dim); font-size: 11.5px; }
+.typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--fg-dim); animation: blink 1.2s infinite; display: inline-block; }
+.typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.intro { color: var(--fg-dim); font-size: 12px; text-align: center; margin: auto 10px; }
+.intro b { color: var(--fg); display: block; margin-bottom: 4px; }
+.composer { border-top: 1px solid var(--line); padding: 10px 12px 12px; }
+.composer textarea { width: 100%; resize: none; min-height: 64px; max-height: 200px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-bright); font: 13px/1.5 var(--font); outline: none; }
+.composer textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.cf { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; font-size: 11px; color: var(--fg-dim); }
+.send { padding: 4px 14px; border-radius: 7px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 12px; }
+.send:disabled { opacity: .45; cursor: default; }
+.err { color: var(--red); font-size: 11.5px; margin-top: 6px; display: none; }
+.err.show { display: block; }
+.offline { color: var(--red); }
+
+@media (max-width: 1180px) {
+  .app { grid-template-columns: 248px minmax(0, 1fr); }
+  .chat { position: fixed; right: 0; top: 0; bottom: 26px; width: min(400px, 100vw); z-index: 10; transform: translateX(100%); transition: transform .2s ease; box-shadow: -12px 0 32px rgba(0, 0, 0, .35); }
+  .chat.open { transform: none; }
+  .chat-h .x, .icon-btn { display: inline-block; }
+}
+@media (max-width: 760px) {
+  body { overflow: auto; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) 26px; height: auto; min-height: 100vh; }
+  .side { grid-row: 1; border-right: 0; border-bottom: 1px solid var(--line); }
+  .main { grid-row: 2; }
+  .list { max-height: 220px; }
+  .mh, .body { padding-left: 16px; padding-right: 16px; }
+  .term { min-height: 360px; }
+  .status { grid-row: 3; }
+  .status .hide-sm { display: none; }
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><path d="M12 7.2V21M5 12H2a10 10 0 0 0 20 0h-3M8.5 10.5h7"/></svg>Crew deck</h1>
-      <div class="sub" id="sub">Firstmate's workers, live</div>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><path d="M12 7.2V21M5 12H2a10 10 0 0 0 20 0h-3M8.5 10.5h7"/></svg>
+      <span class="n">crew-deck</span><span class="h">firstmate</span>
     </div>
-    <div class="live"><span class="dot" id="dot"></span><span id="updated">connecting…</span></div>
-  </header>
-  <div class="banner" id="banner">Lost contact with the crew-deck server. Retrying…</div>
-  <div class="stats" id="stats"></div>
-  <section class="needs" id="needs"></section>
-  <section><h2>Workers</h2><div id="workers"></div></section>
+    <div id="needs"></div>
+    <div class="grp"><span>workers</span><span id="wcount"></span></div>
+    <nav class="list" id="list" aria-label="Workers"></nav>
+  </aside>
+
+  <main class="main" id="main"></main>
+
+  <aside class="chat" id="chat" aria-label="Chat with firstmate">
+    <div class="chat-h">
+      <span class="av">fm</span>
+      <div><span class="n">firstmate</span><span class="s">answers when it next checks in</span></div>
+      <button class="icon-btn x" id="closeChat" aria-label="Close chat">✕</button>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <form class="composer" id="composer">
+      <textarea id="input" rows="3" placeholder="Message firstmate…" aria-label="Message firstmate"></textarea>
+      <div class="cf"><span><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline</span><button class="send" id="send" type="submit">Send</button></div>
+      <div class="err" id="err"></div>
+    </form>
+  </aside>
+
+  <footer class="status">
+    <span id="live">● connecting…</span>
+    <span class="hide-sm" id="mem"></span>
+    <span class="grow"></span>
+    <span class="hide-sm"><kbd>j</kbd>/<kbd>k</kbd> select · <kbd>t</kbd> terminal · <kbd>e</kbd> events · <kbd>/</kbd> chat</span>
+    <span id="themeName"></span>
+  </footer>
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const open = new Set();
-let last = 0, themeKey = "";
+const linkify = (s) => esc(s).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 const VARS = { background: "--bg", dark_background: "--bg-dark", darker_background: "--bg-darker", lighter_background: "--bg-light",
   foreground: "--fg", dark_foreground: "--fg-dim", bright_foreground: "--fg-bright", muted: "--muted", accent: "--accent",
   selection: "--selection", red: "--red", yellow: "--yellow", orange: "--orange", green: "--green", cyan: "--cyan", blue: "--blue", magenta: "--magenta" };
+let deck = null, sel = store.get("crew-deck-sel"), tab = store.get("crew-deck-tab") || "terminal", themeKey = "", lastOk = 0, chatKey = "", pending = [];
 
 function applyTheme(t) {
-  const key = JSON.stringify(t);
+  const key = JSON.stringify(t || {});
   if (!t || key === themeKey) return;
   themeKey = key;
-  const root = document.documentElement.style;
-  for (const [k, v] of Object.entries(VARS)) if (t.colors?.[k]) root.setProperty(v, t.colors[k]);
-  if (t.font) root.setProperty("--font", `"${t.font}", ui-monospace, monospace`);
-  root.setProperty("color-scheme", t.colors?.mode === "light" ? "light" : "dark");
+  const r = document.documentElement.style;
+  for (const [k, v] of Object.entries(VARS)) if (t.colors?.[k]) r.setProperty(v, t.colors[k]);
+  if (t.font) r.setProperty("--font", `"${t.font}", ui-monospace, monospace`);
+  r.setProperty("color-scheme", t.colors?.mode === "light" ? "light" : "dark");
+  $("themeName").textContent = t.name ? `theme ${t.name}` : "";
 }
 function dur(s) {
-  if (s == null || s < 0) return "–";
+  if (s == null || !isFinite(s) || s < 0) return "–";
   s = Math.floor(s);
   if (s < 60) return s + "s";
   const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
-  if (d) return `${d}d ${h % 24}h`;
-  if (h) return `${h}h ${m % 60}m`;
-  return `${m}m`;
+  return d ? `${d}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`;
 }
-const gb = (b) => b == null ? "–" : (b / 1073741824).toFixed(b >= 10737418240 ? 0 : 1) + " GB";
-const prNum = (u) => (u.match(/\/pull\/(\d+)/) || [])[1];
+const size = (b) => b == null ? "–" : b >= 1073741824 ? (b / 1073741824).toFixed(1) + "G" : Math.round(b / 1048576) + "M";
+const prNum = (u) => (String(u).match(/\/pull\/(\d+)/) || [])[1] || "";
+const toEpoch = (a) => a == null ? null : /^\d+(\.\d+)?$/.test(String(a)) ? Number(a) : Date.parse(a) / 1000;
+const ago = (a) => { const e = toEpoch(a); return e ? dur(Date.now() / 1000 - e) + " ago" : ""; };
 
-function render(d) {
-  applyTheme(d.theme);
-  const now = d.generated, w = d.workers || [];
-  $("sub").textContent = `Firstmate's workers, live${d.theme?.name ? " · " + d.theme.name + " theme" : ""}`;
-  const m = d.memory || {}, frac = m.total ? m.used / m.total : 0;
-  const cls = frac > 0.85 ? "hot" : frac > 0.7 ? "warn" : "";
-  const swap = m.swap_used > 104857600 ? ` · swap ${gb(m.swap_used)}` : "";
-  $("stats").innerHTML = `
-    <div class="tile"><div class="k">Workers</div><div class="v">${w.length}</div></div>
-    <div class="tile you"><div class="k">Waiting on you</div><div class="v">${d.waiting.length + d.ready.length}</div></div>
-    <div class="tile ready"><div class="k">PRs ready</div><div class="v">${d.ready.length}</div></div>
-    <div class="tile"><div class="k">Memory</div><div class="v">${gb(m.used)} <small>of ${gb(m.total)}${swap}</small></div>
-      <div class="bar ${cls}"><i style="width:${(frac * 100).toFixed(1)}%"></i></div></div>`;
+function renderSide() {
+  const w = deck.workers || [];
+  if (!w.some((x) => x.id === sel)) sel = w[0]?.id || null;
+  $("wcount").textContent = w.length;
   const needs = [
-    ...d.waiting.map((x) => `<div class="need"><div class="what"><div class="t">${esc(x.title)}</div><div class="r">${esc(x.reason)}</div></div></div>`),
-    ...d.ready.map((x) => `<div class="need pr"><div class="what"><div class="t">${esc(x.title)}</div><div class="r">PR ready for your merge word</div></div><a class="btn" href="${esc(x.pr)}" target="_blank" rel="noopener">Open PR #${esc(prNum(x.pr))}</a></div>`),
+    ...deck.waiting.map((x) => `<div class="need b-you"><span class="d"></span><span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.reason)}</span></span></div>`),
+    ...deck.ready.map((x) => `<a class="need b-ready" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="d"></span><span><span class="t">PR #${esc(prNum(x.pr))} ready to merge</span><span class="s">${esc(x.title)}</span></span></a>`),
   ];
-  $("needs").innerHTML = needs.length ? `<h2>Needs you</h2>${needs.join("")}` : "";
-  if (!d.ok) { $("workers").innerHTML = `<div class="empty-deck">Couldn't read Firstmate's fleet records at ${esc(d.home)}.</div>`; return; }
-  if (!w.length) { $("workers").innerHTML = `<div class="empty-deck">No workers running.</div>`; return; }
-  $("workers").innerHTML = `<div class="grid">${w.map((x) => `
-    <article class="card b-${esc(x.badge)}">
-      <div class="top">
-        <div><div class="name">${esc(x.title)}</div><div class="chip">${esc(x.repo)}${x.branch ? " · " + esc(x.branch) : ""}</div></div>
-        <span class="pill">${esc(x.label)}</span>
-      </div>
-      <div class="now"><div class="lbl">${x.busy ? '<span class="pulse"></span>Working right now' : "Latest"}</div>
-        ${x.doing ? esc(x.doing) : '<span class="empty">No update on screen yet</span>'}</div>
-      <div class="meta">
-        <span>running <b>${dur(x.started ? now - x.started : null)}</b></span>
-        ${x.rss ? `<span>memory <b>${gb(x.rss)}</b></span>` : ""}
-        ${x.last_age != null ? `<span>last report <b>${dur(x.last_age)} ago</b></span>` : ""}
-        ${x.pr ? `<a href="${esc(x.pr)}" target="_blank" rel="noopener">PR #${esc(prNum(x.pr))}</a>` : ""}
-      </div>
-      ${x.screen?.length ? `<details data-id="${esc(x.id)}"${open.has(x.id) ? " open" : ""}><summary>Screen</summary><pre>${esc(x.screen.join("\n"))}</pre></details>` : ""}
-    </article>`).join("")}</div>`;
-  document.querySelectorAll("details[data-id]").forEach((el) => {
-    const pre = el.querySelector("pre"); if (pre) pre.scrollTop = pre.scrollHeight;
-    el.addEventListener("toggle", () => el.open ? open.add(el.dataset.id) : open.delete(el.dataset.id));
-  });
+  $("needs").innerHTML = needs.length ? `<div class="grp"><span>needs you</span><span>${needs.length}</span></div>${needs.join("")}` : "";
+  $("list").innerHTML = w.length ? w.map((x) => `
+    <button class="row b-${esc(x.badge)}${x.id === sel ? " sel" : ""}" data-id="${esc(x.id)}">
+      <span class="d${x.busy ? " live" : ""}"></span>
+      <span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.id)} · ${dur(x.started ? deck.generated - x.started : null)}</span></span>
+      <span class="st">${esc(x.label)}</span>
+    </button>`).join("") : `<div class="s" style="padding:8px 9px;color:var(--fg-dim)">no workers running</div>`;
+  $("list").querySelectorAll(".row").forEach((b) => b.onclick = () => select(b.dataset.id));
 }
+
+function renderMain() {
+  const x = (deck.workers || []).find((w) => w.id === sel);
+  const main = $("main");
+  if (!deck.ok) { main.innerHTML = `<div class="empty"><b>Can't read the fleet</b>Firstmate's records at ${esc(deck.home)} didn't load.</div>`; return; }
+  if (!x) { main.innerHTML = `<div class="mh"><div class="tools"><button class="icon-btn" data-chat>chat</button></div><div class="crumbs">firstmate</div><h1>No workers running</h1></div><div class="empty"><b>All quiet</b>New workers show up here as soon as firstmate starts them.</div>`; bindChatBtn(); return; }
+  const preOld = main.querySelector("pre"), atBottom = !preOld || preOld.scrollHeight - preOld.scrollTop - preOld.clientHeight < 40, keep = preOld && preOld.dataset.id === x.id ? preOld.scrollTop : null;
+  main.innerHTML = `
+    <header class="mh b-${esc(x.badge)}">
+      <div class="tools"><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">${esc(x.repo || "project")} <span>/</span> <b>${esc(x.id)}</b></div>
+      <h1>${esc(x.title)}</h1>
+      <div class="chips">
+        <span class="chip state"><span class="d${x.busy ? " live" : ""}"></span>${esc(x.label)}</span>
+        ${x.branch ? `<span class="chip"><span class="k">⎇</span>${esc(x.branch)}</span>` : ""}
+        <span class="chip"><span class="k">up</span>${dur(x.started ? deck.generated - x.started : null)}</span>
+        ${x.rss ? `<span class="chip"><span class="k">mem</span>${size(x.rss)}</span>` : ""}
+        ${x.mode ? `<span class="chip"><span class="k">ship</span>${esc(x.mode)}</span>` : ""}
+        ${x.pr ? `<a class="chip link" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="k">PR</span>#${esc(prNum(x.pr))} ↗</a>` : ""}
+      </div>
+    </header>
+    <div class="body">
+      <section class="latest b-${esc(x.badge)}">
+        <div class="lh">${x.busy ? '<span class="d live"></span>working now' : "latest from the worker"}</div>
+        ${x.doing ? `<p>${linkify(x.doing)}</p>` : '<p class="none">Nothing on its screen yet.</p>'}
+      </section>
+      <div class="tabs">
+        <button class="tab${tab === "terminal" ? " on" : ""}" data-tab="terminal">terminal</button>
+        <button class="tab${tab === "events" ? " on" : ""}" data-tab="events">events<span class="n">${(x.events || []).length}</span></button>
+      </div>
+      <div class="pane">${tab === "terminal" ? `
+        <div class="term">
+          <div class="tbar"><i></i><i></i><i></i><span>${esc(x.target || "")}</span><span class="r">read-only</span></div>
+          <pre data-id="${esc(x.id)}">${esc((x.screen || []).join("\n")) || "(empty screen)"}</pre>
+        </div>` : `
+        <div class="ev">${(x.events || []).map((e) => `<div class="ev-row t-${esc(e.state)}"><time>${e.at ? dur(deck.generated - e.at) : "–"}</time><span class="tag">${esc(e.state)}</span><span class="note">${linkify(e.note)}</span></div>`).join("") || '<div class="empty">No events yet.</div>'}</div>`}
+      </div>
+    </div>`;
+  main.querySelectorAll(".tab").forEach((b) => b.onclick = () => { tab = b.dataset.tab; store.set("crew-deck-tab", tab); renderMain(); });
+  const pre = main.querySelector("pre");
+  if (pre) pre.scrollTop = (keep != null && !atBottom) ? keep : pre.scrollHeight;
+  bindChatBtn();
+}
+
+function renderStatus() {
+  const m = deck.memory || {};
+  const frac = m.total ? m.used / m.total : 0, n = 14, f = Math.round(frac * n);
+  const color = frac > 0.85 ? "var(--red)" : frac > 0.7 ? "var(--yellow)" : "var(--fg)";
+  $("mem").innerHTML = m.total ? `mem <b style="color:${color}">${size(m.used)}</b>/${size(m.total)} <span style="color:${color}">${"▮".repeat(f)}</span><span style="opacity:.35">${"▮".repeat(n - f)}</span>${m.swap_used > 104857600 ? ` · swap <b>${size(m.swap_used)}</b>` : ""}` : "";
+}
+
+function select(id) { sel = id; store.set("crew-deck-sel", id); renderSide(); renderMain(); }
+function bindChatBtn() { document.querySelectorAll("[data-chat]").forEach((b) => b.onclick = () => openChat()); }
+function openChat() { $("chat").classList.add("open"); $("input").focus(); }
 
 async function tick() {
   try {
     const r = await fetch("/api/deck", { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
-    const d = await r.json();
-    render(d); last = Date.now();
-    $("banner").classList.remove("show"); $("dot").classList.remove("off");
-  } catch (e) {
-    $("banner").classList.add("show"); $("dot").classList.add("off");
-  }
+    deck = await r.json(); lastOk = Date.now();
+    applyTheme(deck.theme); renderSide(); renderMain(); renderStatus();
+  } catch { $("live").innerHTML = '<span class="offline">● disconnected — retrying</span>'; }
 }
-setInterval(() => { if (last) $("updated").textContent = `live · updated ${dur((Date.now() - last) / 1000)} ago`; }, 1000);
-tick(); setInterval(tick, 4000);
+
+function renderChat(msgs) {
+  const all = [...msgs];
+  for (const p of pending) if (!msgs.some((m) => m.body === p.body)) all.push(p);
+  pending = pending.filter((p) => !msgs.some((m) => m.body === p.body));
+  const key = JSON.stringify(all);
+  if (key === chatKey) return;
+  chatKey = key;
+  const box = $("msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  if (!all.length) { box.innerHTML = `<div class="intro"><b>Talk to firstmate</b>Ask about the fleet or hand it a task. Messages go to firstmate's inbox and wake it; the answer appears here.</div>`; return; }
+  const waiting = all.some((m) => m.state !== "answered");
+  box.innerHTML = all.map((m) => `
+    <div class="m me"><div class="bub">${linkify(m.body)}</div>
+      <div class="meta">${ago(m.at)} · ${m.state === "answered" ? '<span class="ok">answered</span>' : m.state === "seen" ? '<span class="ok">seen</span>' : m.state === "sending" ? "sending…" : '<span class="wait">delivered</span>'}</div></div>
+    ${m.reply ? `<div class="m fm"><div class="bub">${linkify(m.reply.body)}</div><div class="meta">firstmate · ${ago(m.reply.at)}</div></div>` : ""}`).join("")
+    + (waiting ? `<div class="typing"><i></i><i></i><i></i> firstmate will answer when it next checks in</div>` : "");
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+async function chatTick() {
+  try {
+    const r = await fetch("/api/chat", { cache: "no-store" });
+    const d = await r.json();
+    renderChat(d.messages || []);
+  } catch {}
+}
+
+$("composer").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim();
+  if (!text) return;
+  $("send").disabled = true; $("err").classList.remove("show");
+  pending.push({ body: text, at: Date.now() / 1000, state: "sending" });
+  chatKey = ""; await chatTick(); $("msgs").scrollTop = $("msgs").scrollHeight;
+  try {
+    const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" },
+      body: JSON.stringify({ text, rid: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || "firstmate's inbox did not take the message");
+    $("input").value = "";
+  } catch (err) {
+    pending = pending.filter((p) => p.body !== text);
+    $("err").textContent = String(err.message || err); $("err").classList.add("show");
+  }
+  $("send").disabled = false; chatKey = ""; chatTick();
+};
+$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); } });
+$("closeChat").onclick = () => $("chat").classList.remove("open");
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("textarea, input")) { if (e.key === "Escape") e.target.blur(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey || !deck) return;
+  const w = deck.workers || [], i = w.findIndex((x) => x.id === sel);
+  if (e.key === "j" || e.key === "ArrowDown") { if (w.length) select(w[Math.min(w.length - 1, i + 1)].id); e.preventDefault(); }
+  else if (e.key === "k" || e.key === "ArrowUp") { if (w.length) select(w[Math.max(0, i - 1)].id); e.preventDefault(); }
+  else if (e.key === "t" || e.key === "e") { tab = e.key === "t" ? "terminal" : "events"; store.set("crew-deck-tab", tab); renderMain(); }
+  else if (e.key === "/") { e.preventDefault(); openChat(); }
+  else if (e.key === "Escape") $("chat").classList.remove("open");
+});
+setInterval(() => { if (lastOk) $("live").innerHTML = `<span style="color:var(--green)">●</span> live · ${dur((Date.now() - lastOk) / 1000)} ago`; }, 1000);
+tick(); chatTick(); setInterval(tick, 4000); setInterval(chatTick, 4000);
 </script>
 </body>
 </html>
