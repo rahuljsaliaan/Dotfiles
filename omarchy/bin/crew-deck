@@ -1478,17 +1478,23 @@ function renderReview() {
   $("sendRev").onclick = () => sendReview();
 }
 
+let sendingReview = false;
 async function sendReview() {
-  const b = reviewBoard; if (!b) return;
+  const b = reviewBoard; if (!b || sendingReview) return;
   const q = qStore(b.key);
   const err = $("rerr");
   if (!q.length) { if (err) err.textContent = "Nothing to send yet."; return; }
+  sendingReview = true;
+  document.querySelectorAll("#sendRev, #fbarSend").forEach((x) => { x.disabled = true; x.textContent = "Sending…"; });
   try {
     const r = await fetch(`/api/board/${b.key}/send`, { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" }, body: JSON.stringify({ items: q }) });
     const d = await r.json().catch(() => ({}));
     if (!d.ok) throw new Error(d.error || "the worker did not get it");
     qSave(b.key, []); annotating = false; postAnnotate(); await loadThread(b.key); renderReview();
   } catch (e) { const er = $("rerr"); if (er) er.textContent = String(e.message || e); }
+  sendingReview = false;
+  const fs = $("fbarSend"); if (fs) { fs.disabled = false; fs.textContent = "Send to agent"; }
+  renderReview();
 }
 
 window.addEventListener("message", (e) => {
