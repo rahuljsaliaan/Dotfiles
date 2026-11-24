@@ -143,7 +143,41 @@ def screen(target):
     lines = [l.rstrip() for l in raw.splitlines()]
     busy = any("esc to interrupt" in l for l in lines[-8:])
     kept = [l for l in lines if l.strip() and not CHROME.search(l)]
-    return kept, busy
+    return kept, busy, agent_status(lines)
+
+
+EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+GLYPHS = re.compile(r"[\ue000-\uf8ff\U000f0000-\U000fffff]")
+
+
+def agent_status(lines):
+    """The agent's own status line (model, context, cost, plan usage), read
+    from the bottom of its screen: '󰚩 Opus 5.5 high │ … │ ctx 65k 6% │ $0.33 │ 5h 51% ↻1h42m │ wk 55%'."""
+    line = next((l for l in reversed(lines[-12:]) if "│" in l and re.search(r"\bctx \S+", l)), None)
+    if not line:
+        return None
+    st = {}
+    for seg in (GLYPHS.sub("", x).strip() for x in line.split("│")):
+        if not seg:
+            continue
+        if seg.startswith("ctx "):
+            parts = seg.split()
+            st["ctx"] = parts[1] if len(parts) > 1 else None
+            st["ctx_pct"] = parts[2] if len(parts) > 2 else None
+        elif seg.startswith("$"):
+            st["cost"] = seg.split()[0]
+        elif seg.startswith("5h "):
+            m = re.match(r"5h (\S+)(?:\s+↻\s*(\S+))?", seg)
+            if m:
+                st["five_hour"], st["five_hour_reset"] = m.group(1), m.group(2)
+        elif seg.startswith("wk "):
+            st["week"] = seg.split()[1] if len(seg.split()) > 1 else None
+        elif "model" not in st and re.search(r"[A-Za-z]", seg) and "/" not in seg:
+            words = seg.split()
+            if words and words[-1].lower() in EFFORTS:
+                st["effort"] = words.pop()
+            st["model"] = " ".join(words)
+    return st or None
 
 
 def doing_now(lines):
@@ -219,6 +253,28 @@ def badge(t, held, last):
     return "muted", "unknown"
 
 
+def captain_call(task_id):
+    """Firstmate's structured write-up of a decision it holds for the owner
+    (data/<task>/captain-call.json): question, context and options."""
+    if not task_id or "/" in task_id:
+        return None
+    try:
+        call = json.loads((FM / "data" / task_id / "captain-call.json").read_text())
+        return call if isinstance(call, dict) and call.get("options") else None
+    except (OSError, ValueError):
+        return None
+
+
+def meta_field(task_id, key):
+    try:
+        for line in (FM / "state" / f"{task_id}.meta").read_text().splitlines():
+            if line.startswith(key + "="):
+                return line.split("=", 1)[1]
+    except OSError:
+        pass
+    return None
+
+
 def title_of(t, record):
     title = (record or {}).get("title") or t.get("id")
     repo = (record or {}).get("repo") or ""
@@ -242,7 +298,8 @@ def build():
     for r in records.values():
         if r.get("hold_kind") == "captain" and r.get("state") != "done":
             title, repo = title_of({"id": r.get("id")}, r)
-            deck["waiting"].append({"id": r.get("id"), "title": title, "repo": repo, "reason": r.get("hold_reason") or ""})
+            deck["waiting"].append({"id": r.get("id"), "title": title, "repo": repo, "reason": r.get("hold_reason") or "",
+                                    "call": captain_call(r.get("id"))})
     for t in snap.get("tasks", []):
         if t.get("kind") == "secondmate":
             continue
@@ -253,9 +310,9 @@ def build():
         title, repo = title_of(t, rec)
         ep = t.get("endpoint") or {}
         target = ep.get("target")
-        lines, busy, rss = [], False, None
+        lines, busy, rss, agent = [], False, None, None
         if t.get("backend") == "tmux" and target and ep.get("exists"):
-            lines, busy = screen(target)
+            lines, busy, agent = screen(target)
             pid = pane_pid(target)
             rss = tree_rss(pid, table) if pid else None
         m = re.match(r"s(\d+)\.", t.get("spawn_gen") or "")
@@ -265,12 +322,13 @@ def build():
              "state": cs.get("state"), "detail": cs.get("detail"),
              "doing": doing_now(lines), "busy": busy, "started": int(m.group(1)) if m else None,
              "rss": rss, "pr": pr, "branch": t.get("branch"), "target": target,
-             "mode": t.get("mode"), "harness": t.get("harness"),
+             "mode": t.get("mode"), "harness": t.get("harness"), "agent": agent,
              "worktree": ((t.get("paths") or {}).get("worktree") or {}).get("path"),
              "screen": lines[-120:], "events": events(status.get("path"))}
         deck["workers"].append(w)
         if kind == "ready" and pr:
-            deck["ready"].append({"id": w["id"], "title": title, "repo": repo, "pr": pr})
+            deck["ready"].append({"id": w["id"], "title": title, "repo": repo, "pr": pr,
+                                  "base": meta_field(w["id"], "base_branch"), "branch": w.get("branch")})
     order = {"you": 0, "bad": 1, "ready": 2, "decide": 3, "fix": 4, "check": 5, "work": 6, "wait": 7, "muted": 8}
     deck["workers"].sort(key=lambda w: (order.get(w["badge"], 9), -(w["started"] or 0)))
     deck["boards"] = boards(deck["workers"])
@@ -352,7 +410,7 @@ def supervision_notes(limit=30):
 
 def firstmate_view(records, workers):
     target = fm_window()
-    lines, busy = screen(target) if target else ([], False)
+    lines, busy, agent = screen(target) if target else ([], False, None)
     landed = []
     for r in records.values():
         if r.get("state") != "done":
@@ -380,7 +438,7 @@ def firstmate_view(records, workers):
     for f in feed:
         f["title"] = names.get(f.get("task"), f.get("task"))
     feed.sort(key=lambda f: -f["at"])
-    return {"target": target, "busy": busy, "doing": doing_now(lines), "screen": lines[-160:],
+    return {"target": target, "busy": busy, "agent": agent, "doing": doing_now(lines), "screen": lines[-160:],
             "landed": landed, "activity": feed[:60]}
 
 
@@ -560,6 +618,8 @@ class Handler(BaseHTTPRequestHandler):
         if m:
             ok, res = board_open(m.group(1))
             return self._json(200 if ok else 409, {"ok": ok, "url": res if ok else None, "error": None if ok else res})
+        if self.path == "/api/decide":
+            return self._decide()
         if self.path != "/api/chat":
             return self._send(404, "not found", "text/plain")
         try:
@@ -575,6 +635,43 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"ok": False, "error": f"message is longer than {MAX_MESSAGE} characters"})
         ok, res = chat_send(text, "crew-deck-" + rid)
         self._json(200 if ok else 500, {"ok": ok, "note": res})
+
+    def _decide(self):
+        """Turn a click in the deck into a message to firstmate's inbox; firstmate
+        records the decision and acts on it. The deck itself changes nothing."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(min(length, 64000)) or b"{}")
+        except ValueError:
+            return self._json(400, {"ok": False, "error": "bad request"})
+        deck = cached_deck()
+        task = str(body.get("task") or "")
+        note = str(body.get("note") or "").strip()[:MAX_MESSAGE]
+        rid = re.sub(r"[^A-Za-z0-9-]", "", str(body.get("rid") or ""))[:64] or str(uuid.uuid4())
+        if body.get("kind") == "call":
+            item = next((w for w in deck.get("waiting", []) if w["id"] == task), None)
+            opts = {o.get("id"): o for o in ((item or {}).get("call") or {}).get("options", [])}
+            opt = opts.get(str(body.get("option")))
+            if not item or (not opt and not note):
+                return self._json(400, {"ok": False, "error": "that decision is no longer open"})
+            text = f"Decision from the crew deck for {task} ({item['title']}): "
+            text += f"option {opt['id']}, {opt.get('label', '')}." if opt else "no listed option."
+            if note:
+                text += f" My note: {note}"
+        elif body.get("kind") == "merge":
+            item = next((r for r in deck.get("ready", []) if r["id"] == task), None)
+            if not item:
+                return self._json(400, {"ok": False, "error": "that PR is no longer waiting"})
+            if body.get("option") == "merge":
+                text = f"From the crew deck: merge {item['pr']} ({item['title']}) into {item.get('base') or 'its base branch'}."
+            else:
+                text = f"From the crew deck: do not merge {item['pr']} ({item['title']}) yet."
+            if note:
+                text += f" My note: {note}"
+        else:
+            return self._json(400, {"ok": False, "error": "unknown decision"})
+        ok, res = chat_send(text, "crew-deck-decide-" + rid)
+        self._json(200 if ok else 500, {"ok": ok, "note": res, "text": text})
 
     def log_message(self, *args):
         pass
@@ -774,6 +871,27 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
 .b-plan { --c: var(--magenta); } .b-fm { --c: var(--accent); } .b-other { --c: var(--fg-dim); }
 .mh .tools { align-items: center; }
 .ferr { color: var(--red); font-size: 11.5px; }
+.dec { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+.dec .q { color: var(--fg-bright); font-size: 14px; line-height: 1.6; }
+.dec .ctx { color: var(--fg); margin: 0; padding-left: 16px; }
+.dec .ctx li { margin: 3px 0; }
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt { text-align: left; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg-dark); }
+.opt:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--bg-dark)); }
+.opt .rb { width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--fg-dim); }
+.opt.on .rb { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--bg-dark); background: var(--accent); }
+.opt .ol { color: var(--fg-bright); font-weight: 600; }
+.opt .od { color: var(--fg); font-size: 12.5px; margin-top: 2px; }
+.rec { font-size: 10.5px; color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); border-radius: 5px; padding: 0 6px; margin-left: 8px; font-weight: 500; }
+.dec textarea { width: 100%; resize: vertical; min-height: 60px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-bright); font: 13px/1.5 var(--font); outline: none; }
+.dec textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.dec .act { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn-s { padding: 4px 12px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; }
+.btn-s:hover { border-color: var(--accent); }
+.sent { padding: 9px 12px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); color: var(--fg); font-size: 12.5px; }
+.need { cursor: pointer; }
+.need.sel { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .empty b { color: var(--fg); display: block; font-size: 14px; margin-bottom: 6px; }
 
 .chat-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
@@ -860,6 +978,7 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
   <footer class="status">
     <span id="live">● connecting…</span>
     <span class="hide-sm" id="mem"></span>
+    <span class="hide-sm" id="plan"></span>
     <span class="grow"></span>
     <span class="hide-sm"><kbd>j</kbd>/<kbd>k</kbd> select · <kbd>t</kbd> terminal · <kbd>e</kbd> events · <kbd>/</kbd> chat</span>
     <span id="themeName"></span>
@@ -876,6 +995,8 @@ const VARS = { background: "--bg", dark_background: "--bg-dark", darker_backgrou
 let deck = null, sel = store.get("crew-deck-sel"), tab = store.get("crew-deck-tab") || "terminal", themeKey = "", lastOk = 0, chatKey = "", pending = [];
 let selBoard = store.get("crew-deck-board") || null;
 let fmTab = store.get("crew-deck-fmtab") || "terminal";
+let selNeed = store.get("crew-deck-need") || null, needKey = "", choice = {}, noteText = {};
+const sentMap = () => { try { return JSON.parse(store.get("crew-deck-sent") || "{}"); } catch { return {}; } };
 const FM_ID = "__firstmate__";
 const STATUS = { open: "open for review", feedback: "your feedback is queued", ended: "ended" };
 const liveBoards = () => (deck.boards || []).filter((b) => b.status !== "ended");
@@ -902,6 +1023,12 @@ const size = (b) => b == null ? "–" : b >= 1073741824 ? (b / 1073741824).toFix
 const prNum = (u) => (String(u).match(/\/pull\/(\d+)/) || [])[1] || "";
 const toEpoch = (a) => a == null ? null : /^\d+(\.\d+)?$/.test(String(a)) ? Number(a) : Date.parse(a) / 1000;
 const ago = (a) => { const e = toEpoch(a); return e ? dur(Date.now() / 1000 - e) + " ago" : ""; };
+const agentChips = (a) => !a ? "" : [
+  a.model ? `<span class="chip"><span class="k">model</span>${esc(a.model)}${a.effort ? ` · ${esc(a.effort)}` : ""}</span>` : "",
+  a.ctx ? `<span class="chip" title="context used"><span class="k">ctx</span>${esc(a.ctx)}${a.ctx_pct ? ` · ${esc(a.ctx_pct)}` : ""}</span>` : "",
+  a.cost ? `<span class="chip" title="spend this session"><span class="k">cost</span>${esc(a.cost)}</span>` : "",
+].join("");
+const money = (c) => Number(String(c || "").replace(/[^0-9.]/g, "")) || 0;
 
 function renderSide() {
   const w = deck.workers || [];
@@ -909,23 +1036,24 @@ function renderSide() {
   $("wcount").textContent = w.length;
   const f = deck.firstmate || {};
   $("fmrow").innerHTML = `
-    <button class="row b-fm${sel === FM_ID && !selBoard ? " sel" : ""}" id="fmbtn">
+    <button class="row b-fm${sel === FM_ID && !selBoard && !selNeed ? " sel" : ""}" id="fmbtn">
       <span class="d${f.busy ? " live" : ""}"></span>
-      <span><span class="t">firstmate</span><span class="s">supervisor · ${(f.landed || []).filter((x) => x.verb === "merged").length} merged</span></span>
+      <span><span class="t">firstmate</span><span class="s">supervisor${f.agent?.model ? ` · ${esc(f.agent.model)}` : ""}${f.agent?.cost ? ` · ${esc(f.agent.cost)}` : ""}</span></span>
       <span class="st">${f.busy ? "busy" : "idle"}</span>
     </button>`;
   $("fmbtn").onclick = () => select(FM_ID);
   const review = liveBoards().filter((b) => b.kind === "worker" && b.status === "open");
   const needs = [
-    ...deck.waiting.map((x) => `<div class="need b-you"><span class="d"></span><span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.reason)}</span></span></div>`),
+    ...deck.waiting.map((x) => `<a class="need b-you${selNeed === "call:" + x.id ? " sel" : ""}" href="#" data-need="call:${esc(x.id)}"><span class="d"></span><span><span class="t">${esc(x.call?.title || "Decision: " + x.title)}</span><span class="s">${esc(x.call ? x.title : x.reason)}</span></span></a>`),
     ...review.map((b) => `<a class="need b-plan" href="#" data-board="${esc(b.key)}"><span class="d"></span><span><span class="t">Plan to review</span><span class="s">${esc(b.title)} · by ${esc(b.owner)}</span></span></a>`),
-    ...deck.ready.map((x) => `<a class="need b-ready" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="d"></span><span><span class="t">PR #${esc(prNum(x.pr))} ready to merge</span><span class="s">${esc(x.title)}</span></span></a>`),
+    ...deck.ready.map((x) => `<a class="need b-ready${selNeed === "merge:" + x.id ? " sel" : ""}" href="#" data-need="merge:${esc(x.id)}"><span class="d"></span><span><span class="t">PR #${esc(prNum(x.pr))} ready to merge</span><span class="s">${esc(x.title)}</span></span></a>`),
   ];
   $("needs").innerHTML = needs.length ? `<div class="grp"><span>needs you</span><span>${needs.length}</span></div>${needs.join("")}` : "";
+  $("needs").querySelectorAll("[data-need]").forEach((el) => el.onclick = (e) => { e.preventDefault(); selectNeed(el.dataset.need); });
   $("list").innerHTML = w.length ? w.map((x) => `
-    <button class="row b-${esc(x.badge)}${x.id === sel && !selBoard ? " sel" : ""}" data-id="${esc(x.id)}">
+    <button class="row b-${esc(x.badge)}${x.id === sel && !selBoard && !selNeed ? " sel" : ""}" data-id="${esc(x.id)}">
       <span class="d${x.busy ? " live" : ""}"></span>
-      <span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.id)} · ${dur(x.started ? deck.generated - x.started : null)}</span></span>
+      <span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.id)} · ${dur(x.started ? deck.generated - x.started : null)}${x.agent?.model ? ` · ${esc(x.agent.model.replace(/^Claude /, ""))}` : ""}${x.agent?.cost ? ` · ${esc(x.agent.cost)}` : ""}</span></span>
       <span class="st">${esc(x.label)}</span>
     </button>`).join("") : `<div class="s" style="padding:8px 9px;color:var(--fg-dim)">no workers running</div>`;
   $("list").querySelectorAll(".row").forEach((b) => b.onclick = () => select(b.dataset.id));
@@ -933,7 +1061,7 @@ function renderSide() {
   if (selBoard && !boards.some((b) => b.key === selBoard)) selBoard = null;
   $("plans").innerHTML = boards.length ? `<div class="grp"><span>plans to review</span><span>${boards.length}</span></div>
     <nav class="list">${boards.map((b) => `
-    <button class="row b-plan${b.key === selBoard ? " sel" : ""}" data-board="${esc(b.key)}">
+    <button class="row b-plan${b.key === selBoard && !selNeed ? " sel" : ""}" data-board="${esc(b.key)}">
       <span class="ic"></span>
       <span><span class="t">${esc(b.title)}</span><span class="s">by ${esc(b.owner)} · ${ago(b.mtime)}</span></span>
       <span class="st">${b.status === "feedback" ? "queued" : ""}</span>
@@ -995,6 +1123,7 @@ function renderFirstmate() {
       <h1>Firstmate</h1>
       <div class="chips">
         <span class="chip state"><span class="d${f.busy ? " live" : ""}"></span>${f.busy ? "busy" : "idle"}</span>
+        ${agentChips(f.agent)}
         <span class="chip"><span class="k">workers</span>${(deck.workers || []).length}</span>
         <span class="chip"><span class="k">merged</span>${landed.filter((x) => x.verb === "merged").length}</span>
         ${f.target ? `<span class="chip"><span class="k">tmux</span>${esc(f.target)}</span>` : ""}
@@ -1033,7 +1162,81 @@ function renderFirstmate() {
   bindChatBtn();
 }
 
+function findNeed(k) {
+  if (!k) return null;
+  const [kind, id] = [k.slice(0, k.indexOf(":")), k.slice(k.indexOf(":") + 1)];
+  const item = kind === "call" ? deck.waiting.find((x) => x.id === id) : kind === "merge" ? deck.ready.find((x) => x.id === id) : null;
+  return item ? { kind, id, item } : null;
+}
+
+function renderNeed(n) {
+  const main = $("main"), key = `${selNeed}|${JSON.stringify(n.item)}|${JSON.stringify(sentMap()[selNeed] || null)}`;
+  if (key === needKey && main.querySelector(".dec")) return;
+  needKey = key;
+  const sent = sentMap()[selNeed];
+  const it = n.item, call = it.call;
+  let body = "";
+  if (n.kind === "call") {
+    const opts = call ? call.options : [];
+    body = `
+      <div class="q">${linkify(call ? call.question : it.reason)}</div>
+      ${call?.context?.length ? `<ul class="ctx">${call.context.map((c) => `<li>${linkify(c)}</li>`).join("")}</ul>` : ""}
+      ${opts.length ? `<div class="opts">${opts.map((o) => `
+        <button class="opt${choice[selNeed] === o.id ? " on" : ""}" data-opt="${esc(o.id)}">
+          <span class="rb"></span>
+          <span><span class="ol">${esc(o.id)}. ${esc(o.label)}</span>${o.recommended ? '<span class="rec">recommended</span>' : ""}<div class="od">${linkify(o.detail || "")}</div></span>
+        </button>`).join("")}</div>` : ""}
+      <textarea id="dnote" placeholder="${opts.length ? "Optional note for firstmate…" : "Your answer for firstmate…"}">${esc(noteText[selNeed] || "")}</textarea>
+      <div class="act"><button class="btn-p" id="dsend">Send decision</button><span class="ferr" id="derr"></span></div>`;
+  } else {
+    body = `
+      <div class="q">The worker finished <b>${esc(it.title)}</b>, and its PR passed every check. It's waiting for your word to merge.</div>
+      <ul class="ctx">
+        <li>PR: <a href="${esc(it.pr)}" target="_blank" rel="noopener">${esc(it.pr)}</a></li>
+        ${it.branch ? `<li>Branch <b>${esc(it.branch)}</b> → <b>${esc(it.base || "its base branch")}</b></li>` : ""}
+      </ul>
+      <textarea id="dnote" placeholder="Optional note for firstmate…">${esc(noteText[selNeed] || "")}</textarea>
+      <div class="act"><button class="btn-p" data-merge="merge">Merge into ${esc(it.base || "base")}</button><button class="btn-s" data-merge="hold">Not yet</button>
+        <a class="btn-s" href="${esc(it.pr)}" target="_blank" rel="noopener">Open PR ↗</a><span class="ferr" id="derr"></span></div>`;
+  }
+  main.innerHTML = `
+    <header class="mh b-you">
+      <div class="tools"><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">needs you <span>/</span> <b>${esc(n.id)}</b></div>
+      <h1>${esc(n.kind === "call" ? (call?.title || "Decision: " + it.title) : `Merge PR #${prNum(it.pr)}?`)}</h1>
+      <div class="chips"><span class="chip"><span class="k">task</span>${esc(it.title)}</span>${it.repo ? `<span class="chip"><span class="k">repo</span>${esc(it.repo)}</span>` : ""}</div>
+    </header>
+    <div class="body"><div class="dec">
+      ${sent ? `<div class="sent">Sent ${ago(sent.at)}: “${esc(sent.text)}” Firstmate will act on it when it next checks in. This stays here until it does; you can send a different answer.</div>` : ""}
+      ${body}
+    </div></div>`;
+  main.querySelectorAll("[data-opt]").forEach((b) => b.onclick = () => { choice[selNeed] = b.dataset.opt; main.querySelectorAll("[data-opt]").forEach((x) => x.classList.toggle("on", x === b)); });
+  const note = $("dnote"); if (note) note.oninput = () => { noteText[selNeed] = note.value; };
+  const send = async (payload) => {
+    $("derr").textContent = "";
+    try {
+      const r = await fetch("/api/decide", { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" },
+        body: JSON.stringify({ ...payload, task: n.id, note: noteText[selNeed] || "", rid: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) }) });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) throw new Error(d.error || "firstmate's inbox did not take it");
+      const m = sentMap(); m[selNeed] = { at: Date.now() / 1000, text: d.text }; store.set("crew-deck-sent", JSON.stringify(m));
+      noteText[selNeed] = ""; needKey = ""; renderNeed(n); chatKey = ""; chatTick();
+    } catch (err) { $("derr").textContent = String(err.message || err); }
+  };
+  const ds = $("dsend");
+  if (ds) ds.onclick = () => {
+    if (call?.options?.length && !choice[selNeed] && !(noteText[selNeed] || "").trim()) { $("derr").textContent = "Pick an option or write an answer first."; return; }
+    send({ kind: "call", option: choice[selNeed] || null });
+  };
+  main.querySelectorAll("[data-merge]").forEach((b) => b.onclick = () => send({ kind: "merge", option: b.dataset.merge }));
+  bindChatBtn();
+}
+
 function renderMain() {
+  const need = findNeed(selNeed);
+  if (selNeed && !need) { selNeed = null; store.set("crew-deck-need", ""); }
+  if (need) return renderNeed(need);
+  needKey = "";
   const board = selBoard && (deck.boards || []).find((b) => b.key === selBoard);
   if (board) return renderBoard(board);
   if (sel === FM_ID) return renderFirstmate();
@@ -1049,10 +1252,10 @@ function renderMain() {
       <h1>${esc(x.title)}</h1>
       <div class="chips">
         <span class="chip state"><span class="d${x.busy ? " live" : ""}"></span>${esc(x.label)}</span>
+        ${agentChips(x.agent)}
         ${x.branch ? `<span class="chip"><span class="k">⎇</span>${esc(x.branch)}</span>` : ""}
         <span class="chip"><span class="k">up</span>${dur(x.started ? deck.generated - x.started : null)}</span>
         ${x.rss ? `<span class="chip"><span class="k">mem</span>${size(x.rss)}</span>` : ""}
-        ${x.mode ? `<span class="chip"><span class="k">ship</span>${esc(x.mode)}</span>` : ""}
         ${x.pr ? `<a class="chip link" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="k">PR</span>#${esc(prNum(x.pr))} ↗</a>` : ""}
         ${liveBoards().filter((b) => b.owner_id === x.id).map((b) => `<span class="chip plan" data-board="${esc(b.key)}"><span class="k">plan</span>${esc(b.title)}</span>`).join("")}
       </div>
@@ -1082,14 +1285,22 @@ function renderMain() {
 }
 
 function renderStatus() {
+  const agents = [deck.firstmate?.agent, ...(deck.workers || []).map((w) => w.agent)].filter(Boolean);
+  const a = agents.find((x) => x.five_hour) || {};
+  const pct = (v) => Number(String(v || "").replace("%", "")) || 0;
+  const hot = (v) => pct(v) >= 90 ? "var(--red)" : pct(v) >= 75 ? "var(--yellow)" : "var(--fg)";
+  const total = agents.reduce((t, x) => t + money(x.cost), 0);
+  $("plan").innerHTML = (a.five_hour ? `plan 5h <b style="color:${hot(a.five_hour)}">${esc(a.five_hour)}</b>${a.five_hour_reset ? ` ↻${esc(a.five_hour_reset)}` : ""}${a.week ? ` · wk <b style="color:${hot(a.week)}">${esc(a.week)}</b>` : ""}` : "")
+    + (total ? ` · spend <b>$${total.toFixed(2)}</b>` : "");
   const m = deck.memory || {};
   const frac = m.total ? m.used / m.total : 0, n = 14, f = Math.round(frac * n);
   const color = frac > 0.85 ? "var(--red)" : frac > 0.7 ? "var(--yellow)" : "var(--fg)";
   $("mem").innerHTML = m.total ? `mem <b style="color:${color}">${size(m.used)}</b>/${size(m.total)} <span style="color:${color}">${"▮".repeat(f)}</span><span style="opacity:.35">${"▮".repeat(n - f)}</span>${m.swap_used > 104857600 ? ` · swap <b>${size(m.swap_used)}</b>` : ""}` : "";
 }
 
-function select(id) { sel = id; selBoard = null; store.set("crew-deck-sel", id); store.set("crew-deck-board", ""); renderSide(); renderMain(); }
-function selectBoard(key) { selBoard = key; store.set("crew-deck-board", key); renderSide(); renderMain(); }
+function select(id) { sel = id; selBoard = null; selNeed = null; store.set("crew-deck-sel", id); store.set("crew-deck-board", ""); store.set("crew-deck-need", ""); renderSide(); renderMain(); }
+function selectBoard(key) { selBoard = key; selNeed = null; store.set("crew-deck-board", key); store.set("crew-deck-need", ""); renderSide(); renderMain(); }
+function selectNeed(k) { selNeed = k; needKey = ""; store.set("crew-deck-need", k); renderSide(); renderMain(); }
 function bindChatBtn() { document.querySelectorAll("[data-chat]").forEach((b) => b.onclick = () => openChat()); }
 function openChat() { $("chat").classList.add("open"); $("input").focus(); }
 
