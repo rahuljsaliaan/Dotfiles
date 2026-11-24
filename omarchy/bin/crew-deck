@@ -156,7 +156,7 @@ def agent_status(lines):
     line = next((l for l in reversed(lines[-12:]) if "│" in l and re.search(r"\bctx \S+", l)), None)
     if not line:
         return None
-    st = {}
+    st = {"line": line.strip()}
     for seg in (GLYPHS.sub("", x).strip() for x in line.split("│")):
         if not seg:
             continue
@@ -506,6 +506,94 @@ def board_file(key, rel):
     return target if str(target).startswith(str(main_file.parent) + "/") and target.is_file() else None
 
 
+SHIM = r"""<script>(function(){
+  function post(m){ try { parent.postMessage(Object.assign({ crewDeck: 1 }, m), "*"); } catch (e) {} }
+  function describe(el){
+    if (!el || !el.tagName) return null;
+    var text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 240);
+    var cls = (typeof el.className === "string" && el.className.trim()) ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
+    var heading = el.closest && el.closest("section, article, form, [data-lavish-question]");
+    var h = heading && heading.querySelector("h1,h2,h3,h4,legend");
+    return { tag: el.tagName.toLowerCase(), selector: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + cls, text: text, context: h ? h.textContent.trim().slice(0, 120) : null };
+  }
+  window.lavish = {
+    queuePrompt: function(text, opts){
+      opts = opts || {};
+      var key = opts.queueKey || null, el = opts.element || null;
+      if (!key && el && el.closest) { var w = el.closest("[data-lavish-question]"); if (w) key = w.getAttribute("data-lavish-question"); }
+      var data = null; try { data = opts.data ? JSON.parse(JSON.stringify(opts.data)) : null; } catch (e) {}
+      post({ type: "queue", text: String(text || ""), tag: opts.tag || null, label: opts.text || null, data: data, queueKey: key, element: describe(el) });
+      return true;
+    },
+    sendQueuedPrompts: function(){ post({ type: "send" }); return true; }
+  };
+  var annotate = false, mark = null;
+  window.addEventListener("message", function(e){
+    if (e.source !== parent) return;
+    var d = e.data || {};
+    if (d.crewDeck && d.type === "annotate") { annotate = !!d.on; document.documentElement.style.cursor = annotate ? "crosshair" : ""; if (!annotate && mark) { mark.style.outline = ""; mark = null; } }
+  });
+  document.addEventListener("click", function(e){
+    if (!annotate) return;
+    var el = e.target;
+    if (el.closest("input,select,textarea,button,label,a,summary,[role=button],[data-lavish-action]")) return;
+    e.preventDefault(); e.stopPropagation();
+    if (mark) mark.style.outline = "";
+    mark = el; el.style.outline = "2px solid #c792ea"; el.style.outlineOffset = "2px";
+    post({ type: "annotate", element: describe(el) });
+  }, true);
+})();</script>"""
+
+
+def inject_shim(html):
+    m = re.search(rb"<head[^>]*>", html, re.I)
+    at = m.end() if m else 0
+    return html[:at] + SHIM.encode() + html[at:]
+
+
+def board_thread_path(key):
+    return RUN / "boards" / f"{key}.jsonl"
+
+
+def board_thread(key):
+    try:
+        return [json.loads(l) for l in board_thread_path(key).read_text().splitlines() if l.strip()][-40:]
+    except (OSError, ValueError):
+        return []
+
+
+def board_send(key, items):
+    deck = cached_deck()
+    b = next((x for x in deck.get("boards", []) if x["key"] == key), None)
+    if not b or not b.get("owner_id"):
+        return False, "that plan's worker is no longer running"
+    lines = []
+    for i, it in enumerate(items[:40], 1):
+        kind = it.get("kind")
+        if kind == "answer":
+            q = it.get("queueKey") or (it.get("data") or {}).get("question") or "answer"
+            lines.append(f"{i}. [answer · {q}] {it.get('text', '')}" + (f"\n   data: {json.dumps(it.get('data'))[:800]}" if it.get("data") else ""))
+        elif kind == "comment":
+            el = it.get("element") or {}
+            where = (f" in \"{el.get('context')}\"" if el.get("context") else "")
+            lines.append(f"{i}. [comment on {el.get('selector', 'an element')}{where}: \"{(el.get('text') or '')[:200]}\"] {it.get('text', '')}")
+        elif kind == "question":
+            lines.append(f"{i}. [question] {it.get('text', '')}")
+    if not lines:
+        return False, "nothing to send"
+    msg = ("The captain's feedback on your Lavish plan board, sent from the crew deck, where the captain reviews your board. "
+           "Treat it exactly as board feedback from Lavish: these are the captain's own words. Act on every item. Answer questions and "
+           "show changes by updating the board itself (the deck reloads it on every revision) and keep it armed as before.\n\n" + "\n".join(lines))
+    code, o = sh([str(FM / "bin/fm-send.sh"), b["owner_id"], msg], timeout=30, env=FM_ENV)
+    if code != 0:
+        return False, (o.strip().splitlines() or ["the message did not reach the worker"])[-1][:300]
+    path = board_thread_path(key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps({"at": time.time(), "to": b["owner_id"], "items": items[:40]}) + "\n")
+    return True, b["owner_id"]
+
+
 def board_open(key):
     s = lavish_sessions().get(key)
     if not s:
@@ -580,6 +668,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, cached_deck())
         elif path == "/api/chat":
             self._json(200, chat_thread())
+        elif re.fullmatch(r"/api/board/[0-9a-f]+/thread", path):
+            self._json(200, {"thread": board_thread(path.split("/")[3])})
         elif path == "/api/ping":
             self._json(200, {"app": "crew-deck"})
         elif path.startswith("/board/"):
@@ -594,6 +684,8 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(404, "not found", "text/plain")
             ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+            if not rel and ctype == "text/html":
+                data = inject_shim(data)
             if ctype.startswith("text/") or ctype.endswith(("javascript", "json", "svg+xml")):
                 ctype += "; charset=utf-8"
             self.send_response(200)
@@ -616,6 +708,16 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin and origin.split("://", 1)[-1] not in HOSTS:
             return self._send(403, "forbidden", "text/plain")
+        m = re.fullmatch(r"/api/board/([0-9a-f]+)/send", self.path)
+        if m:
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                items = json.loads(self.rfile.read(min(length, 256000)) or b"{}").get("items") or []
+                items = [i for i in items if isinstance(i, dict)]
+            except (ValueError, AttributeError):
+                return self._json(400, {"ok": False, "error": "bad request"})
+            ok, res = board_send(m.group(1), items)
+            return self._json(200 if ok else 409, {"ok": ok, "to": res if ok else None, "error": None if ok else res})
         m = re.fullmatch(r"/api/board/([0-9a-f]+)/open", self.path)
         if m:
             ok, res = board_open(m.group(1))
@@ -904,6 +1006,31 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
 .sent { padding: 9px 12px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); color: var(--fg); font-size: 12.5px; }
 .need { cursor: pointer; }
 .need.sel { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.tstat { padding: 5px 12px; border-top: 1px solid var(--line); font: 11.5px/1.4 var(--font); color: var(--fg); background: color-mix(in srgb, var(--bg-dark) 70%, var(--bg-darker)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tstat .sep { color: var(--fg-dim); padding: 0 6px; }
+.bgrid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; }
+.review { min-height: 0; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-dark); padding: 12px; overflow-y: auto; }
+.review .rh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.review .rh b { color: var(--fg-bright); }
+.review .rh span { color: var(--fg-dim); font-size: 11.5px; text-align: right; }
+.rtools { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-dim); }
+.btn-s.on { border-color: var(--magenta); color: var(--magenta); background: color-mix(in srgb, var(--magenta) 10%, transparent); }
+.ritem { border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; background: var(--bg); position: relative; font-size: 12.5px; }
+.ritem .rk { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-dim); margin-bottom: 3px; }
+.ritem .rt { color: var(--fg-bright); white-space: pre-wrap; word-wrap: break-word; }
+.ritem .rx { position: absolute; top: 4px; right: 6px; color: var(--fg-dim); font-size: 12px; }
+.ritem .rx:hover { color: var(--red); }
+.ritem .quote { color: var(--fg-dim); font-size: 11.5px; border-left: 2px solid var(--magenta); padding-left: 7px; margin: 3px 0 6px; }
+.review textarea { width: 100%; resize: vertical; min-height: 54px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-bright); font: 12.5px/1.45 var(--font); outline: none; }
+.review textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.rrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rempty { color: var(--fg-dim); font-size: 12px; }
+.rhist .hi { font-size: 11.5px; color: var(--fg); border-left: 2px solid var(--green); padding-left: 8px; margin-top: 6px; }
+.rhist .hi time { color: var(--fg-dim); }
+.fbar { display: none; position: absolute; right: 16px; bottom: 16px; gap: 8px; align-items: center; padding: 6px 8px 6px 12px; border-radius: 10px; background: var(--bg-dark); border: 1px solid var(--line-strong); box-shadow: 0 8px 24px rgba(0,0,0,.4); font-size: 12px; z-index: 2; }
+.frame { position: relative; }
+.frame.full .fbar { display: flex; }
+@media (max-width: 1180px) { .bgrid { grid-template-columns: 1fr; grid-template-rows: minmax(420px, 1fr) auto; } }
 .empty b { color: var(--fg); display: block; font-size: 14px; margin-bottom: 6px; }
 
 .chat-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
@@ -1035,6 +1162,7 @@ const size = (b) => b == null ? "–" : b >= 1073741824 ? (b / 1073741824).toFix
 const prNum = (u) => (String(u).match(/\/pull\/(\d+)/) || [])[1] || "";
 const toEpoch = (a) => a == null ? null : /^\d+(\.\d+)?$/.test(String(a)) ? Number(a) : Date.parse(a) / 1000;
 const ago = (a) => { const e = toEpoch(a); return e ? dur(Date.now() / 1000 - e) + " ago" : ""; };
+const statusLine = (a) => !a?.line ? "" : `<div class="tstat" title="the agent's own status line">${a.line.split("│").map((x) => esc(x.trim())).join('<span class="sep">│</span>')}</div>`;
 const agentChips = (a) => !a ? "" : [
   a.model ? `<span class="chip"><span class="k">model</span>${esc(a.model)}${a.effort ? ` · ${esc(a.effort)}` : ""}</span>` : "",
   a.ctx ? `<span class="chip" title="context used"><span class="k">ctx</span>${esc(a.ctx)}${a.ctx_pct ? ` · ${esc(a.ctx_pct)}` : ""}</span>` : "",
@@ -1097,15 +1225,22 @@ function renderBoard(b) {
   let frame = main.querySelector(".frame iframe");
   if (!frame || frame.dataset.key !== b.key) {
     main.innerHTML = `<header class="mh b-plan" id="bhead"></header>
-      <div class="body"><div class="frame">
-        <div class="tbar"><i></i><i></i><i></i><span>${esc(b.name)}</span><span class="r">preview · comment in Lavish</span><button class="fv" id="fullBtn" title="Full view (f) · Esc to leave">⤢ full view</button></div>
+      <div class="body"><div class="bgrid"><div class="frame">
+        <div class="tbar"><i></i><i></i><i></i><span>${esc(b.name)}</span><span class="r">answers you queue land in the feedback tray</span><button class="fv" id="fullBtn" title="Full view (f) · Esc to leave">⤢ full view</button></div>
         <iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" data-key="${esc(b.key)}" data-v="${esc(v)}" src="/board/${esc(b.key)}/?v=${encodeURIComponent(v)}" title="${esc(b.title)}"></iframe>
-      </div></div>`;
+        <div class="fbar"><span id="fbarText"></span><button class="btn-p" id="fbarSend">Send to agent</button></div>
+      </div><aside class="review" id="review"></aside></div></div>`;
     frame = main.querySelector("iframe");
+    frame.onload = () => postAnnotate();
     $("fullBtn").onclick = () => toggleFull();
+    $("fbarSend").onclick = () => sendReview();
+    annotating = false; reviewBoard = b; loadThread(b.key); renderReview();
   } else if (frame.dataset.v !== v) {
     frame.dataset.v = v; frame.src = `/board/${b.key}/?v=${encodeURIComponent(v)}`;
   }
+  reviewBoard = b;
+  const wl = $("wlatest"), w = (deck.workers || []).find((x) => x.id === b.owner_id);
+  if (wl) wl.innerHTML = w?.doing ? linkify(w.doing) : '<span class="rempty">nothing on its screen yet</span>';
   const errText = $("ferr")?.textContent || "";
   $("bhead").innerHTML = head;
   if (errText) $("ferr").textContent = errText;
@@ -1153,6 +1288,7 @@ function renderFirstmate() {
         <div class="term">
           <div class="tbar"><i></i><i></i><i></i><span>${esc(f.target || "firstmate window not found")}</span><span class="r">read-only</span></div>
           <pre data-id="${FM_ID}">${esc((f.screen || []).join("\n")) || "(empty screen)"}</pre>
+          ${statusLine(f.agent)}
         </div>` : fmTab === "landed" ? `
         <div class="ev">${landed.map((x) => `
           <div class="ev-row ${x.verb === "merged" ? "t-done" : "t-resolved"}" style="grid-template-columns: 96px 92px minmax(0,1fr)">
@@ -1245,6 +1381,70 @@ function renderNeed(n) {
   bindChatBtn();
 }
 
+let annotating = false, reviewBoard = null;
+const threads = {};
+const qStore = (k) => { try { return JSON.parse(store.get("crew-deck-q-" + k) || "[]"); } catch { return []; } };
+const qSave = (k, q) => store.set("crew-deck-q-" + k, JSON.stringify(q));
+function postAnnotate() { const fr = document.querySelector(".frame iframe"); try { fr?.contentWindow?.postMessage({ crewDeck: 1, type: "annotate", on: annotating }, "*"); } catch {} }
+async function loadThread(k) { try { const r = await fetch(`/api/board/${k}/thread`, { cache: "no-store" }); threads[k] = (await r.json()).thread || []; renderReview(); } catch {} }
+
+function renderReview() {
+  const box = $("review"), b = reviewBoard;
+  if (!box || !b) return;
+  const q = qStore(b.key), hist = threads[b.key] || [];
+  const w = (deck.workers || []).find((x) => x.id === b.owner_id);
+  const items = q.map((it, i) => {
+    if (it.kind === "answer") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">answer${it.queueKey ? " · " + esc(it.queueKey) : ""}</div><div class="rt">${esc(it.label || it.text)}</div></div>`;
+    if (it.kind === "comment") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">comment${it.element?.context ? " · " + esc(it.element.context) : ""}</div><div class="quote">${esc((it.element?.text || it.element?.selector || "").slice(0, 160))}</div><textarea data-cm="${i}" placeholder="Your comment on this part…">${esc(it.text || "")}</textarea></div>`;
+    return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">question</div><div class="rt">${esc(it.text)}</div></div>`;
+  }).join("");
+  box.innerHTML = `
+    <div class="rh"><b>Feedback</b><span>to ${esc(w ? w.title : b.owner)}</span></div>
+    <div class="rtools"><button class="btn-s${annotating ? " on" : ""}" id="annBtn">✎ ${annotating ? "Annotating: click the plan" : "Annotate"}</button><span>${annotating ? "Esc or click again to stop" : "click a part of the plan to comment"}</span></div>
+    ${items || '<div class="rempty">Queue answers in the plan, annotate a part of it, or ask a question below. Nothing goes to the worker until you press Send.</div>'}
+    <textarea id="askText" placeholder="Ask the worker a question or add a note…"></textarea>
+    <div class="rrow"><button class="btn-s" id="askAdd">Add to feedback</button></div>
+    <div class="rrow"><button class="btn-p" id="sendRev"${q.length ? "" : " disabled"}>Send to agent${q.length ? ` (${q.length})` : ""}</button><span class="ferr" id="rerr"></span></div>
+    ${hist.length ? `<div class="rhist"><div class="lh">sent</div>${hist.slice().reverse().map((h) => `<div class="hi"><time>${ago(h.at)}</time> · ${h.items.length} item${h.items.length === 1 ? "" : "s"}: ${esc(h.items.map((x) => x.kind === "comment" ? "comment" : x.kind === "question" ? "question" : (x.queueKey || "answer")).join(", "))}</div>`).join("")}</div>` : ""}
+    <div><div class="lh">latest from the worker</div><p id="wlatest" style="margin:0;color:var(--fg);font-size:12.5px;white-space:pre-wrap">${w?.doing ? linkify(w.doing) : '<span class="rempty">nothing on its screen yet</span>'}</p></div>`;
+  const fb = $("fbarText"); if (fb) fb.textContent = q.length ? `${q.length} queued` : "nothing queued";
+  box.querySelectorAll("[data-rm]").forEach((x) => x.onclick = () => { const qq = qStore(b.key); qq.splice(Number(x.dataset.rm), 1); qSave(b.key, qq); renderReview(); });
+  box.querySelectorAll("[data-cm]").forEach((x) => x.oninput = () => { const qq = qStore(b.key); if (qq[x.dataset.cm]) { qq[x.dataset.cm].text = x.value; qSave(b.key, qq); } });
+  $("annBtn").onclick = () => { annotating = !annotating; postAnnotate(); renderReview(); };
+  $("askAdd").onclick = () => { const t = $("askText").value.trim(); if (!t) return; const qq = qStore(b.key); qq.push({ kind: "question", text: t }); qSave(b.key, qq); renderReview(); };
+  $("sendRev").onclick = () => sendReview();
+}
+
+async function sendReview() {
+  const b = reviewBoard; if (!b) return;
+  const q = qStore(b.key).filter((it) => it.kind !== "comment" || (it.text || "").trim());
+  const err = $("rerr");
+  if (!q.length) { if (err) err.textContent = "Nothing to send yet (comments need text)."; return; }
+  try {
+    const r = await fetch(`/api/board/${b.key}/send`, { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" }, body: JSON.stringify({ items: q }) });
+    const d = await r.json().catch(() => ({}));
+    if (!d.ok) throw new Error(d.error || "the worker did not get it");
+    qSave(b.key, []); annotating = false; postAnnotate(); await loadThread(b.key); renderReview();
+  } catch (e) { const er = $("rerr"); if (er) er.textContent = String(e.message || e); }
+}
+
+window.addEventListener("message", (e) => {
+  const fr = document.querySelector(".frame iframe");
+  if (!fr || e.source !== fr.contentWindow) return;
+  const d = e.data || {}; if (!d.crewDeck || !reviewBoard) return;
+  const k = fr.dataset.key, q = qStore(k);
+  if (d.type === "queue") {
+    const item = { kind: "answer", text: String(d.text || "").slice(0, 4000), label: d.label ? String(d.label).slice(0, 400) : null, data: d.data || null, queueKey: d.queueKey || null, element: d.element || null };
+    const i = item.queueKey ? q.findIndex((x) => x.kind === "answer" && x.queueKey === item.queueKey) : -1;
+    if (i >= 0) q[i] = item; else q.push(item);
+    qSave(k, q); renderReview();
+  } else if (d.type === "send") { sendReview(); }
+  else if (d.type === "annotate") {
+    q.push({ kind: "comment", element: d.element || null, text: "" }); qSave(k, q); renderReview();
+    const ta = document.querySelectorAll("#review [data-cm]"); ta[ta.length - 1]?.focus();
+  }
+});
+
 function toggleFull(force) {
   const fr = document.querySelector(".frame");
   if (!fr) return;
@@ -1296,6 +1496,7 @@ function renderMain() {
         <div class="term">
           <div class="tbar"><i></i><i></i><i></i><span>${esc(x.target || "")}</span><span class="r">read-only</span></div>
           <pre data-id="${esc(x.id)}">${esc((x.screen || []).join("\n")) || "(empty screen)"}</pre>
+          ${statusLine(x.agent)}
         </div>` : `
         <div class="ev">${(x.events || []).map((e) => `<div class="ev-row t-${esc(e.state)}"><time>${e.at ? dur(deck.generated - e.at) : "–"}</time><span class="tag">${esc(e.state)}</span><span class="note">${linkify(e.note)}</span></div>`).join("") || '<div class="empty">No events yet.</div>'}</div>`}
       </div>
@@ -1397,7 +1598,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "l" && sel === FM_ID) { fmTab = "landed"; store.set("crew-deck-fmtab", fmTab); renderMain(); }
   else if (e.key === "/") { e.preventDefault(); openChat(); }
   else if (e.key === "f" && document.querySelector(".frame")) toggleFull();
-  else if (e.key === "Escape") { if (document.querySelector(".frame.full")) toggleFull(false); else $("chat").classList.remove("open"); }
+  else if (e.key === "Escape") { if (annotating) { annotating = false; postAnnotate(); renderReview(); } else if (document.querySelector(".frame.full")) toggleFull(false); else $("chat").classList.remove("open"); }
 });
 setInterval(() => { if (lastOk) $("live").innerHTML = `<span style="color:var(--green)">●</span> live · ${dur((Date.now() - lastOk) / 1000)} ago`; }, 1000);
 tick(); chatTick(); setInterval(tick, 4000); setInterval(chatTick, 4000);
