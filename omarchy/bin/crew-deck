@@ -30,6 +30,8 @@ import sys
 import threading
 import time
 import tomllib
+import mimetypes
+import urllib.parse
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -264,12 +266,17 @@ def build():
              "doing": doing_now(lines), "busy": busy, "started": int(m.group(1)) if m else None,
              "rss": rss, "pr": pr, "branch": t.get("branch"), "target": target,
              "mode": t.get("mode"), "harness": t.get("harness"),
+             "worktree": ((t.get("paths") or {}).get("worktree") or {}).get("path"),
              "screen": lines[-120:], "events": events(status.get("path"))}
         deck["workers"].append(w)
         if kind == "ready" and pr:
             deck["ready"].append({"id": w["id"], "title": title, "repo": repo, "pr": pr})
     order = {"you": 0, "bad": 1, "ready": 2, "decide": 3, "fix": 4, "check": 5, "work": 6, "wait": 7, "muted": 8}
     deck["workers"].sort(key=lambda w: (order.get(w["badge"], 9), -(w["started"] or 0)))
+    deck["boards"] = boards(deck["workers"])
+    for w in deck["workers"]:
+        w.pop("worktree", None)
+    deck["firstmate"] = firstmate_view(records, deck["workers"])
     return deck
 
 
@@ -283,6 +290,172 @@ def cached_deck():
             _cache["deck"] = build()
             _cache["at"] = time.time()
         return _cache["deck"]
+
+
+# ---------------------------------------------------------------- firstmate itself
+def fm_window():
+    want = os.environ.get("CREW_DECK_FM_WINDOW")
+    if want:
+        return want
+    for line in out(["tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index}\t#{window_name}"], timeout=3).splitlines():
+        target, _, name = line.partition("\t")
+        if name == "firstmate":
+            return target
+    return None
+
+
+_merges = {}
+
+
+def merge_info(url):
+    """GitHub's record of a merged PR, cached for good once merged; a failed
+    lookup is retried at most every two minutes."""
+    hit = _merges.get(url)
+    if hit and (hit.get("mergedAt") or time.time() - hit.get("_tried", 0) < 120):
+        return hit if hit.get("mergedAt") else None
+    code, o = sh(["gh", "pr", "view", url, "--json", "number,mergedAt,mergedBy,baseRefName,headRefName,mergeCommit"], timeout=15)
+    try:
+        d = json.loads(o) if code == 0 else {}
+    except ValueError:
+        d = {}
+    d["_tried"] = time.time()
+    _merges[url] = d
+    return d if d.get("mergedAt") else None
+
+
+def iso_epoch(s):
+    try:
+        return time.mktime(time.strptime(s.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S%z")) - time.timezone
+    except (ValueError, AttributeError):
+        return None
+
+
+def supervision_notes(limit=30):
+    path = FM / "state/branch-outcomes.jsonl"
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 60000))
+            lines = f.read().decode("utf-8", "replace").splitlines()[-limit:]
+    except OSError:
+        return []
+    notes = []
+    for l in lines:
+        try:
+            r = json.loads(l)
+        except ValueError:
+            continue
+        if r.get("summary") and r.get("epoch"):
+            notes.append({"at": r["epoch"], "task": r.get("task"), "text": r["summary"][:500]})
+    return notes
+
+
+def firstmate_view(records, workers):
+    target = fm_window()
+    lines, busy = screen(target) if target else ([], False)
+    landed = []
+    for r in records.values():
+        if r.get("state") != "done":
+            continue
+        pr = r.get("pr_url")
+        title, repo = title_of({"id": r.get("id")}, r)
+        info = merge_info(pr) if pr and r.get("merged") else None
+        landed.append({"id": r.get("id"), "title": title, "repo": repo, "pr": pr, "kind": r.get("kind"),
+                       "verb": (r.get("completion") or {}).get("verb"), "date": (r.get("completion") or {}).get("date"),
+                       "at": iso_epoch(info.get("mergedAt")) if info else None,
+                       "by": ((info or {}).get("mergedBy") or {}).get("login"), "base": (info or {}).get("baseRefName"),
+                       "head": (info or {}).get("headRefName"), "commit": ((info or {}).get("mergeCommit") or {}).get("oid")})
+    landed.sort(key=lambda x: -(x["at"] or 0))
+    names = {w["id"]: w["title"] for w in workers}
+    names.update({x["id"]: x["title"] for x in landed})
+    feed = [{"at": n["at"], "who": "firstmate", "kind": "note", "task": n["task"], "text": n["text"]} for n in supervision_notes()]
+    for w in workers:
+        for e in w.get("events") or []:
+            if e.get("at"):
+                feed.append({"at": e["at"], "who": w["id"], "kind": e["state"], "task": w["id"], "text": e["note"]})
+    for x in landed:
+        if x["at"] and x["pr"]:
+            feed.append({"at": x["at"], "who": "firstmate", "kind": "merged", "task": x["id"],
+                         "text": f"Merged PR #{x['pr'].rsplit('/', 1)[-1]} into {x['base'] or 'its base'}: {x['title']}"})
+    for f in feed:
+        f["title"] = names.get(f.get("task"), f.get("task"))
+    feed.sort(key=lambda f: -f["at"])
+    return {"target": target, "busy": busy, "doing": doing_now(lines), "screen": lines[-160:],
+            "landed": landed, "activity": feed[:60]}
+
+
+# ---------------------------------------------------------------- lavish boards
+LAVISH_STATE = Path(os.environ.get("LAVISH_AXI_STATE_DIR", HOME / ".lavish-axi")) / "state.json"
+FM_SCRATCH = "/tmp/claude-%d/%s" % (os.getuid(), str(FM).replace("/", "-"))
+
+
+def lavish_sessions():
+    try:
+        data = json.loads(LAVISH_STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+    s = data.get("sessions") or {}
+    items = s.values() if isinstance(s, dict) else s
+    return {x.get("key"): x for x in items if isinstance(x, dict) and x.get("key") and x.get("file")}
+
+
+def board_title(path):
+    try:
+        head = Path(path).read_text(errors="replace")[:6000]
+    except OSError:
+        return None
+    m = re.search(r"<title[^>]*>(.*?)</title>", head, re.S | re.I)
+    return re.sub(r"\s+", " ", m.group(1)).strip()[:120] if m else None
+
+
+def boards(workers):
+    """Every Lavish session, attributed to the agent whose files it lives in:
+    a worker (its worktree or its data folder, written after it started),
+    firstmate (this home or its sessions' scratchpads), or another session."""
+    out_ = []
+    for key, s in lavish_sessions().items():
+        f = s.get("file")
+        try:
+            mtime = os.path.getmtime(f)
+        except OSError:
+            continue
+        owner, kind = None, "other"
+        for w in workers:
+            roots = [p for p in (w.get("worktree"), str(FM / "data" / (w.get("id") or "-"))) if p]
+            if any(f.startswith(r.rstrip("/") + "/") for r in roots) and mtime >= (w.get("started") or 0):
+                owner, kind = w, "worker"
+                break
+        if kind == "other" and (f.startswith(str(FM) + "/") or f.startswith(FM_SCRATCH)):
+            kind = "firstmate"
+        where = Path(f.split("/.lavish/")[0]).name if "/.lavish/" in f else Path(f).parent.name
+        out_.append({"key": key, "file": f, "name": Path(f).name, "status": s.get("status"), "url": s.get("url"),
+                     "rev": s.get("artifact_revision"), "mtime": mtime, "title": board_title(f) or Path(f).stem,
+                     "kind": kind, "owner_id": owner.get("id") if owner else None,
+                     "owner": owner.get("title") if owner else ("firstmate" if kind == "firstmate" else where)})
+    out_.sort(key=lambda b: -b["mtime"])
+    return out_
+
+
+def board_file(key, rel):
+    s = lavish_sessions().get(key)
+    if not s:
+        return None
+    main_file = Path(s["file"]).resolve()
+    if not rel:
+        return main_file
+    target = (main_file.parent / rel).resolve()
+    return target if str(target).startswith(str(main_file.parent) + "/") and target.is_file() else None
+
+
+def board_open(key):
+    s = lavish_sessions().get(key)
+    if not s:
+        return False, "that Lavish page is gone"
+    code, o = sh(["lavish-axi", s["file"], "--no-open"], timeout=30)
+    m = re.search(r"https?://127\.0\.0\.1:\d+/session/[0-9a-f]+", o)
+    if code == 0 and m:
+        return True, m.group(0)
+    return False, (o.strip().splitlines() or ["Lavish would not open it"])[-1][:300]
 
 
 # ---------------------------------------------------------------- chat
@@ -350,18 +523,46 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, chat_thread())
         elif path == "/api/ping":
             self._json(200, {"app": "crew-deck"})
+        elif path.startswith("/board/"):
+            parts = path.split("/", 3)
+            key = re.sub(r"[^0-9a-f]", "", parts[2] if len(parts) > 2 else "")
+            rel = urllib.parse.unquote(parts[3]) if len(parts) > 3 else ""
+            f = board_file(key, rel)
+            if not f:
+                return self._send(404, "not found", "text/plain")
+            try:
+                data = f.read_bytes()
+            except OSError:
+                return self._send(404, "not found", "text/plain")
+            ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+            if ctype.startswith("text/") or ctype.endswith(("javascript", "json", "svg+xml")):
+                ctype += "; charset=utf-8"
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            # Served pages run with an opaque origin, so their scripts can never call this server's API.
+            self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms allow-modals")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         else:
             self._send(404, "not found", "text/plain")
 
     def do_POST(self):
         if not self._host_ok():
             return
-        if self.path != "/api/chat" or self.headers.get("X-Crew-Deck") != "1" \
+        if self.headers.get("X-Crew-Deck") != "1" \
                 or not (self.headers.get("Content-Type") or "").startswith("application/json"):
             return self._send(403, "forbidden", "text/plain")
         origin = self.headers.get("Origin")
         if origin and origin.split("://", 1)[-1] not in HOSTS:
             return self._send(403, "forbidden", "text/plain")
+        m = re.fullmatch(r"/api/board/([0-9a-f]+)/open", self.path)
+        if m:
+            ok, res = board_open(m.group(1))
+            return self._json(200 if ok else 409, {"ok": ok, "url": res if ok else None, "error": None if ok else res})
+        if self.path != "/api/chat":
+            return self._send(404, "not found", "text/plain")
         try:
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(min(length, 64000)) or b"{}")
@@ -560,6 +761,20 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
 .t-done { --c: var(--green); } .t-working { --c: var(--blue); } .t-paused { --c: var(--fg-dim); }
 .t-needs-decision { --c: var(--magenta); } .t-resolved { --c: var(--cyan); } .t-blocked, .t-failed { --c: var(--red); }
 .empty { margin: auto; text-align: center; color: var(--fg-dim); max-width: 380px; padding: 24px; }
+.side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
+.side-scroll .list { overflow: visible; padding-bottom: 4px; }
+.row .ic { width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid var(--c); }
+.more { width: calc(100% - 16px); margin: 2px 8px; text-align: left; font-size: 11.5px; color: var(--fg-dim); padding: 6px 9px; border-radius: 7px; }
+.more:hover { background: var(--hover); color: var(--fg); }
+.chip.plan { cursor: pointer; color: var(--magenta); border-color: color-mix(in srgb, var(--magenta) 35%, transparent); }
+.chip.plan:hover { background: color-mix(in srgb, var(--magenta) 10%, transparent); }
+.btn-p { padding: 4px 12px; border-radius: 7px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 12px; }
+.btn-p:disabled { opacity: .5; }
+.frame { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-darker); }
+.frame iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.b-plan { --c: var(--magenta); } .b-fm { --c: var(--accent); } .b-other { --c: var(--fg-dim); }
+.mh .tools { align-items: center; }
+.ferr { color: var(--red); font-size: 11.5px; }
 .empty b { color: var(--fg); display: block; font-size: 14px; margin-bottom: 6px; }
 
 .chat-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
@@ -618,9 +833,13 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><path d="M12 7.2V21M5 12H2a10 10 0 0 0 20 0h-3M8.5 10.5h7"/></svg>
       <span class="n">crew-deck</span><span class="h">firstmate</span>
     </div>
-    <div id="needs"></div>
-    <div class="grp"><span>workers</span><span id="wcount"></span></div>
-    <nav class="list" id="list" aria-label="Workers"></nav>
+    <div class="side-scroll">
+      <nav class="list" id="fmrow" style="padding-top:10px"></nav>
+      <div id="needs"></div>
+      <div class="grp"><span>workers</span><span id="wcount"></span></div>
+      <nav class="list" id="list" aria-label="Workers"></nav>
+      <div id="plans"></div>
+    </div>
   </aside>
 
   <main class="main" id="main"></main>
@@ -656,6 +875,12 @@ const VARS = { background: "--bg", dark_background: "--bg-dark", darker_backgrou
   foreground: "--fg", dark_foreground: "--fg-dim", bright_foreground: "--fg-bright", muted: "--muted", accent: "--accent",
   selection: "--selection", red: "--red", yellow: "--yellow", orange: "--orange", green: "--green", cyan: "--cyan", blue: "--blue", magenta: "--magenta" };
 let deck = null, sel = store.get("crew-deck-sel"), tab = store.get("crew-deck-tab") || "terminal", themeKey = "", lastOk = 0, chatKey = "", pending = [];
+let selBoard = store.get("crew-deck-board") || null, showOther = store.get("crew-deck-other") === "1";
+let fmTab = store.get("crew-deck-fmtab") || "terminal";
+const FM_ID = "__firstmate__";
+const STATUS = { open: "open for review", feedback: "your feedback is queued", ended: "ended" };
+const liveBoards = () => (deck.boards || []).filter((b) => b.status !== "ended");
+const ownerLabel = (b) => b.kind === "worker" ? b.owner : b.kind === "firstmate" ? "firstmate" : `another session · ${b.owner}`;
 
 function applyTheme(t) {
   const key = JSON.stringify(t || {});
@@ -681,23 +906,141 @@ const ago = (a) => { const e = toEpoch(a); return e ? dur(Date.now() / 1000 - e)
 
 function renderSide() {
   const w = deck.workers || [];
-  if (!w.some((x) => x.id === sel)) sel = w[0]?.id || null;
+  if (sel !== FM_ID && !w.some((x) => x.id === sel)) sel = w[0]?.id || FM_ID;
   $("wcount").textContent = w.length;
+  const f = deck.firstmate || {};
+  $("fmrow").innerHTML = `
+    <button class="row b-fm${sel === FM_ID && !selBoard ? " sel" : ""}" id="fmbtn">
+      <span class="d${f.busy ? " live" : ""}"></span>
+      <span><span class="t">firstmate</span><span class="s">supervisor · ${(f.landed || []).filter((x) => x.verb === "merged").length} merged</span></span>
+      <span class="st">${f.busy ? "busy" : "idle"}</span>
+    </button>`;
+  $("fmbtn").onclick = () => select(FM_ID);
+  const review = liveBoards().filter((b) => b.kind === "worker" && b.status === "open");
   const needs = [
     ...deck.waiting.map((x) => `<div class="need b-you"><span class="d"></span><span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.reason)}</span></span></div>`),
+    ...review.map((b) => `<a class="need b-plan" href="#" data-board="${esc(b.key)}"><span class="d"></span><span><span class="t">Plan to review</span><span class="s">${esc(b.title)} · by ${esc(b.owner)}</span></span></a>`),
     ...deck.ready.map((x) => `<a class="need b-ready" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="d"></span><span><span class="t">PR #${esc(prNum(x.pr))} ready to merge</span><span class="s">${esc(x.title)}</span></span></a>`),
   ];
   $("needs").innerHTML = needs.length ? `<div class="grp"><span>needs you</span><span>${needs.length}</span></div>${needs.join("")}` : "";
   $("list").innerHTML = w.length ? w.map((x) => `
-    <button class="row b-${esc(x.badge)}${x.id === sel ? " sel" : ""}" data-id="${esc(x.id)}">
+    <button class="row b-${esc(x.badge)}${x.id === sel && !selBoard ? " sel" : ""}" data-id="${esc(x.id)}">
       <span class="d${x.busy ? " live" : ""}"></span>
       <span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.id)} · ${dur(x.started ? deck.generated - x.started : null)}</span></span>
       <span class="st">${esc(x.label)}</span>
     </button>`).join("") : `<div class="s" style="padding:8px 9px;color:var(--fg-dim)">no workers running</div>`;
   $("list").querySelectorAll(".row").forEach((b) => b.onclick = () => select(b.dataset.id));
+  const boards = liveBoards(), mine = boards.filter((b) => b.kind !== "other"), other = boards.filter((b) => b.kind === "other");
+  if (selBoard && !(deck.boards || []).some((b) => b.key === selBoard)) selBoard = null;
+  const brow = (b) => `
+    <button class="row ${b.kind === "worker" ? "b-plan" : b.kind === "firstmate" ? "b-fm" : "b-other"}${b.key === selBoard ? " sel" : ""}" data-board="${esc(b.key)}">
+      <span class="ic"></span>
+      <span><span class="t">${esc(b.title)}</span><span class="s">by ${esc(ownerLabel(b))} · ${ago(b.mtime)}</span></span>
+      <span class="st">${b.status === "feedback" ? "queued" : ""}</span>
+    </button>`;
+  $("plans").innerHTML = `<div class="grp"><span>plans · lavish</span><span>${mine.length}</span></div>
+    <nav class="list">${mine.map(brow).join("") || `<div class="s" style="padding:4px 9px;color:var(--fg-dim);font-size:11.5px">no plans from the crew yet</div>`}</nav>
+    ${other.length ? `<button class="more" id="toggleOther">${showOther ? "▾" : "▸"} other lavish sessions · ${other.length}</button>${showOther ? `<nav class="list">${other.map(brow).join("")}</nav>` : ""}` : ""}`;
+  document.querySelectorAll("[data-board]").forEach((el) => el.onclick = (e) => { e.preventDefault(); selectBoard(el.dataset.board); });
+  const t = $("toggleOther"); if (t) t.onclick = () => { showOther = !showOther; store.set("crew-deck-other", showOther ? "1" : "0"); renderSide(); };
+}
+
+function renderBoard(b) {
+  const main = $("main");
+  const v = `${b.rev ?? ""}-${b.mtime}`;
+  const owner = b.kind === "worker" && b.owner_id ? `<span class="chip link" data-worker="${esc(b.owner_id)}" style="cursor:pointer"><span class="k">by</span>${esc(b.owner)}</span>` : `<span class="chip"><span class="k">by</span>${esc(ownerLabel(b))}</span>`;
+  const head = `
+      <div class="tools"><span class="ferr" id="ferr"></span><button class="btn-p" id="commentBtn">Comment in Lavish ↗</button><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">plans <span>/</span> <b>${esc(b.name)}</b></div>
+      <h1>${esc(b.title)}</h1>
+      <div class="chips">${owner}
+        <span class="chip state ${b.status === "open" ? "b-plan" : "b-other"}">${esc(STATUS[b.status] || b.status || "unknown")}</span>
+        <span class="chip"><span class="k">updated</span>${ago(b.mtime)}</span>
+        ${b.rev != null ? `<span class="chip"><span class="k">rev</span>${esc(b.rev)}</span>` : ""}
+      </div>`;
+  let frame = main.querySelector(".frame iframe");
+  if (!frame || frame.dataset.key !== b.key) {
+    main.innerHTML = `<header class="mh b-plan" id="bhead"></header>
+      <div class="body"><div class="frame">
+        <div class="tbar"><i></i><i></i><i></i><span>${esc(b.file)}</span><span class="r">preview · comment in Lavish</span></div>
+        <iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" data-key="${esc(b.key)}" data-v="${esc(v)}" src="/board/${esc(b.key)}/?v=${encodeURIComponent(v)}" title="${esc(b.title)}"></iframe>
+      </div></div>`;
+    frame = main.querySelector("iframe");
+  } else if (frame.dataset.v !== v) {
+    frame.dataset.v = v; frame.src = `/board/${b.key}/?v=${encodeURIComponent(v)}`;
+  }
+  const errText = $("ferr")?.textContent || "";
+  $("bhead").innerHTML = head;
+  if (errText) $("ferr").textContent = errText;
+  main.querySelectorAll("[data-worker]").forEach((el) => el.onclick = () => select(el.dataset.worker));
+  $("commentBtn").onclick = async () => {
+    const win = window.open("about:blank", "_blank");
+    $("commentBtn").disabled = true; $("ferr").textContent = "";
+    try {
+      const r = await fetch(`/api/board/${b.key}/open`, { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" }, body: "{}" });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) throw new Error(d.error || "Lavish would not open it");
+      if (win) win.location = d.url; else window.open(d.url, "_blank");
+    } catch (err) { if (win) win.close(); $("ferr").textContent = String(err.message || err); }
+    $("commentBtn").disabled = false;
+  };
+  bindChatBtn();
+}
+
+function renderFirstmate() {
+  const f = deck.firstmate || {}, main = $("main");
+  const preOld = main.querySelector("pre"), atBottom = !preOld || preOld.scrollHeight - preOld.scrollTop - preOld.clientHeight < 40, keep = preOld && preOld.dataset.id === FM_ID ? preOld.scrollTop : null;
+  const landed = f.landed || [], act = f.activity || [];
+  const short = (s) => (s || "").slice(0, 7);
+  main.innerHTML = `
+    <header class="mh b-fm">
+      <div class="tools"><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">firstmate <span>/</span> <b>supervisor</b></div>
+      <h1>Firstmate</h1>
+      <div class="chips">
+        <span class="chip state"><span class="d${f.busy ? " live" : ""}"></span>${f.busy ? "busy" : "idle"}</span>
+        <span class="chip"><span class="k">workers</span>${(deck.workers || []).length}</span>
+        <span class="chip"><span class="k">merged</span>${landed.filter((x) => x.verb === "merged").length}</span>
+        ${f.target ? `<span class="chip"><span class="k">tmux</span>${esc(f.target)}</span>` : ""}
+      </div>
+    </header>
+    <div class="body">
+      ${f.doing ? `<section class="latest b-fm"><div class="lh">${f.busy ? '<span class="d live"></span>working now' : "latest from firstmate"}</div><p>${linkify(f.doing)}</p></section>` : ""}
+      <div class="tabs">
+        <button class="tab${fmTab === "terminal" ? " on" : ""}" data-fmtab="terminal">terminal</button>
+        <button class="tab${fmTab === "landed" ? " on" : ""}" data-fmtab="landed">landed<span class="n">${landed.length}</span></button>
+        <button class="tab${fmTab === "activity" ? " on" : ""}" data-fmtab="activity">activity<span class="n">${act.length}</span></button>
+      </div>
+      <div class="pane">${fmTab === "terminal" ? `
+        <div class="term">
+          <div class="tbar"><i></i><i></i><i></i><span>${esc(f.target || "firstmate window not found")}</span><span class="r">read-only</span></div>
+          <pre data-id="${FM_ID}">${esc((f.screen || []).join("\n")) || "(empty screen)"}</pre>
+        </div>` : fmTab === "landed" ? `
+        <div class="ev">${landed.map((x) => `
+          <div class="ev-row ${x.verb === "merged" ? "t-done" : "t-resolved"}" style="grid-template-columns: 96px 92px minmax(0,1fr)">
+            <time>${x.at ? ago(x.at) : esc(x.date || "–")}</time>
+            <span class="tag">${x.verb === "merged" ? "✓ merged" : esc(x.verb || "done")}</span>
+            <span class="note"><span style="color:var(--fg-bright)">${esc(x.title)}</span><br>
+              <span style="color:var(--fg-dim)">${x.pr ? `<a href="${esc(x.pr)}" target="_blank" rel="noopener">PR #${esc(prNum(x.pr))}</a>` : esc(x.kind || "")}${x.head ? ` · ${esc(x.head)} → <b style="color:var(--fg)">${esc(x.base)}</b>` : ""}${x.commit ? ` · ${esc(short(x.commit))}` : ""}${x.by ? ` · by ${esc(x.by)} via firstmate` : ""}</span></span>
+          </div>`).join("") || '<div class="empty">Nothing landed yet.</div>'}</div>` : `
+        <div class="ev">${act.map((a) => `
+          <div class="ev-row t-${a.kind === "merged" ? "done" : a.kind === "note" ? "resolved" : esc(a.kind)}" style="grid-template-columns: 64px 150px minmax(0,1fr)">
+            <time>${dur(deck.generated - a.at)}</time>
+            <span class="tag">${a.who === "firstmate" ? "firstmate" : esc(a.who)}<br><span style="color:var(--fg-dim)">${esc(a.kind)}</span></span>
+            <span class="note">${a.title && a.who === "firstmate" ? `<span style="color:var(--fg-dim)">${esc(a.title)}</span><br>` : ""}${linkify(a.text)}</span>
+          </div>`).join("") || '<div class="empty">No activity yet.</div>'}</div>`}
+      </div>
+    </div>`;
+  main.querySelectorAll("[data-fmtab]").forEach((b) => b.onclick = () => { fmTab = b.dataset.fmtab; store.set("crew-deck-fmtab", fmTab); renderFirstmate(); });
+  const pre = main.querySelector("pre");
+  if (pre) pre.scrollTop = (keep != null && !atBottom) ? keep : pre.scrollHeight;
+  bindChatBtn();
 }
 
 function renderMain() {
+  const board = selBoard && (deck.boards || []).find((b) => b.key === selBoard);
+  if (board) return renderBoard(board);
+  if (sel === FM_ID) return renderFirstmate();
   const x = (deck.workers || []).find((w) => w.id === sel);
   const main = $("main");
   if (!deck.ok) { main.innerHTML = `<div class="empty"><b>Can't read the fleet</b>Firstmate's records at ${esc(deck.home)} didn't load.</div>`; return; }
@@ -715,6 +1058,7 @@ function renderMain() {
         ${x.rss ? `<span class="chip"><span class="k">mem</span>${size(x.rss)}</span>` : ""}
         ${x.mode ? `<span class="chip"><span class="k">ship</span>${esc(x.mode)}</span>` : ""}
         ${x.pr ? `<a class="chip link" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="k">PR</span>#${esc(prNum(x.pr))} ↗</a>` : ""}
+        ${liveBoards().filter((b) => b.owner_id === x.id).map((b) => `<span class="chip plan" data-board="${esc(b.key)}"><span class="k">plan</span>${esc(b.title)}</span>`).join("")}
       </div>
     </header>
     <div class="body">
@@ -737,6 +1081,7 @@ function renderMain() {
   main.querySelectorAll(".tab").forEach((b) => b.onclick = () => { tab = b.dataset.tab; store.set("crew-deck-tab", tab); renderMain(); });
   const pre = main.querySelector("pre");
   if (pre) pre.scrollTop = (keep != null && !atBottom) ? keep : pre.scrollHeight;
+  main.querySelectorAll("[data-board]").forEach((el) => el.onclick = () => selectBoard(el.dataset.board));
   bindChatBtn();
 }
 
@@ -747,7 +1092,8 @@ function renderStatus() {
   $("mem").innerHTML = m.total ? `mem <b style="color:${color}">${size(m.used)}</b>/${size(m.total)} <span style="color:${color}">${"▮".repeat(f)}</span><span style="opacity:.35">${"▮".repeat(n - f)}</span>${m.swap_used > 104857600 ? ` · swap <b>${size(m.swap_used)}</b>` : ""}` : "";
 }
 
-function select(id) { sel = id; store.set("crew-deck-sel", id); renderSide(); renderMain(); }
+function select(id) { sel = id; selBoard = null; store.set("crew-deck-sel", id); store.set("crew-deck-board", ""); renderSide(); renderMain(); }
+function selectBoard(key) { selBoard = key; store.set("crew-deck-board", key); renderSide(); renderMain(); }
 function bindChatBtn() { document.querySelectorAll("[data-chat]").forEach((b) => b.onclick = () => openChat()); }
 function openChat() { $("chat").classList.add("open"); $("input").focus(); }
 
@@ -810,10 +1156,15 @@ $("closeChat").onclick = () => $("chat").classList.remove("open");
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input")) { if (e.key === "Escape") e.target.blur(); return; }
   if (e.metaKey || e.ctrlKey || e.altKey || !deck) return;
-  const w = deck.workers || [], i = w.findIndex((x) => x.id === sel);
-  if (e.key === "j" || e.key === "ArrowDown") { if (w.length) select(w[Math.min(w.length - 1, i + 1)].id); e.preventDefault(); }
-  else if (e.key === "k" || e.key === "ArrowUp") { if (w.length) select(w[Math.max(0, i - 1)].id); e.preventDefault(); }
-  else if (e.key === "t" || e.key === "e") { tab = e.key === "t" ? "terminal" : "events"; store.set("crew-deck-tab", tab); renderMain(); }
+  const w = [{ id: FM_ID }, ...(deck.workers || [])], i = w.findIndex((x) => x.id === sel);
+  if (e.key === "j" || e.key === "ArrowDown") { select(w[Math.min(w.length - 1, i + 1)].id); e.preventDefault(); }
+  else if (e.key === "k" || e.key === "ArrowUp") { select(w[Math.max(0, i - 1)].id); e.preventDefault(); }
+  else if (e.key === "t" || e.key === "e") {
+    if (sel === FM_ID) { fmTab = e.key === "t" ? "terminal" : "activity"; store.set("crew-deck-fmtab", fmTab); }
+    else { tab = e.key === "t" ? "terminal" : "events"; store.set("crew-deck-tab", tab); }
+    renderMain();
+  }
+  else if (e.key === "l" && sel === FM_ID) { fmTab = "landed"; store.set("crew-deck-fmtab", fmTab); renderMain(); }
   else if (e.key === "/") { e.preventDefault(); openChat(); }
   else if (e.key === "Escape") $("chat").classList.remove("open");
 });
