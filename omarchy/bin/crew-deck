@@ -512,9 +512,9 @@ SHIM = r"""<script>(function(){
     if (!el || !el.tagName) return null;
     var text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 240);
     var cls = (typeof el.className === "string" && el.className.trim()) ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
-    var heading = el.closest && el.closest("section, article, form, [data-lavish-question]");
-    var h = heading && heading.querySelector("h1,h2,h3,h4,legend");
-    return { tag: el.tagName.toLowerCase(), selector: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + cls, text: text, context: h ? h.textContent.trim().slice(0, 120) : null };
+    var wrap = el.closest && el.closest("section, article, form, [data-lavish-question]");
+    var h = wrap && wrap.querySelector("h1,h2,h3,h4,legend");
+    return { tag: el.tagName.toLowerCase(), selector: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + cls, text: text, context: h ? h.textContent.trim().replace(/\s+/g, " ").slice(0, 120) : null };
   }
   window.lavish = {
     queuePrompt: function(text, opts){
@@ -527,21 +527,81 @@ SHIM = r"""<script>(function(){
     },
     sendQueuedPrompts: function(){ post({ type: "send" }); return true; }
   };
-  var annotate = false, mark = null;
+  var css = document.createElement("style");
+  css.textContent = "[data-cd-hover]{outline:2px dashed #c792ea!important;outline-offset:2px!important;cursor:crosshair!important}" +
+    "[data-cd-mark]{outline:2px solid #c792ea!important;outline-offset:2px!important}" +
+    ".cd-pin{position:absolute;z-index:2147483646;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#c792ea;color:#0b1020;font:700 11px/20px system-ui,sans-serif;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none}" +
+    ".cd-pop{position:absolute;z-index:2147483647;width:320px;max-width:calc(100vw - 24px);background:#0f1724;color:#e6e9f5;border:1px solid #c792ea;border-radius:10px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.45);font:13px/1.45 system-ui,sans-serif}" +
+    ".cd-pop .cd-q{font-size:11.5px;color:#9aa3c7;border-left:2px solid #c792ea;padding-left:7px;margin-bottom:8px;max-height:3.2em;overflow:hidden}" +
+    ".cd-pop textarea{width:100%;box-sizing:border-box;min-height:64px;resize:vertical;border-radius:7px;border:1px solid #2c3a57;background:#0a111d;color:#e6e9f5;padding:7px 9px;font:13px/1.45 system-ui,sans-serif;outline:none}" +
+    ".cd-pop textarea:focus{border-color:#82aaff}" +
+    ".cd-pop .cd-row{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:8px}" +
+    ".cd-pop .cd-hint{margin-right:auto;font-size:11px;color:#7c86ad}" +
+    ".cd-pop button{font:600 12px system-ui,sans-serif;border-radius:7px;padding:5px 12px;cursor:pointer;border:1px solid #2c3a57;background:transparent;color:#e6e9f5}" +
+    ".cd-pop button.cd-add{background:#82aaff;border-color:#82aaff;color:#0b1020}";
+  (document.head || document.documentElement).appendChild(css);
+  var annotate = false, hover = null, pop = null, seq = 0, pins = {};
+  function clearHover(){ if (hover) { hover.removeAttribute("data-cd-hover"); hover = null; } }
+  function closePop(){ if (pop) { pop.remove(); pop = null; } }
+  function place(node, el, below){
+    var r = el.getBoundingClientRect(), x = r.left + window.scrollX, y = (below ? r.bottom + 8 : r.top - 10) + window.scrollY;
+    node.style.left = Math.max(8, Math.min(x, window.scrollX + document.documentElement.clientWidth - node.offsetWidth - 12)) + "px";
+    node.style.top = Math.max(8, y) + "px";
+  }
+  function pin(el, id){
+    seq += 1; el.setAttribute("data-cd-mark", id);
+    var b = document.createElement("span"); b.className = "cd-pin"; b.textContent = String(seq);
+    document.body.appendChild(b);
+    var r = el.getBoundingClientRect(); b.style.left = (r.right + window.scrollX - 10) + "px"; b.style.top = (r.top + window.scrollY - 10) + "px";
+    pins[id] = { el: el, badge: b };
+  }
+  function openPop(el){
+    closePop();
+    var d = describe(el);
+    pop = document.createElement("div"); pop.className = "cd-pop"; pop.setAttribute("data-cd-pop", "");
+    var q = document.createElement("div"); q.className = "cd-q"; q.textContent = d.text || d.selector;
+    var ta = document.createElement("textarea"); ta.placeholder = "Comment on this part…";
+    var row = document.createElement("div"); row.className = "cd-row";
+    var hint = document.createElement("span"); hint.className = "cd-hint"; hint.textContent = "Ctrl+Enter adds · Esc cancels";
+    var cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
+    var add = document.createElement("button"); add.type = "button"; add.className = "cd-add"; add.textContent = "Add";
+    row.append(hint, cancel, add); pop.append(q, ta, row); document.body.appendChild(pop);
+    place(pop, el, true);
+    var submit = function(){
+      var t = ta.value.trim(); if (!t) { ta.focus(); return; }
+      var id = "cd" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      pin(el, id); post({ type: "comment", text: t, element: d, markId: id }); closePop();
+    };
+    add.onclick = submit; cancel.onclick = closePop;
+    ta.addEventListener("keydown", function(e){ if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePop(); } });
+    setTimeout(function(){ ta.focus(); }, 0);
+  }
   window.addEventListener("message", function(e){
     if (e.source !== parent) return;
     var d = e.data || {};
-    if (d.crewDeck && d.type === "annotate") { annotate = !!d.on; document.documentElement.style.cursor = annotate ? "crosshair" : ""; if (!annotate && mark) { mark.style.outline = ""; mark = null; } }
+    if (!d.crewDeck) return;
+    if (d.type === "annotate") { annotate = !!d.on; if (!annotate) { clearHover(); closePop(); } }
+    if (d.type === "unmark" && pins[d.markId]) { pins[d.markId].el.removeAttribute("data-cd-mark"); pins[d.markId].badge.remove(); delete pins[d.markId]; }
   });
+  var interactive = "input,select,textarea,button,label,a,summary,[role=button],[data-lavish-action],[data-cd-pop],.cd-pop";
+  document.addEventListener("mouseover", function(e){
+    if (!annotate || pop) return;
+    var el = e.target; if (el.closest(interactive) || el === document.body || el === document.documentElement) { clearHover(); return; }
+    if (hover !== el) { clearHover(); hover = el; el.setAttribute("data-cd-hover", ""); }
+  }, true);
   document.addEventListener("click", function(e){
     if (!annotate) return;
     var el = e.target;
-    if (el.closest("input,select,textarea,button,label,a,summary,[role=button],[data-lavish-action]")) return;
-    e.preventDefault(); e.stopPropagation();
-    if (mark) mark.style.outline = "";
-    mark = el; el.style.outline = "2px solid #c792ea"; el.style.outlineOffset = "2px";
-    post({ type: "annotate", element: describe(el) });
+    if (el.closest("[data-cd-pop]")) return;
+    if (pop) { e.preventDefault(); e.stopPropagation(); closePop(); return; }
+    if (el.closest(interactive) || el === document.body || el === document.documentElement) return;
+    e.preventDefault(); e.stopPropagation(); clearHover(); openPop(el);
   }, true);
+  document.addEventListener("keydown", function(e){
+    if (e.key !== "Escape" || !annotate) return;
+    if (pop) { closePop(); return; }
+    post({ type: "stop-annotate" });
+  });
 })();</script>"""
 
 
@@ -1395,12 +1455,12 @@ function renderReview() {
   const w = (deck.workers || []).find((x) => x.id === b.owner_id);
   const items = q.map((it, i) => {
     if (it.kind === "answer") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">answer${it.queueKey ? " · " + esc(it.queueKey) : ""}</div><div class="rt">${esc(it.label || it.text)}</div></div>`;
-    if (it.kind === "comment") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">comment${it.element?.context ? " · " + esc(it.element.context) : ""}</div><div class="quote">${esc((it.element?.text || it.element?.selector || "").slice(0, 160))}</div><textarea data-cm="${i}" placeholder="Your comment on this part…">${esc(it.text || "")}</textarea></div>`;
+    if (it.kind === "comment") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">comment ${q.slice(0, i + 1).filter((x) => x.kind === "comment").length}${it.element?.context ? " · " + esc(it.element.context) : ""}</div><div class="quote">${esc((it.element?.text || it.element?.selector || "").slice(0, 120))}</div><div class="rt">${esc(it.text)}</div></div>`;
     return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">question</div><div class="rt">${esc(it.text)}</div></div>`;
   }).join("");
   box.innerHTML = `
     <div class="rh"><b>Feedback</b><span>to ${esc(w ? w.title : b.owner)}</span></div>
-    <div class="rtools"><button class="btn-s${annotating ? " on" : ""}" id="annBtn">✎ ${annotating ? "Annotating: click the plan" : "Annotate"}</button><span>${annotating ? "Esc or click again to stop" : "click a part of the plan to comment"}</span></div>
+    <div class="rtools"><button class="btn-s${annotating ? " on" : ""}" id="annBtn">✎ ${annotating ? "Annotating: click the plan" : "Annotate"}</button><span>${annotating ? "click a part of the plan · Esc stops" : "comment on any part of the plan"}</span></div>
     ${items || '<div class="rempty">Queue answers in the plan, annotate a part of it, or ask a question below. Nothing goes to the worker until you press Send.</div>'}
     <textarea id="askText" placeholder="Ask the worker a question or add a note…"></textarea>
     <div class="rrow"><button class="btn-s" id="askAdd">Add to feedback</button></div>
@@ -1408,8 +1468,11 @@ function renderReview() {
     ${hist.length ? `<div class="rhist"><div class="lh">sent</div>${hist.slice().reverse().map((h) => `<div class="hi"><time>${ago(h.at)}</time> · ${h.items.length} item${h.items.length === 1 ? "" : "s"}: ${esc(h.items.map((x) => x.kind === "comment" ? "comment" : x.kind === "question" ? "question" : (x.queueKey || "answer")).join(", "))}</div>`).join("")}</div>` : ""}
     <div><div class="lh">latest from the worker</div><p id="wlatest" style="margin:0;color:var(--fg);font-size:12.5px;white-space:pre-wrap">${w?.doing ? linkify(w.doing) : '<span class="rempty">nothing on its screen yet</span>'}</p></div>`;
   const fb = $("fbarText"); if (fb) fb.textContent = q.length ? `${q.length} queued` : "nothing queued";
-  box.querySelectorAll("[data-rm]").forEach((x) => x.onclick = () => { const qq = qStore(b.key); qq.splice(Number(x.dataset.rm), 1); qSave(b.key, qq); renderReview(); });
-  box.querySelectorAll("[data-cm]").forEach((x) => x.oninput = () => { const qq = qStore(b.key); if (qq[x.dataset.cm]) { qq[x.dataset.cm].text = x.value; qSave(b.key, qq); } });
+  box.querySelectorAll("[data-rm]").forEach((x) => x.onclick = () => {
+    const qq = qStore(b.key), [gone] = qq.splice(Number(x.dataset.rm), 1); qSave(b.key, qq);
+    if (gone?.markId) try { document.querySelector(".frame iframe")?.contentWindow?.postMessage({ crewDeck: 1, type: "unmark", markId: gone.markId }, "*"); } catch {}
+    renderReview();
+  });
   $("annBtn").onclick = () => { annotating = !annotating; postAnnotate(); renderReview(); };
   $("askAdd").onclick = () => { const t = $("askText").value.trim(); if (!t) return; const qq = qStore(b.key); qq.push({ kind: "question", text: t }); qSave(b.key, qq); renderReview(); };
   $("sendRev").onclick = () => sendReview();
@@ -1417,9 +1480,9 @@ function renderReview() {
 
 async function sendReview() {
   const b = reviewBoard; if (!b) return;
-  const q = qStore(b.key).filter((it) => it.kind !== "comment" || (it.text || "").trim());
+  const q = qStore(b.key);
   const err = $("rerr");
-  if (!q.length) { if (err) err.textContent = "Nothing to send yet (comments need text)."; return; }
+  if (!q.length) { if (err) err.textContent = "Nothing to send yet."; return; }
   try {
     const r = await fetch(`/api/board/${b.key}/send`, { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" }, body: JSON.stringify({ items: q }) });
     const d = await r.json().catch(() => ({}));
@@ -1439,10 +1502,10 @@ window.addEventListener("message", (e) => {
     if (i >= 0) q[i] = item; else q.push(item);
     qSave(k, q); renderReview();
   } else if (d.type === "send") { sendReview(); }
-  else if (d.type === "annotate") {
-    q.push({ kind: "comment", element: d.element || null, text: "" }); qSave(k, q); renderReview();
-    const ta = document.querySelectorAll("#review [data-cm]"); ta[ta.length - 1]?.focus();
-  }
+  else if (d.type === "comment") {
+    const text = String(d.text || "").trim().slice(0, 4000);
+    if (text) { q.push({ kind: "comment", element: d.element || null, text, markId: d.markId || null }); qSave(k, q); renderReview(); }
+  } else if (d.type === "stop-annotate") { annotating = false; renderReview(); }
 });
 
 function toggleFull(force) {
