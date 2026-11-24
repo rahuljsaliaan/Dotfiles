@@ -21,6 +21,7 @@ another web page cannot read the console or post to firstmate's inbox.
 
 Environment: FM_HOME (default ~/Repository/firstmate), CREW_DECK_PORT (default 4399).
 """
+import base64
 import json
 import os
 import re
@@ -48,6 +49,11 @@ RUN = STATE / "crew-deck"
 PIDFILE = RUN / "server.pid"
 CACHE_SECONDS = 2.5
 MAX_MESSAGE = 4000
+UPLOADS = RUN / "uploads"
+MAX_IMAGES = 6
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}
+UPLOAD_NAME = re.compile(r"[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.(png|jpg|webp|gif)")
 
 TOOL_LINE = re.compile(
     r"^(Bash|Read|Write|Update|Edit|MultiEdit|Search|Grep|Glob|Task|Agent|Fetch|Web\w*|List|Skill|"
@@ -678,11 +684,49 @@ def chat_thread():
     msgs = []
     for n, handled in [(n, False) for n in data.get("pending", [])] + [(n, True) for n in data.get("handled", [])]:
         reply = n.get("reply")
-        msgs.append({"id": n.get("id"), "at": n.get("at"), "body": n.get("body") or "",
+        msgs.append({"id": n.get("id"), "at": n.get("at"), "body": n.get("body") or "", "rid": n.get("request_id") or "",
                      "state": "answered" if reply else ("seen" if handled or n.get("acknowledged") else "sent"),
                      "reply": {"at": reply.get("at"), "body": reply.get("body") or ""} if reply else None})
     msgs.sort(key=lambda m: str(m.get("at") or ""))
     return {"ok": True, "messages": msgs[-80:]}
+
+
+def image_ok(data, ext):
+    """The bytes must really be the image type the page claimed."""
+    return {".png": data.startswith(b"\x89PNG\r\n\x1a\n"), ".jpg": data.startswith(b"\xff\xd8\xff"),
+            ".gif": data[:6] in (b"GIF87a", b"GIF89a"), ".webp": data[:4] == b"RIFF" and data[8:12] == b"WEBP"}[ext]
+
+
+def save_images(images):
+    """Store pasted images where firstmate can read them; return their paths or an error."""
+    if not isinstance(images, list) or len(images) > MAX_IMAGES:
+        return None, f"attach at most {MAX_IMAGES} images"
+    saved = []
+    for img in images:
+        if not isinstance(img, dict):
+            return None, "bad image"
+        ext = IMAGE_TYPES.get(str(img.get("type") or ""))
+        if not ext:
+            return None, "only PNG, JPEG, WebP and GIF images can be attached"
+        try:
+            data = base64.b64decode(str(img.get("data") or ""), validate=True)
+        except ValueError:
+            return None, "an image could not be read"
+        if not data or len(data) > MAX_IMAGE_BYTES:
+            return None, f"each image must be under {MAX_IMAGE_BYTES // (1024 * 1024)} MB"
+        if not image_ok(data, ext):
+            return None, "an attachment is not the image it claims to be"
+        saved.append((data, ext))
+    UPLOADS.mkdir(parents=True, exist_ok=True)
+    os.chmod(UPLOADS, 0o700)
+    paths = []
+    for data, ext in saved:
+        f = UPLOADS / (time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8] + ext)
+        fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        paths.append(str(f))
+    return paths, None
 
 
 def chat_send(text, rid):
@@ -732,6 +776,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"thread": board_thread(path.split("/")[3])})
         elif path == "/api/ping":
             self._json(200, {"app": "crew-deck"})
+        elif path.startswith("/upload/") and UPLOAD_NAME.fullmatch(path[8:]):
+            try:
+                data = (UPLOADS / path[8:]).read_bytes()
+            except OSError:
+                return self._send(404, "not found", "text/plain")
+            ctype = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}[path.rsplit(".", 1)[1]]
+            self._send(200, data, ctype)
         elif path.startswith("/board/"):
             parts = path.split("/", 3)
             key = re.sub(r"[^0-9a-f]", "", parts[2] if len(parts) > 2 else "")
@@ -788,15 +839,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, "not found", "text/plain")
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(min(length, 64000)) or b"{}")
+            if length > MAX_IMAGES * MAX_IMAGE_BYTES * 4 // 3 + 64000:
+                return self._json(413, {"ok": False, "error": "the attachments are too large"})
+            body = json.loads(self.rfile.read(length) or b"{}")
             text = str(body.get("text") or "").strip()
+            images = body.get("images") or []
             rid = re.sub(r"[^A-Za-z0-9-]", "", str(body.get("rid") or ""))[:64] or str(uuid.uuid4())
         except (ValueError, AttributeError):
             return self._json(400, {"ok": False, "error": "bad request"})
-        if not text:
+        if not text and not images:
             return self._json(400, {"ok": False, "error": "empty message"})
         if len(text) > MAX_MESSAGE:
             return self._json(400, {"ok": False, "error": f"message is longer than {MAX_MESSAGE} characters"})
+        if images:
+            paths, err = save_images(images)
+            if err:
+                return self._json(400, {"ok": False, "error": err})
+            word = "image" if len(paths) == 1 else f"{len(paths)} images"
+            text = (text + "\n\n" if text else "") + f"[Attached {word} from the crew deck; open each file to see it:]\n" \
+                + "\n".join(paths)
         ok, res = chat_send(text, "crew-deck-" + rid)
         self._json(200 if ok else 500, {"ok": ok, "note": res})
 
@@ -1120,6 +1181,18 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
 .send { padding: 4px 14px; border-radius: 7px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 12px; }
 .send:disabled { opacity: .45; cursor: default; }
 .err { color: var(--red); font-size: 11.5px; margin-top: 6px; display: none; }
+.cf-r { display: flex; align-items: center; gap: 8px; }
+.attach { padding: 4px 9px; border-radius: 7px; border: 1px solid var(--line-strong); color: var(--fg); font-size: 11.5px; background: transparent; }
+.attach:hover { border-color: var(--accent); color: var(--fg-bright); }
+.atts { display: flex; flex-wrap: wrap; gap: 6px; }
+.atts:not(:empty) { margin-bottom: 7px; }
+.att { position: relative; width: 58px; height: 58px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line-strong); background: var(--bg); }
+.att img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.att button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--bg-darker, #000) 80%, transparent); color: var(--fg-bright); font-size: 11px; line-height: 18px; text-align: center; padding: 0; }
+.composer.drop textarea { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.shots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.shots a { display: block; border-radius: 7px; overflow: hidden; border: 1px solid var(--line-strong); }
+.shots img { display: block; max-width: 220px; max-height: 160px; object-fit: contain; background: var(--bg); }
 .err.show { display: block; }
 .offline { color: var(--red); }
 
@@ -1168,8 +1241,12 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
     </div>
     <div class="msgs" id="msgs"></div>
     <form class="composer" id="composer">
-      <textarea id="input" rows="3" placeholder="Message firstmate…" aria-label="Message firstmate"></textarea>
-      <div class="cf"><span><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline</span><button class="send" id="send" type="submit">Send</button></div>
+      <div class="atts" id="atts"></div>
+      <textarea id="input" rows="3" placeholder="Message firstmate… (paste or drop images)" aria-label="Message firstmate"></textarea>
+      <div class="cf"><span><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline</span>
+        <span class="cf-r"><button class="attach" id="attach" type="button" title="Attach images (or paste / drop them)" aria-label="Attach images">＋ image</button>
+        <input type="file" id="files" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+        <button class="send" id="send" type="submit">Send</button></span></div>
       <div class="err" id="err"></div>
     </form>
   </aside>
@@ -1606,10 +1683,19 @@ async function tick() {
   } catch { $("live").innerHTML = '<span class="offline">● disconnected — retrying</span>'; }
 }
 
+const SHOT = /\n?\n?\[Attached [^\]]*from the crew deck[^\]]*\]\n?([\s\S]*)$/;
+function msgHtml(m) {
+  const k = SHOT.exec(m.body || "");
+  const text = k ? m.body.slice(0, k.index) : (m.body || "");
+  const names = k ? (k[1].match(/[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.(?:png|jpg|webp|gif)/g) || []) : [];
+  const srcs = [...names.map((n) => "/upload/" + n), ...(m.previews || [])];
+  return (text ? linkify(text) : "") + (srcs.length ? `<div class="shots">${srcs.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="attached image"></a>`).join("")}</div>` : "");
+}
+const sameMsg = (m, p) => (p.rid && m.rid === p.rid) || m.body === p.body;
 function renderChat(msgs) {
   const all = [...msgs];
-  for (const p of pending) if (!msgs.some((m) => m.body === p.body)) all.push(p);
-  pending = pending.filter((p) => !msgs.some((m) => m.body === p.body));
+  for (const p of pending) if (!msgs.some((m) => sameMsg(m, p))) all.push(p);
+  pending = pending.filter((p) => !msgs.some((m) => sameMsg(m, p)));
   const key = JSON.stringify(all);
   if (key === chatKey) return;
   chatKey = key;
@@ -1617,7 +1703,7 @@ function renderChat(msgs) {
   if (!all.length) { box.innerHTML = `<div class="intro"><b>Talk to firstmate</b>Ask about the fleet or hand it a task. Messages go to firstmate's inbox and wake it; the answer appears here.</div>`; return; }
   const waiting = all.some((m) => m.state !== "answered");
   box.innerHTML = all.map((m) => `
-    <div class="m me"><div class="bub">${linkify(m.body)}</div>
+    <div class="m me"><div class="bub">${msgHtml(m)}</div>
       <div class="meta">${ago(m.at)} · ${m.state === "answered" ? '<span class="ok">answered</span>' : m.state === "seen" ? '<span class="ok">seen</span>' : m.state === "sending" ? "sending…" : '<span class="wait">delivered</span>'}</div></div>
     ${m.reply ? `<div class="m fm"><div class="bub">${linkify(m.reply.body)}</div><div class="meta">firstmate · ${ago(m.reply.at)}</div></div>` : ""}`).join("")
     + (waiting ? `<div class="typing"><i></i><i></i><i></i> firstmate will answer when it next checks in</div>` : "");
@@ -1632,24 +1718,58 @@ async function chatTick() {
   } catch {}
 }
 
+let atts = [];
+const IMG_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+function chatErr(msg) { $("err").textContent = msg; $("err").classList.toggle("show", !!msg); }
+function renderAtts() {
+  $("atts").innerHTML = atts.map((a, i) => `<div class="att"><img src="${a.url}" alt="image to send"><button type="button" data-rm="${i}" aria-label="Remove image">✕</button></div>`).join("");
+  $("atts").querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => { const [a] = atts.splice(+b.dataset.rm, 1); URL.revokeObjectURL(a.url); renderAtts(); });
+}
+function addImages(files) {
+  let added = 0;
+  for (const f of files) {
+    if (!IMG_TYPES.includes(f.type)) { chatErr("Only PNG, JPEG, WebP and GIF images can be attached."); continue; }
+    if (f.size > 10 * 1024 * 1024) { chatErr("Each image must be under 10 MB."); continue; }
+    if (atts.length >= 6) { chatErr("At most 6 images per message."); break; }
+    atts.push({ file: f, type: f.type, url: URL.createObjectURL(f) }); added++;
+  }
+  if (added) { chatErr(""); renderAtts(); }
+  return added;
+}
+const b64 = (f) => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",", 2)[1] || ""); r.onerror = () => bad(r.error); r.readAsDataURL(f); });
+$("input").addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.items || [])].filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter(Boolean);
+  if (files.length && addImages(files) && !e.clipboardData.getData("text/plain")) e.preventDefault();
+});
+$("attach").onclick = () => $("files").click();
+$("files").onchange = () => { addImages([...$("files").files]); $("files").value = ""; $("input").focus(); };
+const comp = $("composer");
+comp.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { e.preventDefault(); comp.classList.add("drop"); } });
+comp.addEventListener("dragleave", (e) => { if (!comp.contains(e.relatedTarget)) comp.classList.remove("drop"); });
+comp.addEventListener("drop", (e) => { comp.classList.remove("drop"); if (e.dataTransfer?.files?.length) { e.preventDefault(); addImages([...e.dataTransfer.files]); $("input").focus(); } });
+let chatSending = false;
 $("composer").onsubmit = async (e) => {
   e.preventDefault();
-  const text = $("input").value.trim();
-  if (!text) return;
-  $("send").disabled = true; $("err").classList.remove("show");
-  pending.push({ body: text, at: Date.now() / 1000, state: "sending" });
+  if (chatSending) return;
+  const text = $("input").value.trim(), sendAtts = [...atts];
+  if (!text && !sendAtts.length) return;
+  chatSending = true; $("send").disabled = true; chatErr("");
+  const rid = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  const p = { body: text, rid: "crew-deck-" + rid, previews: sendAtts.map((a) => a.url), at: Date.now() / 1000, state: "sending" };
+  pending.push(p);
   chatKey = ""; await chatTick(); $("msgs").scrollTop = $("msgs").scrollHeight;
   try {
+    const images = await Promise.all(sendAtts.map(async (a) => ({ type: a.type, data: await b64(a.file) })));
     const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" },
-      body: JSON.stringify({ text, rid: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) }) });
+      body: JSON.stringify({ text, images, rid }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) throw new Error(d.error || "firstmate's inbox did not take the message");
-    $("input").value = "";
+    $("input").value = ""; atts = atts.filter((a) => !sendAtts.includes(a)); renderAtts();
   } catch (err) {
-    pending = pending.filter((p) => p.body !== text);
-    $("err").textContent = String(err.message || err); $("err").classList.add("show");
+    pending = pending.filter((x) => x !== p);
+    chatErr(String(err.message || err));
   }
-  $("send").disabled = false; chatKey = ""; chatTick();
+  chatSending = false; $("send").disabled = false; chatKey = ""; chatTick();
 };
 $("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); } });
 $("closeChat").onclick = () => $("chat").classList.remove("open");
