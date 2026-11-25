@@ -246,7 +246,9 @@ def badge(t, held, last):
         return "bad", state
     if state == "parked":
         return "decide", "deciding"
-    if state == "done" or (pr and last_state == "done"):
+    # A recorded PR is one firstmate registered as ready (bin/fm-pr-check.sh), even while a
+    # pipeline's CI monitor still waits on a repo that has no CI.
+    if state == "done" or pr:
         return "ready", "PR ready"
     if "fix" in detail or (last_state == "paused" and "fix" in last_note):
         return "fix", "fixing"
