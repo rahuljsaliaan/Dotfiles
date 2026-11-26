@@ -248,7 +248,7 @@ def badge(t, held, last):
         return "decide", "deciding"
     # A recorded PR is one firstmate registered as ready (bin/fm-pr-check.sh), even while a
     # pipeline's CI monitor still waits on a repo that has no CI.
-    if state == "done" or pr:
+    if state == "done" or (pr and meta_field(t.get("id"), "pr")):  # a PR firstmate registered as ready
         return "ready", "PR ready"
     if "fix" in detail or (last_state == "paused" and "fix" in last_note):
         return "fix", "fixing"
@@ -1059,6 +1059,9 @@ kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-stron
 .icon-btn:hover { border-color: var(--accent); }
 
 .body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 22px 18px; gap: 14px; }
+.ask { border: 1px solid color-mix(in srgb, var(--yellow) 55%, transparent); background: color-mix(in srgb, var(--yellow) 10%, var(--bg-dark)); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; flex: none; }
+.ask .lh { color: var(--yellow); }
+.ask p { margin: 0 0 10px; color: var(--fg-bright); }
 .latest { border: 1px solid var(--line); border-radius: 10px; background: var(--bg-dark); padding: 12px 14px; max-height: 32%; overflow-y: auto; flex: none; }
 .lh { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
 .latest p { margin: 0; color: var(--fg-bright); white-space: pre-wrap; word-wrap: break-word; }
@@ -1632,6 +1635,7 @@ function renderMain() {
       </div>
     </header>
     <div class="body">
+      ${(() => { const w = (deck.waiting || []).find((y) => y.id === x.id); return w ? `<section class="ask"><div class="lh">needs your answer</div><p><b>${esc(w.call?.title || "A decision")}</b>${w.call?.question ? ` — ${esc(w.call.question)}` : ""}</p><button class="btn-p" data-answer="${esc(x.id)}">Answer it</button></section>` : ""; })()}
       <section class="latest b-${esc(x.badge)}">
         <div class="lh">${x.busy ? '<span class="d live"></span>working now' : "latest from the worker"}</div>
         ${x.doing ? `<p>${linkify(x.doing)}</p>` : '<p class="none">Nothing on its screen yet.</p>'}
@@ -1653,6 +1657,7 @@ function renderMain() {
   const pre = main.querySelector("pre");
   if (pre) pre.scrollTop = (keep != null && !atBottom) ? keep : pre.scrollHeight;
   main.querySelectorAll("[data-board]").forEach((el) => el.onclick = () => selectBoard(el.dataset.board));
+  main.querySelectorAll("[data-answer]").forEach((el) => el.onclick = () => selectNeed("call:" + el.dataset.answer));
   bindChatBtn();
 }
 
