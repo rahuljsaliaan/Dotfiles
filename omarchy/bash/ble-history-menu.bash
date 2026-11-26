@@ -45,10 +45,13 @@ function ble/hmenu/collect {
   [[ $prefix =~ [^[:space:]] ]] || return 1
   ble/hmenu/entries
   _ble_hmenu_total=0
-  while IFS= read -r line; do
+  # One fzf process, fed from a here-string (no pipe or subshell around it).
+  local -a matches=()
+  ble/util/assign-array matches 'fzf --filter="$prefix" --scheme=history <<< "$_ble_hmenu_cache"'
+  for line in "${matches[@]}"; do
     [[ $line == "$prefix" ]] && continue
     ((++_ble_hmenu_total <= BLE_HISTORY_MENU_MAX)) && _ble_hmenu_items+=("$line")
-  done < <(printf '%s' "$_ble_hmenu_cache" | fzf --filter="$prefix" --scheme=history)
+  done
   ((${#_ble_hmenu_items[@]}))
 }
 
@@ -125,7 +128,16 @@ function ble/hmenu/draw {
   local fill=$((inner - ${#hint} - ${#count} - 1))
   printf -v line '%*s' "$fill" ''; line=${line// /─}
   text+=" $B╰─"$'\e[38;2;'"${rgb[dark_foreground]}m$hint$B$line"$'\e[38;2;'"${rgb[dark_foreground]}m$count$B╯$R"
-  ble/edit/info/show ansi "$text"
+  # ble/edit/info/show would re-parse all of this one character at a time
+  # (~300 ms for the box). The layout is known here, so hand the panel the
+  # finished text: every row is inner+3 columns wide, n+1 newlines.
+  if ble/is-function ble/edit/info/.render-content; then
+    ble/edit/info/.render-content $((inner + 3)) $((n + 1)) "${text//$'\n'/$'\r\n'}"
+    ble/util/buffer.flush
+    _ble_edit_info_scene=show
+  else
+    ble/edit/info/show ansi "$text"
+  fi
   local ret; ble/hmenu/typed
   _ble_hmenu_drawn=$ret
 }
@@ -164,6 +176,9 @@ function ble/hmenu/update {
 }
 
 function ble/hmenu/idle {
+  # Rebuild the entry list (after a command, ~30 ms) while nothing is typed,
+  # so the first key of the next command does not pay for it.
+  [[ $_ble_edit_str ]] || ble/hmenu/entries
   ble/util/idle.wait-user-input
   ble/hmenu/update
 }
