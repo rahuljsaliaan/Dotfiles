@@ -185,6 +185,12 @@ if [[ -f "$HOME/.local/share/applications/Microsoft Teams.desktop" ]]; then
   omarchy-webapp-remove "Microsoft Teams" >/dev/null && printf '  removed  Microsoft Teams web app\n'
 fi
 
+# ble.sh, the bash line editor behind the grey history suggestion shown while
+# typing (the zsh-autosuggestions of the Zorin setup). ~/.bashrc loads it.
+if omarchy pkg aur add blesh-git >/dev/null; then
+  printf '  ok       blesh-git\n'
+fi
+
 # Web apps pinned in the dock (shell.json dock.pinned names them by launcher).
 for entry in "Gmail|https://mail.google.com/|gmail" \
              "YouTube Music|https://music.youtube.com/|youtube-music"; do

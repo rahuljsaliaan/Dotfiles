@@ -4,9 +4,25 @@
 # If not running interactively, don't do anything else (leave this above the rc source)
 [[ $- != *i* ]] && return
 
+# ble.sh: shows the rest of the newest matching history entry in grey as you
+# type (zsh-autosuggestions on the Zorin setup). Loaded before Omarchy's rc and
+# attached on the last line of this file, as ble.sh requires.
+[[ -r /usr/share/blesh/ble.sh ]] && source /usr/share/blesh/ble.sh --noattach
+
 # All the default Omarchy aliases and functions
 # (don't mess with these directly, just overwrite them here!)
 source "$OMARCHY_PATH/default/bash/rc"
+
+if [[ ${BLE_VERSION-} ]]; then
+  # → or End takes the suggestion; the grey matches the Zorin autosuggest colour.
+  ble-face auto_complete='fg=#5c6370'
+  # Zorin has no syntax colouring; keep the line plain.
+  bleopt highlight_syntax=
+  # Omarchy's fzf Ctrl+R, bound through ble.sh so the two do not fight.
+  ble-import -d integration/fzf-key-bindings
+fi
+# Ctrl+R: the same bordered dropdown as on Zorin.
+export FZF_CTRL_R_OPTS="--layout=reverse --border --info=inline --delimiter='\t' --with-nth=2.."
 
 # Add your own exports, aliases, and functions here.
 #
@@ -39,3 +55,6 @@ tdl() {
   tmux send-keys -t "$editor_pane" "$EDITOR ." C-m
   tmux select-pane -t "$editor_pane"
 }
+
+# Must stay the last line.
+[[ ! ${BLE_VERSION-} ]] || ble-attach
