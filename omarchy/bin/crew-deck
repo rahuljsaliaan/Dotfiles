@@ -1,0 +1,1824 @@
+#!/usr/bin/env python3
+"""crew-deck - a live, read-only console for Firstmate's workers, with a chat to firstmate.
+
+Usage:
+  crew-deck           start the local server if it is not running, then open the page
+  crew-deck serve     run the server in the foreground
+  crew-deck stop      stop the background server
+  crew-deck --json    print one snapshot and exit
+
+It reads Firstmate's own fleet snapshot (bin/fm-fleet-view.sh --json), each
+worker's status log and tmux screen, and the memory its processes use. It
+never steers, stops or merges a worker. The chat panel writes to Firstmate's
+captain inbox (bin/fm-inbox.sh note), which wakes firstmate, and shows the
+answers firstmate publishes there (bin/fm-inbox.sh reply), so replies arrive
+when firstmate next checks in rather than instantly.
+
+Colours and font follow the current Omarchy theme (colors.toml) on every
+refresh. The server listens on 127.0.0.1 only, answers only requests whose
+Host is itself, and takes chat messages only with its own request header, so
+another web page cannot read the console or post to firstmate's inbox.
+
+Environment: FM_HOME (default ~/Repository/firstmate), CREW_DECK_PORT (default 4399).
+"""
+import base64
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+import tomllib
+import mimetypes
+import urllib.parse
+import urllib.request
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+HOME = Path.home()
+FM = Path(os.environ.get("FM_HOME", HOME / "Repository/firstmate"))
+PORT = int(os.environ.get("CREW_DECK_PORT", "4399"))
+URL = f"http://127.0.0.1:{PORT}/"
+HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+STATE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+COLORS = STATE / "omarchy/current/theme/colors.toml"
+RUN = STATE / "crew-deck"
+PIDFILE = RUN / "server.pid"
+CACHE_SECONDS = 2.5
+MAX_MESSAGE = 4000
+UPLOADS = RUN / "uploads"
+MAX_IMAGES = 6
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}
+UPLOAD_NAME = re.compile(r"[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.(png|jpg|webp|gif)")
+
+TOOL_LINE = re.compile(
+    r"^(Bash|Read|Write|Update|Edit|MultiEdit|Search|Grep|Glob|Task|Agent|Fetch|Web\w*|List|Skill|"
+    r"Reading|Writing|Searching|Running|Ran|Listing|Updating|Editing|Wrote|Called|Calling)\b"
+)
+CHROME = re.compile(r"^[\s─━│╭╮╰╯▐▛▜▌▝▘█▀▙▟]*$|^\s*(⏵⏵|󰚩|❯\s*$)|esc to interrupt|shift\+tab to cycle|Update available")
+EVENT = re.compile(r"^([a-z][a-z-]*)\s*((?:\[[^\]]*\]\s*)*):\s?(.*)$")
+
+
+def sh(args, timeout=15, env=None, stdin=None):
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env, input=stdin)
+        return r.returncode, r.stdout
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
+
+
+def out(args, **kw):
+    code, text = sh(args, **kw)
+    return text if code == 0 else ""
+
+
+FM_ENV = {**os.environ, "FM_HOME": str(FM)}
+
+
+# ---------------------------------------------------------------- theme
+_font = None
+
+
+def theme():
+    global _font
+    try:
+        with open(COLORS, "rb") as f:
+            colors = {k: v for k, v in tomllib.load(f).items() if isinstance(v, str)}
+    except (OSError, tomllib.TOMLDecodeError):
+        colors = {}
+    if _font is None:
+        _font = out(["omarchy-font-current"], timeout=3).strip() or "monospace"
+    try:
+        name = (STATE / "omarchy/current/theme.name").read_text().strip()
+    except OSError:
+        name = out(["omarchy-theme-current"], timeout=3).strip()
+    return {"colors": colors, "font": _font, "name": name}
+
+
+# ---------------------------------------------------------------- memory
+def meminfo():
+    vals = {}
+    try:
+        for line in open("/proc/meminfo"):
+            k, v = line.split(":", 1)
+            vals[k] = int(v.split()[0]) * 1024
+    except OSError:
+        return None
+    return {
+        "total": vals.get("MemTotal", 0),
+        "used": vals.get("MemTotal", 0) - vals.get("MemAvailable", 0),
+        "swap_total": vals.get("SwapTotal", 0),
+        "swap_used": vals.get("SwapTotal", 0) - vals.get("SwapFree", 0),
+    }
+
+
+def process_table():
+    page = os.sysconf("SC_PAGE_SIZE")
+    table = {}
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            stat = open(f"/proc/{d}/stat").read()
+            rest = stat[stat.rindex(")") + 2:].split()
+            table[int(d)] = (int(rest[1]), int(rest[21]) * page)
+        except (OSError, ValueError, IndexError):
+            pass
+    return table
+
+
+def tree_rss(root, table):
+    children = {}
+    for pid, (ppid, _) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    total, stack = 0, [root]
+    while stack:
+        pid = stack.pop()
+        total += table.get(pid, (0, 0))[1]
+        stack.extend(children.get(pid, []))
+    return total
+
+
+# ---------------------------------------------------------------- workers
+def screen(target):
+    raw = out(["tmux", "capture-pane", "-p", "-J", "-t", target, "-S", "-200"], timeout=5)
+    lines = [l.rstrip() for l in raw.splitlines()]
+    busy = any("esc to interrupt" in l for l in lines[-8:])
+    kept = [l for l in lines if l.strip() and not CHROME.search(l)]
+    return kept, busy, agent_status(lines)
+
+
+EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+GLYPHS = re.compile(r"[\ue000-\uf8ff\U000f0000-\U000fffff]")
+
+
+def agent_status(lines):
+    """The agent's own status line (model, context, cost, plan usage), read
+    from the bottom of its screen: '󰚩 Opus 5.5 high │ … │ ctx 65k 6% │ $0.33 │ 5h 51% ↻1h42m │ wk 55%'."""
+    line = next((l for l in reversed(lines[-12:]) if "│" in l and re.search(r"\bctx \S+", l)), None)
+    if not line:
+        return None
+    st = {"line": line.strip()}
+    for seg in (GLYPHS.sub("", x).strip() for x in line.split("│")):
+        if not seg:
+            continue
+        if seg.startswith("ctx "):
+            parts = seg.split()
+            st["ctx"] = parts[1] if len(parts) > 1 else None
+            st["ctx_pct"] = parts[2] if len(parts) > 2 else None
+        elif seg.startswith("$"):
+            st["cost"] = seg.split()[0]
+        elif seg.startswith("5h "):
+            m = re.match(r"5h (\S+)(?:\s+↻\s*(\S+))?", seg)
+            if m:
+                st["five_hour"], st["five_hour_reset"] = m.group(1), m.group(2)
+        elif seg.startswith("wk "):
+            st["week"] = seg.split()[1] if len(seg.split()) > 1 else None
+        elif "model" not in st and re.search(r"[A-Za-z]", seg) and "/" not in seg:
+            words = seg.split()
+            if words and words[-1].lower() in EFFORTS:
+                st["effort"] = words.pop()
+            st["model"] = " ".join(words)
+    return st or None
+
+
+def doing_now(lines):
+    """The worker's latest plain-language paragraph: the last '●' block that is
+    prose rather than a tool call."""
+    blocks, cur = [], None
+    for l in lines:
+        if l.startswith("● "):
+            cur = [l[2:].strip()]
+            blocks.append(cur)
+        elif cur is not None and l.startswith("  ") and not l.lstrip().startswith("⎿"):
+            if re.match(r"^\s*[✻✽✶✳✢·*]\s", l):
+                cur = None
+            else:
+                cur.append(l.strip())
+        else:
+            cur = None
+    for b in reversed(blocks):
+        text = re.sub(r"\s+", " ", " ".join(b)).strip()
+        if not TOOL_LINE.match(text):
+            return text[:900] + ("…" if len(text) > 900 else "")
+    return ""
+
+
+def events(path, limit=12):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 24000))
+            tail = f.read().decode("utf-8", "replace").splitlines()[-limit:]
+    except (OSError, TypeError):
+        return []
+    rows = []
+    for line in tail:
+        m = EVENT.match(line.strip())
+        if not m:
+            continue
+        at = re.search(r"\[at=(\d+)\]", m.group(2))
+        rows.append({"state": m.group(1), "at": int(at.group(1)) if at else None, "note": m.group(3)[:400]})
+    return rows[::-1]
+
+
+def pane_pid(target):
+    o = out(["tmux", "display-message", "-p", "-t", target, "#{pane_pid}"], timeout=3).strip()
+    return int(o) if o.isdigit() else None
+
+
+def badge(t, held, last):
+    cs = t.get("current_state") or {}
+    state = cs.get("state") or "unknown"
+    detail = (cs.get("detail") or "").lower()
+    pr = (t.get("pr") or {}).get("url")
+    last_state = (last or {}).get("state")
+    last_note = ((last or {}).get("note") or "").lower()
+    if held:
+        return "you", "needs you"
+    if (t.get("endpoint") or {}).get("exists") is False:
+        return "bad", "stopped"
+    if state in ("failed", "blocked"):
+        return "bad", state
+    if state == "parked":
+        return "decide", "deciding"
+    # A recorded PR is one firstmate registered as ready (bin/fm-pr-check.sh), even while a
+    # pipeline's CI monitor still waits on a repo that has no CI.
+    if state == "done" or (pr and meta_field(t.get("id"), "pr")):  # a PR firstmate registered as ready
+        return "ready", "PR ready"
+    if "fix" in detail or (last_state == "paused" and "fix" in last_note):
+        return "fix", "fixing"
+    if "validating" in detail or "ci" in detail.split():
+        return "check", "reviewing"
+    if state == "paused":
+        return "wait", "waiting"
+    if state == "working":
+        return "work", "working"
+    return "muted", "unknown"
+
+
+def captain_call(task_id):
+    """Firstmate's structured write-up of a decision it holds for the owner
+    (data/<task>/captain-call.json): question, context and options."""
+    if not task_id or "/" in task_id:
+        return None
+    try:
+        call = json.loads((FM / "data" / task_id / "captain-call.json").read_text())
+        return call if isinstance(call, dict) and call.get("options") else None
+    except (OSError, ValueError):
+        return None
+
+
+def meta_field(task_id, key):
+    try:
+        for line in (FM / "state" / f"{task_id}.meta").read_text().splitlines():
+            if line.startswith(key + "="):
+                return line.split("=", 1)[1]
+    except OSError:
+        pass
+    return None
+
+
+def title_of(t, record):
+    title = (record or {}).get("title") or t.get("id")
+    repo = (record or {}).get("repo") or ""
+    if repo and title.lower().startswith(repo.lower() + ":"):
+        title = title[len(repo) + 1:].strip()
+    return title[:1].upper() + title[1:], repo
+
+
+def build():
+    snap = out([str(FM / "bin/fm-fleet-view.sh"), "--json"], timeout=30, env=FM_ENV)
+    try:
+        snap = json.loads(snap)
+    except ValueError:
+        snap = None
+    deck = {"generated": time.time(), "theme": theme(), "memory": meminfo(), "ok": snap is not None,
+            "home": str(FM), "workers": [], "waiting": [], "ready": []}
+    if not snap:
+        return deck
+    records = {r.get("id"): r for r in (snap.get("backlog") or {}).get("records", [])}
+    table = process_table()
+    for r in records.values():
+        if r.get("hold_kind") == "captain" and r.get("state") != "done":
+            title, repo = title_of({"id": r.get("id")}, r)
+            deck["waiting"].append({"id": r.get("id"), "title": title, "repo": repo, "reason": r.get("hold_reason") or "",
+                                    "call": captain_call(r.get("id"))})
+    for t in snap.get("tasks", []):
+        if t.get("kind") == "secondmate":
+            continue
+        rec = records.get(t.get("id")) or t.get("backlog") or {}
+        status = (t.get("paths") or {}).get("status_log") or {}
+        last = status.get("last_event")
+        kind, label = badge(t, rec.get("hold_kind") == "captain", last)
+        title, repo = title_of(t, rec)
+        ep = t.get("endpoint") or {}
+        target = ep.get("target")
+        lines, busy, rss, agent = [], False, None, None
+        if t.get("backend") == "tmux" and target and ep.get("exists"):
+            lines, busy, agent = screen(target)
+            pid = pane_pid(target)
+            rss = tree_rss(pid, table) if pid else None
+        m = re.match(r"s(\d+)\.", t.get("spawn_gen") or "")
+        pr = (t.get("pr") or {}).get("url")
+        cs = t.get("current_state") or {}
+        w = {"id": t.get("id"), "title": title, "repo": repo, "badge": kind, "label": label,
+             "state": cs.get("state"), "detail": cs.get("detail"),
+             "doing": doing_now(lines), "busy": busy, "started": int(m.group(1)) if m else None,
+             "rss": rss, "pr": pr, "branch": t.get("branch"), "target": target,
+             "mode": t.get("mode"), "harness": t.get("harness"), "agent": agent,
+             "worktree": ((t.get("paths") or {}).get("worktree") or {}).get("path"),
+             "screen": lines[-120:], "events": events(status.get("path"))}
+        deck["workers"].append(w)
+        if kind == "ready" and pr:
+            deck["ready"].append({"id": w["id"], "title": title, "repo": repo, "pr": pr,
+                                  "base": meta_field(w["id"], "base_branch"), "branch": w.get("branch")})
+    order = {"you": 0, "bad": 1, "ready": 2, "decide": 3, "fix": 4, "check": 5, "work": 6, "wait": 7, "muted": 8}
+    deck["workers"].sort(key=lambda w: (order.get(w["badge"], 9), -(w["started"] or 0)))
+    deck["boards"] = boards(deck["workers"])
+    for item in deck["waiting"]:
+        item["board"] = next((b["key"] for b in deck["boards"] if b["owner_id"] == item["id"]), None)
+    for w in deck["workers"]:
+        w.pop("worktree", None)
+    deck["firstmate"] = firstmate_view(records, deck["workers"])
+    return deck
+
+
+_cache = {"at": 0.0, "deck": None}
+_lock = threading.Lock()
+
+
+def cached_deck():
+    with _lock:
+        if _cache["deck"] is None or time.time() - _cache["at"] > CACHE_SECONDS:
+            _cache["deck"] = build()
+            _cache["at"] = time.time()
+        return _cache["deck"]
+
+
+# ---------------------------------------------------------------- firstmate itself
+def fm_window():
+    want = os.environ.get("CREW_DECK_FM_WINDOW")
+    if want:
+        return want
+    for line in out(["tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index}\t#{window_name}"], timeout=3).splitlines():
+        target, _, name = line.partition("\t")
+        if name == "firstmate":
+            return target
+    return None
+
+
+_merges = {}
+
+
+def merge_info(url):
+    """GitHub's record of a merged PR, cached for good once merged; a failed
+    lookup is retried at most every two minutes."""
+    hit = _merges.get(url)
+    if hit and (hit.get("mergedAt") or time.time() - hit.get("_tried", 0) < 120):
+        return hit if hit.get("mergedAt") else None
+    code, o = sh(["gh", "pr", "view", url, "--json", "number,mergedAt,mergedBy,baseRefName,headRefName,mergeCommit"], timeout=15)
+    try:
+        d = json.loads(o) if code == 0 else {}
+    except ValueError:
+        d = {}
+    d["_tried"] = time.time()
+    _merges[url] = d
+    return d if d.get("mergedAt") else None
+
+
+def iso_epoch(s):
+    try:
+        return time.mktime(time.strptime(s.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S%z")) - time.timezone
+    except (ValueError, AttributeError):
+        return None
+
+
+def supervision_notes(limit=30):
+    path = FM / "state/branch-outcomes.jsonl"
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 60000))
+            lines = f.read().decode("utf-8", "replace").splitlines()[-limit:]
+    except OSError:
+        return []
+    notes = []
+    for l in lines:
+        try:
+            r = json.loads(l)
+        except ValueError:
+            continue
+        if r.get("summary") and r.get("epoch"):
+            notes.append({"at": r["epoch"], "task": r.get("task"), "text": r["summary"][:500]})
+    return notes
+
+
+def firstmate_view(records, workers):
+    target = fm_window()
+    lines, busy, agent = screen(target) if target else ([], False, None)
+    landed = []
+    for r in records.values():
+        if r.get("state") != "done":
+            continue
+        pr = r.get("pr_url")
+        title, repo = title_of({"id": r.get("id")}, r)
+        info = merge_info(pr) if pr and r.get("merged") else None
+        landed.append({"id": r.get("id"), "title": title, "repo": repo, "pr": pr, "kind": r.get("kind"),
+                       "verb": (r.get("completion") or {}).get("verb"), "date": (r.get("completion") or {}).get("date"),
+                       "at": iso_epoch(info.get("mergedAt")) if info else None,
+                       "by": ((info or {}).get("mergedBy") or {}).get("login"), "base": (info or {}).get("baseRefName"),
+                       "head": (info or {}).get("headRefName"), "commit": ((info or {}).get("mergeCommit") or {}).get("oid")})
+    landed.sort(key=lambda x: -(x["at"] or 0))
+    names = {w["id"]: w["title"] for w in workers}
+    names.update({x["id"]: x["title"] for x in landed})
+    feed = [{"at": n["at"], "who": "firstmate", "kind": "note", "task": n["task"], "text": n["text"]} for n in supervision_notes()]
+    for w in workers:
+        for e in w.get("events") or []:
+            if e.get("at"):
+                feed.append({"at": e["at"], "who": w["id"], "kind": e["state"], "task": w["id"], "text": e["note"]})
+    for x in landed:
+        if x["at"] and x["pr"]:
+            feed.append({"at": x["at"], "who": "firstmate", "kind": "merged", "task": x["id"],
+                         "text": f"Merged PR #{x['pr'].rsplit('/', 1)[-1]} into {x['base'] or 'its base'}: {x['title']}"})
+    for f in feed:
+        f["title"] = names.get(f.get("task"), f.get("task"))
+    feed.sort(key=lambda f: -f["at"])
+    return {"target": target, "busy": busy, "agent": agent, "doing": doing_now(lines), "screen": lines[-160:],
+            "landed": landed, "activity": feed[:60]}
+
+
+# ---------------------------------------------------------------- lavish boards
+LAVISH_STATE = Path(os.environ.get("LAVISH_AXI_STATE_DIR", HOME / ".lavish-axi")) / "state.json"
+
+
+def lavish_sessions():
+    try:
+        data = json.loads(LAVISH_STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+    s = data.get("sessions") or {}
+    items = s.values() if isinstance(s, dict) else s
+    return {x.get("key"): x for x in items if isinstance(x, dict) and x.get("key") and x.get("file")}
+
+
+def board_title(path):
+    try:
+        head = Path(path).read_text(errors="replace")[:6000]
+    except OSError:
+        return None
+    m = re.search(r"<title[^>]*>(.*?)</title>", head, re.S | re.I)
+    return re.sub(r"\s+", " ", m.group(1)).strip()[:120] if m else None
+
+
+def boards(workers):
+    """The Lavish plans live workers are putting to the owner: open sessions whose
+    file lives in a worker's worktree or data folder and was written after that
+    worker started. Every other Lavish session is left out."""
+    out_ = []
+    for key, s in lavish_sessions().items():
+        f = s.get("file")
+        try:
+            mtime = os.path.getmtime(f)
+        except OSError:
+            continue
+        owner, kind = None, "other"
+        for w in workers:
+            roots = [p for p in (w.get("worktree"), str(FM / "data" / (w.get("id") or "-"))) if p]
+            if any(f.startswith(r.rstrip("/") + "/") for r in roots) and mtime >= (w.get("started") or 0):
+                owner, kind = w, "worker"
+                break
+        if kind != "worker" or s.get("status") == "ended":
+            continue  # only plans a live worker is putting to the owner
+        where = Path(f.split("/.lavish/")[0]).name if "/.lavish/" in f else Path(f).parent.name
+        out_.append({"key": key, "file": f, "name": Path(f).name, "status": s.get("status"), "url": s.get("url"),
+                     "rev": s.get("artifact_revision"), "mtime": mtime, "title": board_title(f) or Path(f).stem,
+                     "kind": kind, "owner_id": owner.get("id") if owner else None,
+                     "owner": owner.get("title") if owner else ("firstmate" if kind == "firstmate" else where)})
+    out_.sort(key=lambda b: -b["mtime"])
+    return out_
+
+
+def board_file(key, rel):
+    s = lavish_sessions().get(key)
+    if not s:
+        return None
+    main_file = Path(s["file"]).resolve()
+    if not rel:
+        return main_file
+    target = (main_file.parent / rel).resolve()
+    return target if str(target).startswith(str(main_file.parent) + "/") and target.is_file() else None
+
+
+SHIM = r"""<script>(function(){
+  function post(m){ try { parent.postMessage(Object.assign({ crewDeck: 1 }, m), "*"); } catch (e) {} }
+  function describe(el){
+    if (!el || !el.tagName) return null;
+    var text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 240);
+    var cls = (typeof el.className === "string" && el.className.trim()) ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
+    var wrap = el.closest && el.closest("section, article, form, [data-lavish-question]");
+    var h = wrap && wrap.querySelector("h1,h2,h3,h4,legend");
+    return { tag: el.tagName.toLowerCase(), selector: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + cls, text: text, context: h ? h.textContent.trim().replace(/\s+/g, " ").slice(0, 120) : null };
+  }
+  window.lavish = {
+    queuePrompt: function(text, opts){
+      opts = opts || {};
+      var key = opts.queueKey || null, el = opts.element || null;
+      if (!key && el && el.closest) { var w = el.closest("[data-lavish-question]"); if (w) key = w.getAttribute("data-lavish-question"); }
+      var data = null; try { data = opts.data ? JSON.parse(JSON.stringify(opts.data)) : null; } catch (e) {}
+      post({ type: "queue", text: String(text || ""), tag: opts.tag || null, label: opts.text || null, data: data, queueKey: key, element: describe(el) });
+      return true;
+    },
+    sendQueuedPrompts: function(){ post({ type: "send" }); return true; }
+  };
+  var css = document.createElement("style");
+  css.textContent = "[data-cd-hover]{outline:2px dashed #c792ea!important;outline-offset:2px!important;cursor:crosshair!important}" +
+    "[data-cd-mark]{outline:2px solid #c792ea!important;outline-offset:2px!important}" +
+    ".cd-pin{position:absolute;z-index:2147483646;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#c792ea;color:#0b1020;font:700 11px/20px system-ui,sans-serif;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none}" +
+    ".cd-pop{position:absolute;z-index:2147483647;width:320px;max-width:calc(100vw - 24px);background:#0f1724;color:#e6e9f5;border:1px solid #c792ea;border-radius:10px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.45);font:13px/1.45 system-ui,sans-serif}" +
+    ".cd-pop .cd-q{font-size:11.5px;color:#9aa3c7;border-left:2px solid #c792ea;padding-left:7px;margin-bottom:8px;max-height:3.2em;overflow:hidden}" +
+    ".cd-pop textarea{width:100%;box-sizing:border-box;min-height:64px;resize:vertical;border-radius:7px;border:1px solid #2c3a57;background:#0a111d;color:#e6e9f5;padding:7px 9px;font:13px/1.45 system-ui,sans-serif;outline:none}" +
+    ".cd-pop textarea:focus{border-color:#82aaff}" +
+    ".cd-pop .cd-row{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:8px}" +
+    ".cd-pop .cd-hint{margin-right:auto;font-size:11px;color:#7c86ad}" +
+    ".cd-pop button{font:600 12px system-ui,sans-serif;border-radius:7px;padding:5px 12px;cursor:pointer;border:1px solid #2c3a57;background:transparent;color:#e6e9f5}" +
+    ".cd-pop button.cd-add{background:#82aaff;border-color:#82aaff;color:#0b1020}";
+  (document.head || document.documentElement).appendChild(css);
+  var annotate = false, hover = null, pop = null, seq = 0, pins = {};
+  function clearHover(){ if (hover) { hover.removeAttribute("data-cd-hover"); hover = null; } }
+  function closePop(){ if (pop) { pop.remove(); pop = null; } }
+  function place(node, el, below){
+    var r = el.getBoundingClientRect(), x = r.left + window.scrollX, y = (below ? r.bottom + 8 : r.top - 10) + window.scrollY;
+    node.style.left = Math.max(8, Math.min(x, window.scrollX + document.documentElement.clientWidth - node.offsetWidth - 12)) + "px";
+    node.style.top = Math.max(8, y) + "px";
+  }
+  function pin(el, id){
+    seq += 1; el.setAttribute("data-cd-mark", id);
+    var b = document.createElement("span"); b.className = "cd-pin"; b.textContent = String(seq);
+    document.body.appendChild(b);
+    var r = el.getBoundingClientRect(); b.style.left = (r.right + window.scrollX - 10) + "px"; b.style.top = (r.top + window.scrollY - 10) + "px";
+    pins[id] = { el: el, badge: b };
+  }
+  function openPop(el){
+    closePop();
+    var d = describe(el);
+    pop = document.createElement("div"); pop.className = "cd-pop"; pop.setAttribute("data-cd-pop", "");
+    var q = document.createElement("div"); q.className = "cd-q"; q.textContent = d.text || d.selector;
+    var ta = document.createElement("textarea"); ta.placeholder = "Comment on this part…";
+    var row = document.createElement("div"); row.className = "cd-row";
+    var hint = document.createElement("span"); hint.className = "cd-hint"; hint.textContent = "Ctrl+Enter adds · Esc cancels";
+    var cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
+    var add = document.createElement("button"); add.type = "button"; add.className = "cd-add"; add.textContent = "Add";
+    row.append(hint, cancel, add); pop.append(q, ta, row); document.body.appendChild(pop);
+    place(pop, el, true);
+    var submit = function(){
+      var t = ta.value.trim(); if (!t) { ta.focus(); return; }
+      var id = "cd" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      pin(el, id); post({ type: "comment", text: t, element: d, markId: id }); closePop();
+    };
+    add.onclick = submit; cancel.onclick = closePop;
+    ta.addEventListener("keydown", function(e){ if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePop(); } });
+    setTimeout(function(){ ta.focus(); }, 0);
+  }
+  window.addEventListener("message", function(e){
+    if (e.source !== parent) return;
+    var d = e.data || {};
+    if (!d.crewDeck) return;
+    if (d.type === "annotate") { annotate = !!d.on; if (!annotate) { clearHover(); closePop(); } }
+    if (d.type === "unmark" && pins[d.markId]) { pins[d.markId].el.removeAttribute("data-cd-mark"); pins[d.markId].badge.remove(); delete pins[d.markId]; }
+  });
+  var interactive = "input,select,textarea,button,label,a,summary,[role=button],[data-lavish-action],[data-cd-pop],.cd-pop";
+  document.addEventListener("mouseover", function(e){
+    if (!annotate || pop) return;
+    var el = e.target; if (el.closest(interactive) || el === document.body || el === document.documentElement) { clearHover(); return; }
+    if (hover !== el) { clearHover(); hover = el; el.setAttribute("data-cd-hover", ""); }
+  }, true);
+  document.addEventListener("click", function(e){
+    if (!annotate) return;
+    var el = e.target;
+    if (el.closest("[data-cd-pop]")) return;
+    if (pop) { e.preventDefault(); e.stopPropagation(); closePop(); return; }
+    if (el.closest(interactive) || el === document.body || el === document.documentElement) return;
+    e.preventDefault(); e.stopPropagation(); clearHover(); openPop(el);
+  }, true);
+  document.addEventListener("keydown", function(e){
+    if (e.key !== "Escape" || !annotate) return;
+    if (pop) { closePop(); return; }
+    post({ type: "stop-annotate" });
+  });
+})();</script>"""
+
+
+def inject_shim(html):
+    m = re.search(rb"<head[^>]*>", html, re.I)
+    at = m.end() if m else 0
+    return html[:at] + SHIM.encode() + html[at:]
+
+
+def board_thread_path(key):
+    return RUN / "boards" / f"{key}.jsonl"
+
+
+def board_thread(key):
+    try:
+        return [json.loads(l) for l in board_thread_path(key).read_text().splitlines() if l.strip()][-40:]
+    except (OSError, ValueError):
+        return []
+
+
+def board_send(key, items):
+    deck = cached_deck()
+    b = next((x for x in deck.get("boards", []) if x["key"] == key), None)
+    if not b or not b.get("owner_id"):
+        return False, "that plan's worker is no longer running"
+    lines = []
+    for i, it in enumerate(items[:40], 1):
+        kind = it.get("kind")
+        if kind == "answer":
+            q = it.get("queueKey") or (it.get("data") or {}).get("question") or "answer"
+            lines.append(f"{i}. [answer · {q}] {it.get('text', '')}" + (f"\n   data: {json.dumps(it.get('data'))[:800]}" if it.get("data") else ""))
+        elif kind == "comment":
+            el = it.get("element") or {}
+            where = (f" in \"{el.get('context')}\"" if el.get("context") else "")
+            lines.append(f"{i}. [comment on {el.get('selector', 'an element')}{where}: \"{(el.get('text') or '')[:200]}\"] {it.get('text', '')}")
+        elif kind == "question":
+            lines.append(f"{i}. [question] {it.get('text', '')}")
+    if not lines:
+        return False, "nothing to send"
+    msg = ("The captain's feedback on your Lavish plan board, sent from the crew deck, where the captain reviews your board. "
+           "Treat it exactly as board feedback from Lavish: these are the captain's own words. Act on every item. Answer questions and "
+           "show changes by updating the board itself (the deck reloads it on every revision) and keep it armed as before.\n\n" + "\n".join(lines))
+    code, o = sh([str(FM / "bin/fm-send.sh"), b["owner_id"], msg], timeout=30, env=FM_ENV)
+    if code != 0:
+        return False, (o.strip().splitlines() or ["the message did not reach the worker"])[-1][:300]
+    path = board_thread_path(key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps({"at": time.time(), "to": b["owner_id"], "items": items[:40]}) + "\n")
+    return True, b["owner_id"]
+
+
+def board_open(key):
+    s = lavish_sessions().get(key)
+    if not s:
+        return False, "that Lavish page is gone"
+    code, o = sh(["lavish-axi", s["file"], "--no-open"], timeout=30)
+    m = re.search(r"https?://127\.0\.0\.1:\d+/session/[0-9a-f]+", o)
+    if code == 0 and m:
+        return True, m.group(0)
+    return False, (o.strip().splitlines() or ["Lavish would not open it"])[-1][:300]
+
+
+# ---------------------------------------------------------------- chat
+INBOX = str(FM / "bin/fm-inbox.sh")
+
+
+def chat_thread():
+    code, text = sh([INBOX, "receipts", "--all-pending", "--all-handled", "--all-replies"], timeout=15, env=FM_ENV)
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {"ok": False, "messages": []}
+    msgs = []
+    for n, handled in [(n, False) for n in data.get("pending", [])] + [(n, True) for n in data.get("handled", [])]:
+        reply = n.get("reply")
+        msgs.append({"id": n.get("id"), "at": n.get("at"), "body": n.get("body") or "", "rid": n.get("request_id") or "",
+                     "state": "answered" if reply else ("seen" if handled or n.get("acknowledged") else "sent"),
+                     "reply": {"at": reply.get("at"), "body": reply.get("body") or ""} if reply else None})
+    msgs.sort(key=lambda m: str(m.get("at") or ""))
+    return {"ok": True, "messages": msgs[-80:]}
+
+
+def image_ok(data, ext):
+    """The bytes must really be the image type the page claimed."""
+    return {".png": data.startswith(b"\x89PNG\r\n\x1a\n"), ".jpg": data.startswith(b"\xff\xd8\xff"),
+            ".gif": data[:6] in (b"GIF87a", b"GIF89a"), ".webp": data[:4] == b"RIFF" and data[8:12] == b"WEBP"}[ext]
+
+
+def save_images(images):
+    """Store pasted images where firstmate can read them; return their paths or an error."""
+    if not isinstance(images, list) or len(images) > MAX_IMAGES:
+        return None, f"attach at most {MAX_IMAGES} images"
+    saved = []
+    for img in images:
+        if not isinstance(img, dict):
+            return None, "bad image"
+        ext = IMAGE_TYPES.get(str(img.get("type") or ""))
+        if not ext:
+            return None, "only PNG, JPEG, WebP and GIF images can be attached"
+        try:
+            data = base64.b64decode(str(img.get("data") or ""), validate=True)
+        except ValueError:
+            return None, "an image could not be read"
+        if not data or len(data) > MAX_IMAGE_BYTES:
+            return None, f"each image must be under {MAX_IMAGE_BYTES // (1024 * 1024)} MB"
+        if not image_ok(data, ext):
+            return None, "an attachment is not the image it claims to be"
+        saved.append((data, ext))
+    UPLOADS.mkdir(parents=True, exist_ok=True)
+    os.chmod(UPLOADS, 0o700)
+    paths = []
+    for data, ext in saved:
+        f = UPLOADS / (time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8] + ext)
+        fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        paths.append(str(f))
+    return paths, None
+
+
+def chat_send(text, rid):
+    code, o = sh([INBOX, "note", "--request-id", rid, "--json", "-"], timeout=20, env=FM_ENV, stdin=text)
+    try:
+        res = json.loads(o)
+    except ValueError:
+        res = {}
+    if code == 3 and res.get("id"):
+        sh([INBOX, "announce", "--json", res["id"]], timeout=20, env=FM_ENV)
+        code = 0
+    return code == 0, res
+
+
+# ---------------------------------------------------------------- server
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code, body, ctype):
+        data = body.encode() if isinstance(body, str) else body
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _json(self, code, obj):
+        self._send(code, json.dumps(obj), "application/json")
+
+    def _host_ok(self):
+        if self.headers.get("Host") in HOSTS:
+            return True
+        self._send(403, "forbidden", "text/plain")
+        return False
+
+    def do_GET(self):
+        if not self._host_ok():
+            return
+        path = self.path.split("?", 1)[0]
+        if path == "/":
+            self._send(200, PAGE, "text/html; charset=utf-8")
+        elif path == "/api/deck":
+            self._json(200, cached_deck())
+        elif path == "/api/chat":
+            self._json(200, chat_thread())
+        elif re.fullmatch(r"/api/board/[0-9a-f]+/thread", path):
+            self._json(200, {"thread": board_thread(path.split("/")[3])})
+        elif path == "/api/ping":
+            self._json(200, {"app": "crew-deck"})
+        elif path.startswith("/upload/") and UPLOAD_NAME.fullmatch(path[8:]):
+            try:
+                data = (UPLOADS / path[8:]).read_bytes()
+            except OSError:
+                return self._send(404, "not found", "text/plain")
+            ctype = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}[path.rsplit(".", 1)[1]]
+            self._send(200, data, ctype)
+        elif path.startswith("/board/"):
+            parts = path.split("/", 3)
+            key = re.sub(r"[^0-9a-f]", "", parts[2] if len(parts) > 2 else "")
+            rel = urllib.parse.unquote(parts[3]) if len(parts) > 3 else ""
+            f = board_file(key, rel)
+            if not f:
+                return self._send(404, "not found", "text/plain")
+            try:
+                data = f.read_bytes()
+            except OSError:
+                return self._send(404, "not found", "text/plain")
+            ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+            if not rel and ctype == "text/html":
+                data = inject_shim(data)
+            if ctype.startswith("text/") or ctype.endswith(("javascript", "json", "svg+xml")):
+                ctype += "; charset=utf-8"
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            # Served pages run with an opaque origin, so their scripts can never call this server's API.
+            self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms allow-modals")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self._send(404, "not found", "text/plain")
+
+    def do_POST(self):
+        if not self._host_ok():
+            return
+        if self.headers.get("X-Crew-Deck") != "1" \
+                or not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return self._send(403, "forbidden", "text/plain")
+        origin = self.headers.get("Origin")
+        if origin and origin.split("://", 1)[-1] not in HOSTS:
+            return self._send(403, "forbidden", "text/plain")
+        m = re.fullmatch(r"/api/board/([0-9a-f]+)/send", self.path)
+        if m:
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                items = json.loads(self.rfile.read(min(length, 256000)) or b"{}").get("items") or []
+                items = [i for i in items if isinstance(i, dict)]
+            except (ValueError, AttributeError):
+                return self._json(400, {"ok": False, "error": "bad request"})
+            ok, res = board_send(m.group(1), items)
+            return self._json(200 if ok else 409, {"ok": ok, "to": res if ok else None, "error": None if ok else res})
+        m = re.fullmatch(r"/api/board/([0-9a-f]+)/open", self.path)
+        if m:
+            ok, res = board_open(m.group(1))
+            return self._json(200 if ok else 409, {"ok": ok, "url": res if ok else None, "error": None if ok else res})
+        if self.path == "/api/decide":
+            return self._decide()
+        if self.path != "/api/chat":
+            return self._send(404, "not found", "text/plain")
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_IMAGES * MAX_IMAGE_BYTES * 4 // 3 + 64000:
+                return self._json(413, {"ok": False, "error": "the attachments are too large"})
+            body = json.loads(self.rfile.read(length) or b"{}")
+            text = str(body.get("text") or "").strip()
+            images = body.get("images") or []
+            rid = re.sub(r"[^A-Za-z0-9-]", "", str(body.get("rid") or ""))[:64] or str(uuid.uuid4())
+        except (ValueError, AttributeError):
+            return self._json(400, {"ok": False, "error": "bad request"})
+        if not text and not images:
+            return self._json(400, {"ok": False, "error": "empty message"})
+        if len(text) > MAX_MESSAGE:
+            return self._json(400, {"ok": False, "error": f"message is longer than {MAX_MESSAGE} characters"})
+        if images:
+            paths, err = save_images(images)
+            if err:
+                return self._json(400, {"ok": False, "error": err})
+            word = "image" if len(paths) == 1 else f"{len(paths)} images"
+            text = (text + "\n\n" if text else "") + f"[Attached {word} from the crew deck; open each file to see it:]\n" \
+                + "\n".join(paths)
+        ok, res = chat_send(text, "crew-deck-" + rid)
+        self._json(200 if ok else 500, {"ok": ok, "note": res})
+
+    def _decide(self):
+        """Turn a click in the deck into a message to firstmate's inbox; firstmate
+        records the decision and acts on it. The deck itself changes nothing."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(min(length, 64000)) or b"{}")
+        except ValueError:
+            return self._json(400, {"ok": False, "error": "bad request"})
+        deck = cached_deck()
+        task = str(body.get("task") or "")
+        note = str(body.get("note") or "").strip()[:MAX_MESSAGE]
+        rid = re.sub(r"[^A-Za-z0-9-]", "", str(body.get("rid") or ""))[:64] or str(uuid.uuid4())
+        if body.get("kind") == "call":
+            item = next((w for w in deck.get("waiting", []) if w["id"] == task), None)
+            opts = {o.get("id"): o for o in ((item or {}).get("call") or {}).get("options", [])}
+            opt = opts.get(str(body.get("option")))
+            if not item or (not opt and not note):
+                return self._json(400, {"ok": False, "error": "that decision is no longer open"})
+            text = f"Decision from the crew deck for {task} ({item['title']}): "
+            text += f"option {opt['id']}, {opt.get('label', '')}." if opt else "no listed option."
+            if note:
+                text += f" My note: {note}"
+        elif body.get("kind") == "merge":
+            item = next((r for r in deck.get("ready", []) if r["id"] == task), None)
+            if not item:
+                return self._json(400, {"ok": False, "error": "that PR is no longer waiting"})
+            if body.get("option") == "merge":
+                text = f"From the crew deck: merge {item['pr']} ({item['title']}) into {item.get('base') or 'its base branch'}."
+            else:
+                text = f"From the crew deck: do not merge {item['pr']} ({item['title']}) yet."
+            if note:
+                text += f" My note: {note}"
+        else:
+            return self._json(400, {"ok": False, "error": "unknown decision"})
+        ok, res = chat_send(text, "crew-deck-decide-" + rid)
+        self._json(200 if ok else 500, {"ok": ok, "note": res, "text": text})
+
+    def log_message(self, *args):
+        pass
+
+
+def serve():
+    RUN.mkdir(parents=True, exist_ok=True)
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    PIDFILE.write_text(str(os.getpid()))
+    signal.signal(signal.SIGTERM, lambda *_: (srv.server_close(), sys.exit(0)))
+    try:
+        srv.serve_forever()
+    finally:
+        try:
+            if PIDFILE.read_text().strip() == str(os.getpid()):
+                PIDFILE.unlink()
+        except OSError:
+            pass
+
+
+def alive():
+    try:
+        with urllib.request.urlopen(URL + "api/ping", timeout=1) as r:
+            return json.load(r).get("app") == "crew-deck"
+    except Exception:
+        return False
+
+
+def start_background():
+    RUN.mkdir(parents=True, exist_ok=True)
+    log = open(RUN / "server.log", "ab")
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "serve"], stdin=subprocess.DEVNULL,
+                     stdout=log, stderr=log, start_new_session=True, close_fds=True)
+    for _ in range(50):
+        if alive():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def stop():
+    try:
+        pid = int(PIDFILE.read_text().strip())
+        if b"crew-deck" not in Path(f"/proc/{pid}/cmdline").read_bytes():
+            raise ValueError
+    except (OSError, ValueError):
+        print("crew-deck: no server running")
+        return False
+    os.kill(pid, signal.SIGTERM)
+    for _ in range(30):
+        if not Path(f"/proc/{pid}").exists():
+            break
+        time.sleep(0.1)
+    print(f"crew-deck: stopped server {pid}")
+    return True
+
+
+def main():
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if arg in ("-h", "--help"):
+        print(__doc__.strip())
+    elif arg == "serve":
+        serve()
+    elif arg == "stop":
+        stop()
+    elif arg == "restart":
+        stop()
+        if not start_background():
+            sys.exit(f"crew-deck: the server did not start; see {RUN / 'server.log'}")
+        print(URL)
+    elif arg == "--json":
+        print(json.dumps(build(), indent=1))
+    elif arg == "":
+        if not alive() and not start_background():
+            sys.exit(f"crew-deck: the server did not start; see {RUN / 'server.log'}")
+        opener = "browser-here" if out(["sh", "-c", "command -v browser-here"]).strip() else "xdg-open"
+        subprocess.Popen([opener, URL], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        print(URL)
+    else:
+        sys.exit(f"crew-deck: unknown argument {arg!r}; see crew-deck --help")
+
+
+PAGE = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crew-deck</title>
+<style>
+:root {
+  --bg: #0c1523; --bg-dark: #09111c; --bg-darker: #070b12; --bg-light: #162740;
+  --fg: #a6accd; --fg-dim: #525975; --fg-bright: #c8d3f5; --muted: #464b5d;
+  --accent: #82aaff; --selection: #1b3457;
+  --red: #f07178; --yellow: #ffcb6b; --orange: #f78c6c; --green: #c3e88d;
+  --cyan: #89ddff; --blue: #82aaff; --magenta: #c792ea;
+  --font: "JetBrainsMono Nerd Font", ui-monospace, monospace;
+  --line: color-mix(in srgb, var(--fg) 9%, transparent);
+  --line-strong: color-mix(in srgb, var(--fg) 16%, transparent);
+  --hover: color-mix(in srgb, var(--fg) 5%, transparent);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.55 var(--font); -webkit-font-smoothing: antialiased; overflow: hidden; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+::selection { background: var(--selection); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--fg) 14%, transparent); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+kbd { font: 11px var(--font); padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; color: var(--fg); background: var(--bg-dark); }
+
+.app { height: 100vh; display: grid; grid-template-columns: 268px minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr) 26px; }
+.side { grid-row: 1; background: var(--bg-dark); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.main { grid-row: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.chat { grid-row: 1; background: var(--bg-dark); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.status { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 18px; padding: 0 12px; font-size: 11.5px; color: var(--fg-dim); background: var(--bg-darker); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.status .grow { flex: 1; }
+.status b { color: var(--fg); font-weight: 500; }
+
+.brand { display: flex; align-items: center; gap: 9px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+.brand svg { color: var(--accent); flex: none; }
+.brand .n { color: var(--fg-bright); font-weight: 700; letter-spacing: .02em; }
+.brand .h { color: var(--fg-dim); font-size: 11.5px; margin-left: auto; }
+.grp { padding: 14px 16px 6px; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg-dim); display: flex; justify-content: space-between; }
+.list { overflow-y: auto; padding: 0 8px 12px; min-height: 0; }
+.need { display: flex; gap: 9px; align-items: flex-start; margin: 0 8px 4px; padding: 7px 9px; border-radius: 7px; color: var(--fg); }
+.need:hover { background: var(--hover); text-decoration: none; }
+.need .d { margin-top: 6px; }
+.need .t { color: var(--fg-bright); display: block; }
+.need .s { color: var(--fg-dim); font-size: 11.5px; display: block; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.row { width: 100%; text-align: left; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 9px; border-radius: 7px; border: 1px solid transparent; }
+.row:hover { background: var(--hover); }
+.row.sel { background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.row .t { color: var(--fg-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.row .s { color: var(--fg-dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.row .st { font-size: 11px; color: var(--c); }
+.d { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.d.live { animation: pulse 1.6s ease-in-out infinite; box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 50%, transparent); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
+
+.b-work { --c: var(--blue); } .b-check { --c: var(--cyan); } .b-fix { --c: var(--orange); }
+.b-decide { --c: var(--magenta); } .b-you { --c: var(--yellow); } .b-ready { --c: var(--green); }
+.b-bad { --c: var(--red); } .b-wait, .b-muted { --c: var(--fg-dim); }
+
+.mh { padding: 16px 22px 14px; border-bottom: 1px solid var(--line); }
+.crumbs { font-size: 11.5px; color: var(--fg-dim); display: flex; gap: 6px; align-items: center; }
+.crumbs b { color: var(--fg); font-weight: 500; }
+.mh h1 { margin: 4px 0 10px; font-size: 18px; line-height: 1.35; color: var(--fg-bright); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 2px 9px; border-radius: 6px; border: 1px solid var(--line-strong); color: var(--fg); background: var(--bg-dark); white-space: nowrap; }
+.chip.state { color: var(--c); border-color: color-mix(in srgb, var(--c) 35%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.chip.link:hover { border-color: var(--accent); text-decoration: none; }
+.chip .k { color: var(--fg-dim); }
+.mh .tools { float: right; display: flex; gap: 6px; }
+.icon-btn { display: none; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 6px; font-size: 11.5px; }
+.icon-btn:hover { border-color: var(--accent); }
+
+.body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 22px 18px; gap: 14px; }
+.ask { border: 1px solid color-mix(in srgb, var(--yellow) 55%, transparent); background: color-mix(in srgb, var(--yellow) 10%, var(--bg-dark)); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; flex: none; }
+.ask .lh { color: var(--yellow); }
+.ask.sent { border-color: color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 8%, var(--bg-dark)); }
+.ask.sent .lh { color: var(--green); }
+.need.sent { opacity: .6; }
+.need.sent .d { background: var(--green) !important; animation: none !important; }
+.done { border: 1px solid color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 8%, var(--bg-dark)); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; justify-items: start; }
+.done .dk { color: var(--green); font-weight: 600; }
+.done .dt { color: var(--fg-bright); white-space: pre-wrap; }
+.done .dd { color: var(--fg-dim); font-size: 12px; }
+.ask p { margin: 0 0 10px; color: var(--fg-bright); }
+.latest { border: 1px solid var(--line); border-radius: 10px; background: var(--bg-dark); padding: 12px 14px; max-height: 32%; overflow-y: auto; flex: none; }
+.lh { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+.latest p { margin: 0; color: var(--fg-bright); white-space: pre-wrap; word-wrap: break-word; }
+.latest .none { color: var(--fg-dim); font-style: italic; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); flex: none; }
+.tab { padding: 6px 12px; font-size: 12px; color: var(--fg-dim); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab:hover { color: var(--fg); }
+.tab.on { color: var(--fg-bright); border-bottom-color: var(--accent); }
+.tab .n { color: var(--fg-dim); margin-left: 4px; }
+.pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.term { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-darker); }
+.tbar { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--fg-dim); background: color-mix(in srgb, var(--bg-dark) 70%, var(--bg-darker)); }
+.tbar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.tbar span { margin-left: 6px; }
+.tbar .r { margin-left: auto; }
+.term pre { flex: 1; margin: 0; padding: 10px 14px; overflow: auto; font: 12px/1.5 var(--font); color: var(--fg); white-space: pre; }
+.ev { flex: 1; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+.ev-row { display: grid; grid-template-columns: 64px 112px minmax(0, 1fr); gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.ev-row:last-child { border-bottom: 0; }
+.ev-row time { color: var(--fg-dim); }
+.ev-row .tag { color: var(--c); }
+.ev-row .note { color: var(--fg); word-wrap: break-word; }
+.t-done { --c: var(--green); } .t-working { --c: var(--blue); } .t-paused { --c: var(--fg-dim); }
+.t-needs-decision { --c: var(--magenta); } .t-resolved { --c: var(--cyan); } .t-blocked, .t-failed { --c: var(--red); }
+.empty { margin: auto; text-align: center; color: var(--fg-dim); max-width: 380px; padding: 24px; }
+.side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
+.side-scroll .list { overflow: visible; padding-bottom: 4px; }
+.row .ic { width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid var(--c); }
+.more { width: calc(100% - 16px); margin: 2px 8px; text-align: left; font-size: 11.5px; color: var(--fg-dim); padding: 6px 9px; border-radius: 7px; }
+.more:hover { background: var(--hover); color: var(--fg); }
+.chip.plan { cursor: pointer; color: var(--magenta); border-color: color-mix(in srgb, var(--magenta) 35%, transparent); }
+.chip.plan:hover { background: color-mix(in srgb, var(--magenta) 10%, transparent); }
+.btn-p { padding: 4px 12px; border-radius: 7px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 12px; }
+.btn-p:disabled { opacity: .5; }
+.frame { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-darker); }
+.frame iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.frame.full { position: fixed; inset: 0 0 26px 0; z-index: 30; border-radius: 0; border: 0; }
+.tbar .fv { margin-left: 10px; padding: 1px 8px; border: 1px solid var(--line-strong); border-radius: 5px; font-size: 11px; color: var(--fg); }
+.tbar .fv:hover { border-color: var(--accent); }
+.app.board-mode { grid-template-columns: 268px minmax(0, 1fr); }
+.app.board-mode .chat { position: fixed; right: 0; top: 0; bottom: 26px; width: min(400px, 100vw); z-index: 10; transform: translateX(100%); transition: transform .2s ease; box-shadow: -12px 0 32px rgba(0, 0, 0, .35); }
+.app.board-mode .chat.open { transform: none; }
+.app.board-mode .chat-h .x, .app.board-mode .icon-btn { display: inline-block; }
+.app.board-mode .mh { padding-top: 10px; padding-bottom: 10px; }
+.app.board-mode .mh h1 { font-size: 15px; margin: 2px 0 6px; }
+.app.board-mode .body { padding: 10px 12px 12px; }
+.b-plan { --c: var(--magenta); } .b-fm { --c: var(--accent); } .b-other { --c: var(--fg-dim); }
+.mh .tools { align-items: center; }
+.ferr { color: var(--red); font-size: 11.5px; }
+.dec { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+.dec .q { color: var(--fg-bright); font-size: 14px; line-height: 1.6; }
+.dec .ctx { color: var(--fg); margin: 0; padding-left: 16px; }
+.dec .ctx li { margin: 3px 0; }
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt { text-align: left; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg-dark); }
+.opt:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--bg-dark)); }
+.opt .rb { width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--fg-dim); }
+.opt.on .rb { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--bg-dark); background: var(--accent); }
+.opt .ol { color: var(--fg-bright); font-weight: 600; }
+.opt .od { color: var(--fg); font-size: 12.5px; margin-top: 2px; }
+.rec { font-size: 10.5px; color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); border-radius: 5px; padding: 0 6px; margin-left: 8px; font-weight: 500; }
+.dec textarea { width: 100%; resize: vertical; min-height: 60px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-bright); font: 13px/1.5 var(--font); outline: none; }
+.dec textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.dec .act { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn-s { padding: 4px 12px; border-radius: 7px; border: 1px solid var(--line-strong); font-size: 12px; }
+.btn-s:hover { border-color: var(--accent); }
+.sent { padding: 9px 12px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); color: var(--fg); font-size: 12.5px; }
+.need { cursor: pointer; }
+.need.sel { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.tstat { padding: 5px 12px; border-top: 1px solid var(--line); font: 11.5px/1.4 var(--font); color: var(--fg); background: color-mix(in srgb, var(--bg-dark) 70%, var(--bg-darker)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tstat .sep { color: var(--fg-dim); padding: 0 6px; }
+.bgrid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; }
+.review { min-height: 0; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-dark); padding: 12px; overflow-y: auto; }
+.review .rh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.review .rh b { color: var(--fg-bright); }
+.review .rh span { color: var(--fg-dim); font-size: 11.5px; text-align: right; }
+.rtools { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-dim); }
+.btn-s.on { border-color: var(--magenta); color: var(--magenta); background: color-mix(in srgb, var(--magenta) 10%, transparent); }
+.ritem { border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; background: var(--bg); position: relative; font-size: 12.5px; }
+.ritem .rk { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-dim); margin-bottom: 3px; }
+.ritem .rt { color: var(--fg-bright); white-space: pre-wrap; word-wrap: break-word; }
+.ritem .rx { position: absolute; top: 4px; right: 6px; color: var(--fg-dim); font-size: 12px; }
+.ritem .rx:hover { color: var(--red); }
+.ritem .quote { color: var(--fg-dim); font-size: 11.5px; border-left: 2px solid var(--magenta); padding-left: 7px; margin: 3px 0 6px; }
+.review textarea { width: 100%; resize: vertical; min-height: 54px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-bright); font: 12.5px/1.45 var(--font); outline: none; }
+.review textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.rrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rempty { color: var(--fg-dim); font-size: 12px; }
+.rhist .hi { font-size: 11.5px; color: var(--fg); border-left: 2px solid var(--green); padding-left: 8px; margin-top: 6px; }
+.rhist .hi time { color: var(--fg-dim); }
+.fbar { display: none; position: absolute; right: 16px; bottom: 16px; gap: 8px; align-items: center; padding: 6px 8px 6px 12px; border-radius: 10px; background: var(--bg-dark); border: 1px solid var(--line-strong); box-shadow: 0 8px 24px rgba(0,0,0,.4); font-size: 12px; z-index: 2; }
+.frame { position: relative; }
+.frame.full .fbar { display: flex; }
+@media (max-width: 1180px) { .bgrid { grid-template-columns: 1fr; grid-template-rows: minmax(420px, 1fr) auto; } }
+.empty b { color: var(--fg); display: block; font-size: 14px; margin-bottom: 6px; }
+
+.chat-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.av { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--bg); background: var(--accent); flex: none; }
+.chat-h .n { color: var(--fg-bright); font-weight: 600; display: block; line-height: 1.2; }
+.chat-h .s { color: var(--fg-dim); font-size: 11px; display: block; }
+.chat-h .x { margin-left: auto; display: none; }
+.msgs { flex: 1; overflow-y: auto; padding: 14px 14px 8px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.m { display: flex; flex-direction: column; max-width: 92%; }
+.m.me { align-self: flex-end; align-items: flex-end; }
+.m.fm { align-self: flex-start; }
+.bub { padding: 8px 11px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; color: var(--fg-bright); }
+.me .bub { background: color-mix(in srgb, var(--accent) 16%, var(--bg-dark)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-bottom-right-radius: 3px; }
+.fm .bub { background: var(--bg); border: 1px solid var(--line-strong); border-bottom-left-radius: 3px; }
+.meta { font-size: 10.5px; color: var(--fg-dim); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
+.meta .ok { color: var(--green); } .meta .wait { color: var(--yellow); }
+.typing { align-self: flex-start; display: flex; gap: 8px; align-items: center; color: var(--fg-dim); font-size: 11.5px; }
+.typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--fg-dim); animation: blink 1.2s infinite; display: inline-block; }
+.typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.intro { color: var(--fg-dim); font-size: 12px; text-align: center; margin: auto 10px; }
+.intro b { color: var(--fg); display: block; margin-bottom: 4px; }
+.composer { border-top: 1px solid var(--line); padding: 10px 12px 12px; }
+.composer textarea { width: 100%; resize: none; min-height: 64px; max-height: 200px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-bright); font: 13px/1.5 var(--font); outline: none; }
+.composer textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.cf { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; font-size: 11px; color: var(--fg-dim); }
+.send { padding: 4px 14px; border-radius: 7px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 12px; }
+.send:disabled { opacity: .45; cursor: default; }
+.err { color: var(--red); font-size: 11.5px; margin-top: 6px; display: none; }
+.cf-r { display: flex; align-items: center; gap: 8px; }
+.attach { padding: 4px 9px; border-radius: 7px; border: 1px solid var(--line-strong); color: var(--fg); font-size: 11.5px; background: transparent; }
+.attach:hover { border-color: var(--accent); color: var(--fg-bright); }
+.atts { display: flex; flex-wrap: wrap; gap: 6px; }
+.atts:not(:empty) { margin-bottom: 7px; }
+.att { position: relative; width: 58px; height: 58px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line-strong); background: var(--bg); }
+.att img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.att button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--bg-darker, #000) 80%, transparent); color: var(--fg-bright); font-size: 11px; line-height: 18px; text-align: center; padding: 0; }
+.composer.drop textarea { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.shots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.shots a { display: block; border-radius: 7px; overflow: hidden; border: 1px solid var(--line-strong); }
+.shots img { display: block; max-width: 220px; max-height: 160px; object-fit: contain; background: var(--bg); }
+.err.show { display: block; }
+.offline { color: var(--red); }
+
+@media (max-width: 1180px) {
+  .app { grid-template-columns: 248px minmax(0, 1fr); }
+  .chat { position: fixed; right: 0; top: 0; bottom: 26px; width: min(400px, 100vw); z-index: 10; transform: translateX(100%); transition: transform .2s ease; box-shadow: -12px 0 32px rgba(0, 0, 0, .35); }
+  .chat.open { transform: none; }
+  .chat-h .x, .icon-btn { display: inline-block; }
+}
+@media (max-width: 760px) {
+  body { overflow: auto; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) 26px; height: auto; min-height: 100vh; }
+  .side { grid-row: 1; border-right: 0; border-bottom: 1px solid var(--line); }
+  .main { grid-row: 2; }
+  .list { max-height: 220px; }
+  .mh, .body { padding-left: 16px; padding-right: 16px; }
+  .term { min-height: 360px; }
+  .status { grid-row: 3; }
+  .status .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><path d="M12 7.2V21M5 12H2a10 10 0 0 0 20 0h-3M8.5 10.5h7"/></svg>
+      <span class="n">crew-deck</span><span class="h">firstmate</span>
+    </div>
+    <div class="side-scroll">
+      <nav class="list" id="fmrow" style="padding-top:10px"></nav>
+      <div id="needs"></div>
+      <div class="grp"><span>workers</span><span id="wcount"></span></div>
+      <nav class="list" id="list" aria-label="Workers"></nav>
+      <div id="plans"></div>
+    </div>
+  </aside>
+
+  <main class="main" id="main"></main>
+
+  <aside class="chat" id="chat" aria-label="Chat with firstmate">
+    <div class="chat-h">
+      <span class="av">fm</span>
+      <div><span class="n">firstmate</span><span class="s">answers when it next checks in</span></div>
+      <button class="icon-btn x" id="closeChat" aria-label="Close chat">✕</button>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <form class="composer" id="composer">
+      <div class="atts" id="atts"></div>
+      <textarea id="input" rows="3" placeholder="Message firstmate… (paste or drop images)" aria-label="Message firstmate"></textarea>
+      <div class="cf"><span><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline</span>
+        <span class="cf-r"><button class="attach" id="attach" type="button" title="Attach images (or paste / drop them)" aria-label="Attach images">＋ image</button>
+        <input type="file" id="files" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+        <button class="send" id="send" type="submit">Send</button></span></div>
+      <div class="err" id="err"></div>
+    </form>
+  </aside>
+
+  <footer class="status">
+    <span id="live">● connecting…</span>
+    <span class="hide-sm" id="mem"></span>
+    <span class="hide-sm" id="plan"></span>
+    <span class="grow"></span>
+    <span class="hide-sm"><kbd>j</kbd>/<kbd>k</kbd> select · <kbd>t</kbd> terminal · <kbd>e</kbd> events · <kbd>/</kbd> chat</span>
+    <span id="themeName"></span>
+  </footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const linkify = (s) => esc(s).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const VARS = { background: "--bg", dark_background: "--bg-dark", darker_background: "--bg-darker", lighter_background: "--bg-light",
+  foreground: "--fg", dark_foreground: "--fg-dim", bright_foreground: "--fg-bright", muted: "--muted", accent: "--accent",
+  selection: "--selection", red: "--red", yellow: "--yellow", orange: "--orange", green: "--green", cyan: "--cyan", blue: "--blue", magenta: "--magenta" };
+let deck = null, sel = store.get("crew-deck-sel"), tab = store.get("crew-deck-tab") || "terminal", themeKey = "", lastOk = 0, chatKey = "", pending = [];
+let selBoard = store.get("crew-deck-board") || null;
+let fmTab = store.get("crew-deck-fmtab") || "terminal";
+let selNeed = store.get("crew-deck-need") || null, needKey = "", choice = {}, noteText = {};
+const changing = {}, askDraft = {};
+const sentMap = () => { try { return JSON.parse(store.get("crew-deck-sent") || "{}"); } catch { return {}; } };
+const FM_ID = "__firstmate__";
+const STATUS = { open: "open for review", feedback: "your feedback is queued", ended: "ended" };
+const liveBoards = () => (deck.boards || []).filter((b) => b.status !== "ended");
+const ownerLabel = (b) => b.owner;
+
+function applyTheme(t) {
+  const key = JSON.stringify(t || {});
+  if (!t || key === themeKey) return;
+  themeKey = key;
+  const r = document.documentElement.style;
+  for (const [k, v] of Object.entries(VARS)) if (t.colors?.[k]) r.setProperty(v, t.colors[k]);
+  if (t.font) r.setProperty("--font", `"${t.font}", ui-monospace, monospace`);
+  r.setProperty("color-scheme", t.colors?.mode === "light" ? "light" : "dark");
+  $("themeName").textContent = t.name ? `theme ${t.name}` : "";
+}
+function dur(s) {
+  if (s == null || !isFinite(s) || s < 0) return "–";
+  s = Math.floor(s);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  return d ? `${d}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`;
+}
+const size = (b) => b == null ? "–" : b >= 1073741824 ? (b / 1073741824).toFixed(1) + "G" : Math.round(b / 1048576) + "M";
+const prNum = (u) => (String(u).match(/\/pull\/(\d+)/) || [])[1] || "";
+const toEpoch = (a) => a == null ? null : /^\d+(\.\d+)?$/.test(String(a)) ? Number(a) : Date.parse(a) / 1000;
+const ago = (a) => { const e = toEpoch(a); return e ? dur(Date.now() / 1000 - e) + " ago" : ""; };
+const statusLine = (a) => !a?.line ? "" : `<div class="tstat" title="the agent's own status line">${a.line.split("│").map((x) => esc(x.trim())).join('<span class="sep">│</span>')}</div>`;
+const agentChips = (a) => !a ? "" : [
+  a.model ? `<span class="chip"><span class="k">model</span>${esc(a.model)}${a.effort ? ` · ${esc(a.effort)}` : ""}</span>` : "",
+  a.ctx ? `<span class="chip" title="context used"><span class="k">ctx</span>${esc(a.ctx)}${a.ctx_pct ? ` · ${esc(a.ctx_pct)}` : ""}</span>` : "",
+  a.cost ? `<span class="chip" title="spend this session"><span class="k">cost</span>${esc(a.cost)}</span>` : "",
+].join("");
+const money = (c) => Number(String(c || "").replace(/[^0-9.]/g, "")) || 0;
+
+function renderSide() {
+  const w = deck.workers || [];
+  if (sel !== FM_ID && !w.some((x) => x.id === sel)) sel = w[0]?.id || FM_ID;
+  $("wcount").textContent = w.length;
+  const f = deck.firstmate || {};
+  $("fmrow").innerHTML = `
+    <button class="row b-fm${sel === FM_ID && !selBoard && !selNeed ? " sel" : ""}" id="fmbtn">
+      <span class="d${f.busy ? " live" : ""}"></span>
+      <span><span class="t">firstmate</span><span class="s">supervisor${f.agent?.model ? ` · ${esc(f.agent.model)}` : ""}${f.agent?.cost ? ` · ${esc(f.agent.cost)}` : ""}</span></span>
+      <span class="st">${f.busy ? "busy" : "idle"}</span>
+    </button>`;
+  $("fmbtn").onclick = () => select(FM_ID);
+  const review = liveBoards().filter((b) => b.kind === "worker" && b.status === "open");
+  const needs = [
+    ...deck.waiting.filter((x) => !x.board).map((x) => { const sn = sentMap()["call:" + x.id]; return `<a class="need b-you${sn ? " sent" : ""}${selNeed === "call:" + x.id ? " sel" : ""}" href="#" data-need="call:${esc(x.id)}"><span class="d"></span><span><span class="t">${sn ? "✓ " : ""}${esc(x.call?.title || "Decision: " + x.title)}</span><span class="s">${sn ? "answer sent · firstmate is on it" : esc(x.call ? x.title : x.reason)}</span></span></a>`; }),
+    ...review.map((b) => { const h = threads[b.key] || [], last = h.length ? h[h.length - 1].at : 0, sn = last && last > b.mtime; return `<a class="need b-plan${sn ? " sent" : ""}" href="#" data-board="${esc(b.key)}"><span class="d"></span><span><span class="t">${sn ? "✓ Feedback sent" : "Plan to review"}</span><span class="s">${esc(b.title)} · ${sn ? "waiting for the worker's revision" : "by " + esc(b.owner)}</span></span></a>`; }),
+    ...deck.ready.map((x) => `<a class="need b-ready${selNeed === "merge:" + x.id ? " sel" : ""}" href="#" data-need="merge:${esc(x.id)}"><span class="d"></span><span><span class="t">PR #${esc(prNum(x.pr))} ready to merge</span><span class="s">${esc(x.title)}</span></span></a>`),
+  ];
+  const open = needs.filter((h) => !h.includes(" sent")).length;
+  $("needs").innerHTML = needs.length ? `<div class="grp"><span>${open ? "needs you" : "sent, nothing waits on you"}</span><span>${open || ""}</span></div>${needs.join("")}` : "";
+  $("needs").querySelectorAll("[data-need]").forEach((el) => el.onclick = (e) => { e.preventDefault(); selectNeed(el.dataset.need); });
+  $("list").innerHTML = w.length ? w.map((x) => `
+    <button class="row b-${esc(x.badge)}${x.id === sel && !selBoard && !selNeed ? " sel" : ""}" data-id="${esc(x.id)}">
+      <span class="d${x.busy ? " live" : ""}"></span>
+      <span><span class="t">${esc(x.title)}</span><span class="s">${esc(x.id)} · ${dur(x.started ? deck.generated - x.started : null)}${x.agent?.model ? ` · ${esc(x.agent.model.replace(/^Claude /, ""))}` : ""}${x.agent?.cost ? ` · ${esc(x.agent.cost)}` : ""}</span></span>
+      <span class="st">${esc(x.label)}</span>
+    </button>`).join("") : `<div class="s" style="padding:8px 9px;color:var(--fg-dim)">no workers running</div>`;
+  $("list").querySelectorAll(".row").forEach((b) => b.onclick = () => select(b.dataset.id));
+  const boards = liveBoards();
+  if (selBoard && !boards.some((b) => b.key === selBoard)) selBoard = null;
+  $("plans").innerHTML = boards.length ? `<div class="grp"><span>plans to review</span><span>${boards.length}</span></div>
+    <nav class="list">${boards.map((b) => `
+    <button class="row b-plan${b.key === selBoard && !selNeed ? " sel" : ""}" data-board="${esc(b.key)}">
+      <span class="ic"></span>
+      <span><span class="t">${esc(b.title)}</span><span class="s">by ${esc(b.owner)} · ${ago(b.mtime)}</span></span>
+      <span class="st">${b.status === "feedback" ? "queued" : ""}</span>
+    </button>`).join("")}</nav>` : "";
+  document.querySelectorAll("[data-board]").forEach((el) => el.onclick = (e) => { e.preventDefault(); selectBoard(el.dataset.board); });
+}
+
+function renderBoard(b) {
+  const main = $("main");
+  const v = `${b.rev ?? ""}-${b.mtime}`;
+  const owner = b.kind === "worker" && b.owner_id ? `<span class="chip link" data-worker="${esc(b.owner_id)}" style="cursor:pointer"><span class="k">by</span>${esc(b.owner)}</span>` : `<span class="chip"><span class="k">by</span>${esc(ownerLabel(b))}</span>`;
+  const head = `
+      <div class="tools"><span class="ferr" id="ferr"></span><button class="btn-p" id="commentBtn">Comment in Lavish ↗</button><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">plans <span>/</span> <b>${esc(b.name)}</b></div>
+      <h1>${esc(b.title)}</h1>
+      <div class="chips">${owner}
+        <span class="chip state ${b.status === "open" ? "b-plan" : "b-other"}">${esc(STATUS[b.status] || b.status || "unknown")}</span>
+        <span class="chip"><span class="k">updated</span>${ago(b.mtime)}</span>
+        ${b.rev != null ? `<span class="chip"><span class="k">rev</span>${esc(b.rev)}</span>` : ""}
+      </div>`;
+  let frame = main.querySelector(".frame iframe");
+  if (!frame || frame.dataset.key !== b.key) {
+    main.innerHTML = `<header class="mh b-plan" id="bhead"></header>
+      <div class="body"><div class="bgrid"><div class="frame">
+        <div class="tbar"><i></i><i></i><i></i><span>${esc(b.name)}</span><span class="r">answers you queue land in the feedback tray</span><button class="fv" id="fullBtn" title="Full view (f) · Esc to leave">⤢ full view</button></div>
+        <iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" data-key="${esc(b.key)}" data-v="${esc(v)}" src="/board/${esc(b.key)}/?v=${encodeURIComponent(v)}" title="${esc(b.title)}"></iframe>
+        <div class="fbar"><span id="fbarText"></span><button class="btn-p" id="fbarSend">Send to agent</button></div>
+      </div><aside class="review" id="review"></aside></div></div>`;
+    frame = main.querySelector("iframe");
+    frame.onload = () => postAnnotate();
+    $("fullBtn").onclick = () => toggleFull();
+    $("fbarSend").onclick = () => sendReview();
+    annotating = false; reviewBoard = b; loadThread(b.key); renderReview();
+  } else if (frame.dataset.v !== v) {
+    frame.dataset.v = v; frame.src = `/board/${b.key}/?v=${encodeURIComponent(v)}`;
+  }
+  reviewBoard = b;
+  const wl = $("wlatest"), w = (deck.workers || []).find((x) => x.id === b.owner_id);
+  if (wl) wl.innerHTML = w?.doing ? linkify(w.doing) : '<span class="rempty">nothing on its screen yet</span>';
+  const errText = $("ferr")?.textContent || "";
+  $("bhead").innerHTML = head;
+  if (errText) $("ferr").textContent = errText;
+  main.querySelectorAll("[data-worker]").forEach((el) => el.onclick = () => select(el.dataset.worker));
+  $("commentBtn").onclick = async () => {
+    const win = window.open("about:blank", "_blank");
+    $("commentBtn").disabled = true; $("ferr").textContent = "";
+    try {
+      const r = await fetch(`/api/board/${b.key}/open`, { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" }, body: "{}" });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) throw new Error(d.error || "Lavish would not open it");
+      if (win) win.location = d.url; else window.open(d.url, "_blank");
+    } catch (err) { if (win) win.close(); $("ferr").textContent = String(err.message || err); }
+    $("commentBtn").disabled = false;
+  };
+  bindChatBtn();
+}
+
+function renderFirstmate() {
+  const f = deck.firstmate || {}, main = $("main");
+  const preOld = main.querySelector("pre"), atBottom = !preOld || preOld.scrollHeight - preOld.scrollTop - preOld.clientHeight < 40, keep = preOld && preOld.dataset.id === FM_ID ? preOld.scrollTop : null;
+  const landed = f.landed || [], act = f.activity || [];
+  const short = (s) => (s || "").slice(0, 7);
+  main.innerHTML = `
+    <header class="mh b-fm">
+      <div class="tools"><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">firstmate <span>/</span> <b>supervisor</b></div>
+      <h1>Firstmate</h1>
+      <div class="chips">
+        <span class="chip state"><span class="d${f.busy ? " live" : ""}"></span>${f.busy ? "busy" : "idle"}</span>
+        ${agentChips(f.agent)}
+        <span class="chip"><span class="k">workers</span>${(deck.workers || []).length}</span>
+        <span class="chip"><span class="k">merged</span>${landed.filter((x) => x.verb === "merged").length}</span>
+        ${f.target ? `<span class="chip"><span class="k">tmux</span>${esc(f.target)}</span>` : ""}
+      </div>
+    </header>
+    <div class="body">
+      ${f.doing ? `<section class="latest b-fm"><div class="lh">${f.busy ? '<span class="d live"></span>working now' : "latest from firstmate"}</div><p>${linkify(f.doing)}</p></section>` : ""}
+      <div class="tabs">
+        <button class="tab${fmTab === "terminal" ? " on" : ""}" data-fmtab="terminal">terminal</button>
+        <button class="tab${fmTab === "landed" ? " on" : ""}" data-fmtab="landed">landed<span class="n">${landed.length}</span></button>
+        <button class="tab${fmTab === "activity" ? " on" : ""}" data-fmtab="activity">activity<span class="n">${act.length}</span></button>
+      </div>
+      <div class="pane">${fmTab === "terminal" ? `
+        <div class="term">
+          <div class="tbar"><i></i><i></i><i></i><span>${esc(f.target || "firstmate window not found")}</span><span class="r">read-only</span></div>
+          <pre data-id="${FM_ID}">${esc((f.screen || []).join("\n")) || "(empty screen)"}</pre>
+          ${statusLine(f.agent)}
+        </div>` : fmTab === "landed" ? `
+        <div class="ev">${landed.map((x) => `
+          <div class="ev-row ${x.verb === "merged" ? "t-done" : "t-resolved"}" style="grid-template-columns: 96px 92px minmax(0,1fr)">
+            <time>${x.at ? ago(x.at) : esc(x.date || "–")}</time>
+            <span class="tag">${x.verb === "merged" ? "✓ merged" : esc(x.verb || "done")}</span>
+            <span class="note"><span style="color:var(--fg-bright)">${esc(x.title)}</span><br>
+              <span style="color:var(--fg-dim)">${x.pr ? `<a href="${esc(x.pr)}" target="_blank" rel="noopener">PR #${esc(prNum(x.pr))}</a>` : esc(x.kind || "")}${x.head ? ` · ${esc(x.head)} → <b style="color:var(--fg)">${esc(x.base)}</b>` : ""}${x.commit ? ` · ${esc(short(x.commit))}` : ""}${x.by ? ` · by ${esc(x.by)} via firstmate` : ""}</span></span>
+          </div>`).join("") || '<div class="empty">Nothing landed yet.</div>'}</div>` : `
+        <div class="ev">${act.map((a) => `
+          <div class="ev-row t-${a.kind === "merged" ? "done" : a.kind === "note" ? "resolved" : esc(a.kind)}" style="grid-template-columns: 64px 150px minmax(0,1fr)">
+            <time>${dur(deck.generated - a.at)}</time>
+            <span class="tag">${a.who === "firstmate" ? "firstmate" : esc(a.who)}<br><span style="color:var(--fg-dim)">${esc(a.kind)}</span></span>
+            <span class="note">${a.title && a.who === "firstmate" ? `<span style="color:var(--fg-dim)">${esc(a.title)}</span><br>` : ""}${linkify(a.text)}</span>
+          </div>`).join("") || '<div class="empty">No activity yet.</div>'}</div>`}
+      </div>
+    </div>`;
+  main.querySelectorAll("[data-fmtab]").forEach((b) => b.onclick = () => { fmTab = b.dataset.fmtab; store.set("crew-deck-fmtab", fmTab); renderFirstmate(); });
+  const pre = main.querySelector("pre");
+  if (pre) pre.scrollTop = (keep != null && !atBottom) ? keep : pre.scrollHeight;
+  bindChatBtn();
+}
+
+function findNeed(k) {
+  if (!k) return null;
+  const [kind, id] = [k.slice(0, k.indexOf(":")), k.slice(k.indexOf(":") + 1)];
+  const item = kind === "call" ? deck.waiting.find((x) => x.id === id) : kind === "merge" ? deck.ready.find((x) => x.id === id) : null;
+  return item ? { kind, id, item } : null;
+}
+
+function renderNeed(n) {
+  const main = $("main"), key = `${selNeed}|${JSON.stringify(n.item)}|${JSON.stringify(sentMap()[selNeed] || null)}`;
+  if (key === needKey && main.querySelector(".dec")) return;
+  needKey = key;
+  const sent = changing[selNeed] ? null : sentMap()[selNeed];
+  const it = n.item, call = it.call;
+  let body = "";
+  if (sent) {
+    body = `<div class="done"><div class="dk">✓ Sent ${ago(sent.at)}</div><div class="dt">${esc(sent.text)}</div>
+      <div class="dd">Firstmate is acting on it. This card goes away by itself once firstmate has recorded your answer.</div>
+      <button class="btn-s" id="dchange">Change my answer</button></div>`;
+  } else if (n.kind === "call") {
+    const opts = call ? call.options : [];
+    body = `
+      <div class="q">${linkify(call ? call.question : it.reason)}</div>
+      ${call?.context?.length ? `<ul class="ctx">${call.context.map((c) => `<li>${linkify(c)}</li>`).join("")}</ul>` : ""}
+      ${opts.length ? `<div class="opts">${opts.map((o) => `
+        <button class="opt${choice[selNeed] === o.id ? " on" : ""}" data-opt="${esc(o.id)}">
+          <span class="rb"></span>
+          <span><span class="ol">${esc(o.id)}. ${esc(o.label)}</span>${o.recommended ? '<span class="rec">recommended</span>' : ""}<div class="od">${linkify(o.detail || "")}</div></span>
+        </button>`).join("")}</div>` : ""}
+      <textarea id="dnote" placeholder="${opts.length ? "Optional note for firstmate…" : "Your answer for firstmate…"}">${esc(noteText[selNeed] || "")}</textarea>
+      <div class="act"><button class="btn-p" id="dsend">Send decision</button><span class="ferr" id="derr"></span></div>`;
+  } else {
+    body = `
+      <div class="q">The worker finished <b>${esc(it.title)}</b>, and its PR passed every check. It's waiting for your word to merge.</div>
+      <ul class="ctx">
+        <li>PR: <a href="${esc(it.pr)}" target="_blank" rel="noopener">${esc(it.pr)}</a></li>
+        ${it.branch ? `<li>Branch <b>${esc(it.branch)}</b> → <b>${esc(it.base || "its base branch")}</b></li>` : ""}
+      </ul>
+      <textarea id="dnote" placeholder="Optional note for firstmate…">${esc(noteText[selNeed] || "")}</textarea>
+      <div class="act"><button class="btn-p" data-merge="merge">Merge into ${esc(it.base || "base")}</button><button class="btn-s" data-merge="hold">Not yet</button>
+        <a class="btn-s" href="${esc(it.pr)}" target="_blank" rel="noopener">Open PR ↗</a><span class="ferr" id="derr"></span></div>`;
+  }
+  main.innerHTML = `
+    <header class="mh b-you">
+      <div class="tools"><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">needs you <span>/</span> <b>${esc(n.id)}</b></div>
+      <h1>${esc(n.kind === "call" ? (call?.title || "Decision: " + it.title) : `Merge PR #${prNum(it.pr)}?`)}</h1>
+      <div class="chips"><span class="chip"><span class="k">task</span>${esc(it.title)}</span>${it.repo ? `<span class="chip"><span class="k">repo</span>${esc(it.repo)}</span>` : ""}</div>
+    </header>
+    <div class="body"><div class="dec">
+      ${body}
+    </div></div>`;
+  const dc = $("dchange"); if (dc) dc.onclick = () => { changing[selNeed] = true; needKey = ""; renderNeed(n); };
+  main.querySelectorAll("[data-opt]").forEach((b) => b.onclick = () => { choice[selNeed] = b.dataset.opt; main.querySelectorAll("[data-opt]").forEach((x) => x.classList.toggle("on", x === b)); });
+  const note = $("dnote"); if (note) note.oninput = () => { noteText[selNeed] = note.value; };
+  const send = async (payload) => {
+    $("derr").textContent = "";
+    try {
+      const r = await fetch("/api/decide", { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" },
+        body: JSON.stringify({ ...payload, task: n.id, note: noteText[selNeed] || "", rid: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) }) });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) throw new Error(d.error || "firstmate's inbox did not take it");
+      const m = sentMap(); m[selNeed] = { at: Date.now() / 1000, text: d.text }; store.set("crew-deck-sent", JSON.stringify(m)); delete changing[selNeed];
+      noteText[selNeed] = ""; needKey = ""; renderNeed(n); chatKey = ""; chatTick();
+    } catch (err) { $("derr").textContent = String(err.message || err); }
+  };
+  const ds = $("dsend");
+  if (ds) ds.onclick = () => {
+    if (call?.options?.length && !choice[selNeed] && !(noteText[selNeed] || "").trim()) { $("derr").textContent = "Pick an option or write an answer first."; return; }
+    send({ kind: "call", option: choice[selNeed] || null });
+  };
+  main.querySelectorAll("[data-merge]").forEach((b) => b.onclick = () => send({ kind: "merge", option: b.dataset.merge }));
+  bindChatBtn();
+}
+
+let annotating = false, reviewBoard = null;
+const threads = {};
+const qStore = (k) => { try { return JSON.parse(store.get("crew-deck-q-" + k) || "[]"); } catch { return []; } };
+const qSave = (k, q) => store.set("crew-deck-q-" + k, JSON.stringify(q));
+function postAnnotate() { const fr = document.querySelector(".frame iframe"); try { fr?.contentWindow?.postMessage({ crewDeck: 1, type: "annotate", on: annotating }, "*"); } catch {} }
+async function loadThread(k) { try { const r = await fetch(`/api/board/${k}/thread`, { cache: "no-store" }); threads[k] = (await r.json()).thread || []; renderReview(); } catch {} }
+
+function renderReview() {
+  const box = $("review"), b = reviewBoard;
+  if (!box || !b) return;
+  const q = qStore(b.key), hist = threads[b.key] || [];
+  const w = (deck.workers || []).find((x) => x.id === b.owner_id);
+  const items = q.map((it, i) => {
+    if (it.kind === "answer") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">answer${it.queueKey ? " · " + esc(it.queueKey) : ""}</div><div class="rt">${esc(it.label || it.text)}</div></div>`;
+    if (it.kind === "comment") return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">comment ${q.slice(0, i + 1).filter((x) => x.kind === "comment").length}${it.element?.context ? " · " + esc(it.element.context) : ""}</div><div class="quote">${esc((it.element?.text || it.element?.selector || "").slice(0, 120))}</div><div class="rt">${esc(it.text)}</div></div>`;
+    return `<div class="ritem"><button class="rx" data-rm="${i}" aria-label="Remove">✕</button><div class="rk">question</div><div class="rt">${esc(it.text)}</div></div>`;
+  }).join("");
+  box.innerHTML = `
+    <div class="rh"><b>Feedback</b><span>to ${esc(w ? w.title : b.owner)}</span></div>
+    <div class="rtools"><button class="btn-s${annotating ? " on" : ""}" id="annBtn">✎ ${annotating ? "Annotating: click the plan" : "Annotate"}</button><span>${annotating ? "click a part of the plan · Esc stops" : "comment on any part of the plan"}</span></div>
+    ${items || '<div class="rempty">Write a message below and press Send. You can also queue answers in the plan or annotate a part of it first; they all go together.</div>'}
+    <textarea id="askText" placeholder="Message to the worker… (Ctrl+Enter sends)">${esc(askDraft[b.key] || "")}</textarea>
+    <div class="rrow"><button class="btn-p" id="sendRev">Send${q.length ? ` (${q.length + ((askDraft[b.key] || "").trim() ? 1 : 0)})` : ""}</button><button class="btn-s" id="askAdd" title="Keep this message and add more before sending">Add, send later</button><span class="ferr" id="rerr"></span></div>
+    ${hist.length ? `<div class="rhist"><div class="lh">sent</div>${hist.slice().reverse().map((h) => `<div class="hi"><time>${ago(h.at)}</time> · ${h.items.length} item${h.items.length === 1 ? "" : "s"}: ${esc(h.items.map((x) => x.kind === "comment" ? "comment" : x.kind === "question" ? "question" : (x.queueKey || "answer")).join(", "))}</div>`).join("")}</div>` : ""}
+    <div><div class="lh">latest from the worker</div><p id="wlatest" style="margin:0;color:var(--fg);font-size:12.5px;white-space:pre-wrap">${w?.doing ? linkify(w.doing) : '<span class="rempty">nothing on its screen yet</span>'}</p></div>`;
+  const fb = $("fbarText"); if (fb) fb.textContent = q.length ? `${q.length} queued` : "nothing queued";
+  box.querySelectorAll("[data-rm]").forEach((x) => x.onclick = () => {
+    const qq = qStore(b.key), [gone] = qq.splice(Number(x.dataset.rm), 1); qSave(b.key, qq);
+    if (gone?.markId) try { document.querySelector(".frame iframe")?.contentWindow?.postMessage({ crewDeck: 1, type: "unmark", markId: gone.markId }, "*"); } catch {}
+    renderReview();
+  });
+  $("annBtn").onclick = () => { annotating = !annotating; postAnnotate(); renderReview(); };
+  const at = $("askText");
+  at.oninput = () => { askDraft[b.key] = at.value; };
+  at.onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReview(); } };
+  $("askAdd").onclick = () => { const t = at.value.trim(); if (!t) return; const qq = qStore(b.key); qq.push({ kind: "question", text: t }); qSave(b.key, qq); askDraft[b.key] = ""; renderReview(); };
+  $("sendRev").onclick = () => sendReview();
+}
+
+let sendingReview = false;
+async function sendReview() {
+  const b = reviewBoard; if (!b || sendingReview) return;
+  const typed = (askDraft[b.key] || "").trim();
+  const q = typed ? [...qStore(b.key), { kind: "question", text: typed }] : qStore(b.key);
+  const err = $("rerr");
+  if (!q.length) { if (err) err.textContent = "Write a message first."; return; }
+  sendingReview = true;
+  document.querySelectorAll("#sendRev, #fbarSend").forEach((x) => { x.disabled = true; x.textContent = "Sending…"; });
+  try {
+    const r = await fetch(`/api/board/${b.key}/send`, { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" }, body: JSON.stringify({ items: q }) });
+    const d = await r.json().catch(() => ({}));
+    if (!d.ok) throw new Error(d.error || "the worker did not get it");
+    qSave(b.key, []); askDraft[b.key] = ""; annotating = false; postAnnotate(); await loadThread(b.key); renderReview(); renderSide();
+  } catch (e) { const er = $("rerr"); if (er) er.textContent = String(e.message || e); }
+  sendingReview = false;
+  const fs = $("fbarSend"); if (fs) { fs.disabled = false; fs.textContent = "Send to agent"; }
+  renderReview();
+}
+
+window.addEventListener("message", (e) => {
+  const fr = document.querySelector(".frame iframe");
+  if (!fr || e.source !== fr.contentWindow) return;
+  const d = e.data || {}; if (!d.crewDeck || !reviewBoard) return;
+  const k = fr.dataset.key, q = qStore(k);
+  if (d.type === "queue") {
+    const item = { kind: "answer", text: String(d.text || "").slice(0, 4000), label: d.label ? String(d.label).slice(0, 400) : null, data: d.data || null, queueKey: d.queueKey || null, element: d.element || null };
+    const i = item.queueKey ? q.findIndex((x) => x.kind === "answer" && x.queueKey === item.queueKey) : -1;
+    if (i >= 0) q[i] = item; else q.push(item);
+    qSave(k, q); renderReview();
+  } else if (d.type === "send") { sendReview(); }
+  else if (d.type === "comment") {
+    const text = String(d.text || "").trim().slice(0, 4000);
+    if (text) { q.push({ kind: "comment", element: d.element || null, text, markId: d.markId || null }); qSave(k, q); renderReview(); }
+  } else if (d.type === "stop-annotate") { annotating = false; renderReview(); }
+});
+
+function toggleFull(force) {
+  const fr = document.querySelector(".frame");
+  if (!fr) return;
+  const on = force ?? !fr.classList.contains("full");
+  fr.classList.toggle("full", on);
+  const b = $("fullBtn"); if (b) b.textContent = on ? "⤡ exit full view" : "⤢ full view";
+}
+
+function renderMain() {
+  const boardMode = !selNeed && !!selBoard && (deck.boards || []).some((b) => b.key === selBoard);
+  document.querySelector(".app").classList.toggle("board-mode", boardMode);
+  const need = findNeed(selNeed);
+  if (selNeed && !need) { selNeed = null; store.set("crew-deck-need", ""); }
+  if (need) return renderNeed(need);
+  needKey = "";
+  const board = selBoard && (deck.boards || []).find((b) => b.key === selBoard);
+  if (board) return renderBoard(board);
+  if (sel === FM_ID) return renderFirstmate();
+  const x = (deck.workers || []).find((w) => w.id === sel);
+  const main = $("main");
+  if (!deck.ok) { main.innerHTML = `<div class="empty"><b>Can't read the fleet</b>Firstmate's records at ${esc(deck.home)} didn't load.</div>`; return; }
+  if (!x) { main.innerHTML = `<div class="mh"><div class="tools"><button class="icon-btn" data-chat>chat</button></div><div class="crumbs">firstmate</div><h1>No workers running</h1></div><div class="empty"><b>All quiet</b>New workers show up here as soon as firstmate starts them.</div>`; bindChatBtn(); return; }
+  const preOld = main.querySelector("pre"), atBottom = !preOld || preOld.scrollHeight - preOld.scrollTop - preOld.clientHeight < 40, keep = preOld && preOld.dataset.id === x.id ? preOld.scrollTop : null;
+  main.innerHTML = `
+    <header class="mh b-${esc(x.badge)}">
+      <div class="tools"><button class="icon-btn" data-chat>chat</button></div>
+      <div class="crumbs">${esc(x.repo || "project")} <span>/</span> <b>${esc(x.id)}</b></div>
+      <h1>${esc(x.title)}</h1>
+      <div class="chips">
+        <span class="chip state"><span class="d${x.busy ? " live" : ""}"></span>${esc(x.label)}</span>
+        ${agentChips(x.agent)}
+        ${x.branch ? `<span class="chip"><span class="k">⎇</span>${esc(x.branch)}</span>` : ""}
+        <span class="chip"><span class="k">up</span>${dur(x.started ? deck.generated - x.started : null)}</span>
+        ${x.rss ? `<span class="chip"><span class="k">mem</span>${size(x.rss)}</span>` : ""}
+        ${x.pr ? `<a class="chip link" href="${esc(x.pr)}" target="_blank" rel="noopener"><span class="k">PR</span>#${esc(prNum(x.pr))} ↗</a>` : ""}
+        ${liveBoards().filter((b) => b.owner_id === x.id).map((b) => `<span class="chip plan" data-board="${esc(b.key)}"><span class="k">plan</span>${esc(b.title)}</span>`).join("")}
+      </div>
+    </header>
+    <div class="body">
+      ${(() => { const w = (deck.waiting || []).find((y) => y.id === x.id); const sn = w && sentMap()["call:" + x.id]; return w ? (sn ? `<section class="ask sent"><div class="lh">✓ your answer was sent</div><p>${esc(sn.text)}</p><button class="btn-s" data-answer="${esc(x.id)}">See or change it</button></section>` : `<section class="ask"><div class="lh">needs your answer</div><p><b>${esc(w.call?.title || "A decision")}</b>${w.call?.question ? ` — ${esc(w.call.question)}` : ""}</p><button class="btn-p" data-answer="${esc(x.id)}">Answer it</button></section>`) : ""; })()}
+      <section class="latest b-${esc(x.badge)}">
+        <div class="lh">${x.busy ? '<span class="d live"></span>working now' : "latest from the worker"}</div>
+        ${x.doing ? `<p>${linkify(x.doing)}</p>` : '<p class="none">Nothing on its screen yet.</p>'}
+      </section>
+      <div class="tabs">
+        <button class="tab${tab === "terminal" ? " on" : ""}" data-tab="terminal">terminal</button>
+        <button class="tab${tab === "events" ? " on" : ""}" data-tab="events">events<span class="n">${(x.events || []).length}</span></button>
+      </div>
+      <div class="pane">${tab === "terminal" ? `
+        <div class="term">
+          <div class="tbar"><i></i><i></i><i></i><span>${esc(x.target || "")}</span><span class="r">read-only</span></div>
+          <pre data-id="${esc(x.id)}">${esc((x.screen || []).join("\n")) || "(empty screen)"}</pre>
+          ${statusLine(x.agent)}
+        </div>` : `
+        <div class="ev">${(x.events || []).map((e) => `<div class="ev-row t-${esc(e.state)}"><time>${e.at ? dur(deck.generated - e.at) : "–"}</time><span class="tag">${esc(e.state)}</span><span class="note">${linkify(e.note)}</span></div>`).join("") || '<div class="empty">No events yet.</div>'}</div>`}
+      </div>
+    </div>`;
+  main.querySelectorAll(".tab").forEach((b) => b.onclick = () => { tab = b.dataset.tab; store.set("crew-deck-tab", tab); renderMain(); });
+  const pre = main.querySelector("pre");
+  if (pre) pre.scrollTop = (keep != null && !atBottom) ? keep : pre.scrollHeight;
+  main.querySelectorAll("[data-board]").forEach((el) => el.onclick = () => selectBoard(el.dataset.board));
+  main.querySelectorAll("[data-answer]").forEach((el) => el.onclick = () => selectNeed("call:" + el.dataset.answer));
+  bindChatBtn();
+}
+
+function renderStatus() {
+  const agents = [deck.firstmate?.agent, ...(deck.workers || []).map((w) => w.agent)].filter(Boolean);
+  const a = agents.find((x) => x.five_hour) || {};
+  const pct = (v) => Number(String(v || "").replace("%", "")) || 0;
+  const hot = (v) => pct(v) >= 90 ? "var(--red)" : pct(v) >= 75 ? "var(--yellow)" : "var(--fg)";
+  const total = agents.reduce((t, x) => t + money(x.cost), 0);
+  $("plan").innerHTML = (a.five_hour ? `plan 5h <b style="color:${hot(a.five_hour)}">${esc(a.five_hour)}</b>${a.five_hour_reset ? ` ↻${esc(a.five_hour_reset)}` : ""}${a.week ? ` · wk <b style="color:${hot(a.week)}">${esc(a.week)}</b>` : ""}` : "")
+    + (total ? ` · spend <b>$${total.toFixed(2)}</b>` : "");
+  const m = deck.memory || {};
+  const frac = m.total ? m.used / m.total : 0, n = 14, f = Math.round(frac * n);
+  const color = frac > 0.85 ? "var(--red)" : frac > 0.7 ? "var(--yellow)" : "var(--fg)";
+  $("mem").innerHTML = m.total ? `mem <b style="color:${color}">${size(m.used)}</b>/${size(m.total)} <span style="color:${color}">${"▮".repeat(f)}</span><span style="opacity:.35">${"▮".repeat(n - f)}</span>${m.swap_used > 104857600 ? ` · swap <b>${size(m.swap_used)}</b>` : ""}` : "";
+}
+
+function select(id) { sel = id; selBoard = null; selNeed = null; store.set("crew-deck-sel", id); store.set("crew-deck-board", ""); store.set("crew-deck-need", ""); renderSide(); renderMain(); }
+function selectBoard(key) { selBoard = key; selNeed = null; store.set("crew-deck-board", key); store.set("crew-deck-need", ""); renderSide(); renderMain(); }
+function selectNeed(k) { selNeed = k; needKey = ""; store.set("crew-deck-need", k); renderSide(); renderMain(); }
+function bindChatBtn() { document.querySelectorAll("[data-chat]").forEach((b) => b.onclick = () => openChat()); }
+function openChat() { $("chat").classList.add("open"); $("input").focus(); }
+
+async function tick() {
+  try {
+    const r = await fetch("/api/deck", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    deck = await r.json(); lastOk = Date.now();
+    applyTheme(deck.theme); renderSide(); renderMain(); renderStatus();
+  } catch { $("live").innerHTML = '<span class="offline">● disconnected — retrying</span>'; }
+}
+
+const SHOT = /\n?\n?\[Attached [^\]]*from the crew deck[^\]]*\]\n?([\s\S]*)$/;
+function msgHtml(m) {
+  const k = SHOT.exec(m.body || "");
+  const text = k ? m.body.slice(0, k.index) : (m.body || "");
+  const names = k ? (k[1].match(/[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.(?:png|jpg|webp|gif)/g) || []) : [];
+  const srcs = [...names.map((n) => "/upload/" + n), ...(m.previews || [])];
+  return (text ? linkify(text) : "") + (srcs.length ? `<div class="shots">${srcs.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="attached image"></a>`).join("")}</div>` : "");
+}
+const sameMsg = (m, p) => (p.rid && m.rid === p.rid) || m.body === p.body;
+function renderChat(msgs) {
+  const all = [...msgs];
+  for (const p of pending) if (!msgs.some((m) => sameMsg(m, p))) all.push(p);
+  pending = pending.filter((p) => !msgs.some((m) => sameMsg(m, p)));
+  const key = JSON.stringify(all);
+  if (key === chatKey) return;
+  chatKey = key;
+  const box = $("msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  if (!all.length) { box.innerHTML = `<div class="intro"><b>Talk to firstmate</b>Ask about the fleet or hand it a task. Messages go to firstmate's inbox and wake it; the answer appears here.</div>`; return; }
+  const waiting = all.some((m) => m.state !== "answered");
+  box.innerHTML = all.map((m) => `
+    <div class="m me"><div class="bub">${msgHtml(m)}</div>
+      <div class="meta">${ago(m.at)} · ${m.state === "answered" ? '<span class="ok">answered</span>' : m.state === "seen" ? '<span class="ok">seen</span>' : m.state === "sending" ? "sending…" : '<span class="wait">delivered</span>'}</div></div>
+    ${m.reply ? `<div class="m fm"><div class="bub">${linkify(m.reply.body)}</div><div class="meta">firstmate · ${ago(m.reply.at)}</div></div>` : ""}`).join("")
+    + (waiting ? `<div class="typing"><i></i><i></i><i></i> firstmate will answer when it next checks in</div>` : "");
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+async function chatTick() {
+  try {
+    const r = await fetch("/api/chat", { cache: "no-store" });
+    const d = await r.json();
+    renderChat(d.messages || []);
+  } catch {}
+}
+
+let atts = [];
+const IMG_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+function chatErr(msg) { $("err").textContent = msg; $("err").classList.toggle("show", !!msg); }
+function renderAtts() {
+  $("atts").innerHTML = atts.map((a, i) => `<div class="att"><img src="${a.url}" alt="image to send"><button type="button" data-rm="${i}" aria-label="Remove image">✕</button></div>`).join("");
+  $("atts").querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => { const [a] = atts.splice(+b.dataset.rm, 1); URL.revokeObjectURL(a.url); renderAtts(); });
+}
+function addImages(files) {
+  let added = 0;
+  for (const f of files) {
+    if (!IMG_TYPES.includes(f.type)) { chatErr("Only PNG, JPEG, WebP and GIF images can be attached."); continue; }
+    if (f.size > 10 * 1024 * 1024) { chatErr("Each image must be under 10 MB."); continue; }
+    if (atts.length >= 6) { chatErr("At most 6 images per message."); break; }
+    atts.push({ file: f, type: f.type, url: URL.createObjectURL(f) }); added++;
+  }
+  if (added) { chatErr(""); renderAtts(); }
+  return added;
+}
+const b64 = (f) => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",", 2)[1] || ""); r.onerror = () => bad(r.error); r.readAsDataURL(f); });
+$("input").addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.items || [])].filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter(Boolean);
+  if (files.length && addImages(files) && !e.clipboardData.getData("text/plain")) e.preventDefault();
+});
+$("attach").onclick = () => $("files").click();
+$("files").onchange = () => { addImages([...$("files").files]); $("files").value = ""; $("input").focus(); };
+const comp = $("composer");
+comp.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { e.preventDefault(); comp.classList.add("drop"); } });
+comp.addEventListener("dragleave", (e) => { if (!comp.contains(e.relatedTarget)) comp.classList.remove("drop"); });
+comp.addEventListener("drop", (e) => { comp.classList.remove("drop"); if (e.dataTransfer?.files?.length) { e.preventDefault(); addImages([...e.dataTransfer.files]); $("input").focus(); } });
+let chatSending = false;
+$("composer").onsubmit = async (e) => {
+  e.preventDefault();
+  if (chatSending) return;
+  const text = $("input").value.trim(), sendAtts = [...atts];
+  if (!text && !sendAtts.length) return;
+  chatSending = true; $("send").disabled = true; chatErr("");
+  const rid = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  const p = { body: text, rid: "crew-deck-" + rid, previews: sendAtts.map((a) => a.url), at: Date.now() / 1000, state: "sending" };
+  pending.push(p);
+  chatKey = ""; await chatTick(); $("msgs").scrollTop = $("msgs").scrollHeight;
+  try {
+    const images = await Promise.all(sendAtts.map(async (a) => ({ type: a.type, data: await b64(a.file) })));
+    const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json", "X-Crew-Deck": "1" },
+      body: JSON.stringify({ text, images, rid }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || "firstmate's inbox did not take the message");
+    $("input").value = ""; atts = atts.filter((a) => !sendAtts.includes(a)); renderAtts();
+  } catch (err) {
+    pending = pending.filter((x) => x !== p);
+    chatErr(String(err.message || err));
+  }
+  chatSending = false; $("send").disabled = false; chatKey = ""; chatTick();
+};
+$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); } });
+$("closeChat").onclick = () => $("chat").classList.remove("open");
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("textarea, input")) { if (e.key === "Escape") e.target.blur(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey || !deck) return;
+  const w = [{ id: FM_ID }, ...(deck.workers || [])], i = w.findIndex((x) => x.id === sel);
+  if (e.key === "j" || e.key === "ArrowDown") { select(w[Math.min(w.length - 1, i + 1)].id); e.preventDefault(); }
+  else if (e.key === "k" || e.key === "ArrowUp") { select(w[Math.max(0, i - 1)].id); e.preventDefault(); }
+  else if (e.key === "t" || e.key === "e") {
+    if (sel === FM_ID) { fmTab = e.key === "t" ? "terminal" : "activity"; store.set("crew-deck-fmtab", fmTab); }
+    else { tab = e.key === "t" ? "terminal" : "events"; store.set("crew-deck-tab", tab); }
+    renderMain();
+  }
+  else if (e.key === "l" && sel === FM_ID) { fmTab = "landed"; store.set("crew-deck-fmtab", fmTab); renderMain(); }
+  else if (e.key === "/") { e.preventDefault(); openChat(); }
+  else if (e.key === "f" && document.querySelector(".frame")) toggleFull();
+  else if (e.key === "Escape") { if (annotating) { annotating = false; postAnnotate(); renderReview(); } else if (document.querySelector(".frame.full")) toggleFull(false); else $("chat").classList.remove("open"); }
+});
+setInterval(() => { if (lastOk) $("live").innerHTML = `<span style="color:var(--green)">●</span> live · ${dur((Date.now() - lastOk) / 1000)} ago`; }, 1000);
+tick(); chatTick(); setInterval(tick, 4000); setInterval(chatTick, 4000);
+</script>
+</body>
+</html>
+"""
+
+if __name__ == "__main__":
+    main()

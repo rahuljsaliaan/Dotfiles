@@ -25,6 +25,7 @@
 - Always include a visible toggle in the page header that switches `data-theme` between `dark` and `light`. Remember the choice in localStorage under `lavish-theme`, with every access wrapped in try/catch, and apply a stored choice in `<head>` before first paint. The page must still render dark when storage is unavailable.
 - Keep both modes readable: color inline SVG and custom CSS through `currentColor` and DaisyUI tokens (`--color-base-100`, `--color-base-content`, …), not fixed light-only colors. Re-render any Mermaid diagram when the theme flips.
 - Open the page on the same Hyprland workspace as the terminal Claude runs in, not wherever the browser last was. Start or resume the session with `npx -y lavish-axi <file> --no-open` (add `--reopen` only when reopening is warranted), then open the `url` it prints with `browser-here <url>`. That puts it as a new tab in the browser window already on that workspace, or opens a new browser window there. If `browser-here` is missing or fails, fall back to a plain `npx -y lavish-axi <file>`.
+- Exception for Firstmate workers: when the session runs as a Firstmate worker (the `FM_TASK_ID` environment variable is set), never open a Lavish page in the browser. Start or resume the session with `--no-open` and run neither `browser-here` nor a plain `lavish-axi <file>`. The user sees worker boards inside the crew deck (`crew-deck`) and opens Lavish from there only when they want to comment.
 
 ## Browser work happens in the user's own Chromium
 
