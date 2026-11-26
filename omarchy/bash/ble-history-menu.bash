@@ -11,6 +11,7 @@
 # through history as usual. Loaded by ~/.bashrc once ble.sh is loaded.
 
 : "${BLE_HISTORY_MENU_MAX:=8}"
+_ble_hmenu_total=0
 
 _ble_hmenu_prefix=   # the typed text the list was built for
 _ble_hmenu_items=()  # matches, best first
@@ -43,26 +44,87 @@ function ble/hmenu/collect {
   _ble_hmenu_items=()
   [[ $prefix =~ [^[:space:]] ]] || return 1
   ble/hmenu/entries
+  _ble_hmenu_total=0
   while IFS= read -r line; do
     [[ $line == "$prefix" ]] && continue
-    _ble_hmenu_items+=("$line")
-  done < <(printf '%s' "$_ble_hmenu_cache" |
-    fzf --filter="$prefix" --scheme=history | head -n "$BLE_HISTORY_MENU_MAX")
+    ((++_ble_hmenu_total <= BLE_HISTORY_MENU_MAX)) && _ble_hmenu_items+=("$line")
+  done < <(printf '%s' "$_ble_hmenu_cache" | fzf --filter="$prefix" --scheme=history)
   ((${#_ble_hmenu_items[@]}))
 }
 
+# Colours from the current Omarchy theme (Shinkai values as the fallback),
+# as "r;g;b" for 24-bit SGR.
+function ble/hmenu/load-colors {
+  local -A c=(
+    [accent]='#82aaff' [selection]='#1b3457' [muted]='#464b5d'
+    [lighter_background]='#162740' [foreground]='#a6accd'
+    [dark_foreground]='#525975' [bright_foreground]='#c8d3f5'
+  )
+  local file=~/.local/state/omarchy/current/theme/colors.toml key value
+  if [[ -r $file ]]; then
+    while IFS='= ' read -r key value; do
+      value=${value//\"/}
+      [[ ${c[$key]+set} && $value == \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] ]] && c[$key]=$value
+    done < "$file"
+  fi
+  local name hex
+  declare -gA _ble_hmenu_rgb=()
+  for name in "${!c[@]}"; do
+    hex=${c[$name]#\#}
+    _ble_hmenu_rgb[$name]="$((16#${hex:0:2}));$((16#${hex:2:2}));$((16#${hex:4:2}))"
+  done
+}
+ble/hmenu/load-colors
+
+# One entry with the typed letters picked out in the accent colour (the
+# first in-order match of each, case-insensitive, close to what fzf matched).
+# $1 entry, $2 colour of the other letters; result in ret.
+function ble/hmenu/mark-match {
+  local item=$1 base=$2 typed=${_ble_hmenu_prefix,,} i j=0 ch out=
+  local hi=$'\e[1;38;2;'"${_ble_hmenu_rgb[accent]}m" lo=$'\e[22;38;2;'"${base}m"
+  for ((i = 0; i < ${#item}; i++)); do
+    ch=${item:i:1}
+    if ((j < ${#typed})) && [[ ${ch,,} == "${typed:j:1}" ]]; then
+      out+=$hi$ch$lo; ((j++))
+    else
+      out+=$ch
+    fi
+  done
+  ret=$lo$out
+}
+
+# The list as a rounded box under the prompt: entries on the theme's lighter
+# background, the highlighted one on the selection colour with an accent bar,
+# and a footer with the keys and the match count.
 function ble/hmenu/draw {
-  local cols=${COLUMNS:-80} i item text=
+  local -A rgb; local k; for k in "${!_ble_hmenu_rgb[@]}"; do rgb[$k]=${_ble_hmenu_rgb[$k]}; done
+  local cols=${COLUMNS:-80} n=${#_ble_hmenu_items[@]} i item w=0 ret
+  local hint=" ↑↓ select  enter run " count=" $n/$_ble_hmenu_total "
+  ((_ble_hmenu_total > n)) || count=" $n "
+  for item in "${_ble_hmenu_items[@]}"; do ((${#item} > w)) && w=${#item}; done
+  local min=$((${#hint} + ${#count} + 2))
+  ((w + 3 < min)) && w=$((min - 3))
+  ((w > cols - 8)) && w=$((cols - 8))
+  local inner=$((w + 3))   # bar + space + text + space
+  local B=$'\e[22;38;2;'"${rgb[muted]}m" R=$'\e[m'
+  local bg=$'\e[48;2;'"${rgb[lighter_background]}m" sel=$'\e[48;2;'"${rgb[selection]}m"
+  local line; printf -v line '%*s' "$inner" ''; line=${line// /─}
+  local text=" $B╭$line╮$R"$'\n'
   for i in "${!_ble_hmenu_items[@]}"; do
     item=${_ble_hmenu_items[i]}
-    ((${#item} > cols - 4)) && item=${item:0:cols-5}…
+    ((${#item} > w)) && item=${item:0:w-1}…
+    local pad; printf -v pad '%*s' $((w - ${#item})) ''
     if ((i == _ble_hmenu_index)); then
-      text+=$'\e[1;7m'" $item "$'\e[m'
+      ble/hmenu/mark-match "$item" "${rgb[bright_foreground]}"
+      text+=" $B│$sel"$'\e[38;2;'"${rgb[accent]}m▌ $ret$pad $B$sel$R$B│$R"$'\n'
     else
-      text+=$'\e[38;2;92;99;112m'" $item"$'\e[m'
+      ble/hmenu/mark-match "$item" "${rgb[foreground]}"
+      text+=" $B│$bg  $ret$pad $R$B│$R"$'\n'
     fi
-    ((i < ${#_ble_hmenu_items[@]} - 1)) && text+=$'\n'
   done
+  local fill=$((inner - ${#hint} - ${#count} - 1))
+  printf -v line '%*s' "$fill" ''; line=${line// /─}
+  text+=" $B╰─"$'\e[38;2;'"${rgb[dark_foreground]}m$hint$B$line"$'\e[38;2;'"${rgb[dark_foreground]}m$count$B╯$R"
   ble/edit/info/show ansi "$text"
   local ret; ble/hmenu/typed
   _ble_hmenu_drawn=$ret
