@@ -66,6 +66,7 @@ function ble/hmenu/load-colors {
   local file=~/.local/state/omarchy/current/theme/colors.toml key value
   if [[ -r $file ]]; then
     while IFS='= ' read -r key value; do
+      [[ $key ]] || continue
       value=${value//\"/}
       [[ ${c[$key]+set} && $value == \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] ]] && c[$key]=$value
     done < "$file"
