@@ -6,6 +6,7 @@
 #   Down / Up  move through the list, filling the line with that entry
 #              (Up past the top goes back to what you typed)
 #   Enter      runs the line, as always
+#   Esc        closes the list (and undoes a highlighted pick) until you type
 # Every other key edits as normal: the list is only a panel, never a mode that
 # takes the keyboard. With nothing typed, or no match, Up and Down step
 # through history as usual. Loaded by ~/.bashrc once ble.sh is loaded.
@@ -66,6 +67,7 @@ function ble/hmenu/load-colors {
   local file=~/.local/state/omarchy/current/theme/colors.toml key value
   if [[ -r $file ]]; then
     while IFS='= ' read -r key value; do
+      [[ $key ]] || continue
       value=${value//\"/}
       [[ ${c[$key]+set} && $value == \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] ]] && c[$key]=$value
     done < "$file"
@@ -131,8 +133,12 @@ function ble/hmenu/draw {
   # ble/edit/info/show would re-parse all of this one character at a time
   # (~300 ms for the box). The layout is known here, so hand the panel the
   # finished text: every row is inner+3 columns wide, n+1 newlines.
-  if ble/is-function ble/edit/info/.render-content; then
+  # Put the cursor back on the prompt line before anything is written, so the
+  # terminal never shows it down in the box (one write, cursor hidden).
+  if ble/is-function ble/edit/info/.render-content && ble/is-function ble/canvas/panel/save-position; then
+    local pos; ble/canvas/panel/save-position; pos=$ret
     ble/edit/info/.render-content $((inner + 3)) $((n + 1)) "${text//$'\n'/$'\r\n'}"
+    ble/canvas/panel/load-position "$pos"
     ble/util/buffer.flush
     _ble_edit_info_scene=show
   else
@@ -229,3 +235,16 @@ ble-bind -m auto_complete -f up hmenu-up
 function ble/hmenu/on-exec { ble/hmenu/clear; _ble_hmenu_drawn=; }
 blehook PREEXEC+=ble/hmenu/on-exec
 blehook PRECMD+=ble/hmenu/on-exec
+
+# Esc closes the list until you type again and leaves exactly what you typed:
+# a highlighted entry is undone and the grey suggestion is dropped too.
+function ble/widget/hmenu-close {
+  [[ $_ble_decode_keymap == auto_complete ]] && ble/widget/auto_complete/cancel
+  if ((${#_ble_hmenu_items[@]} && _ble_hmenu_index >= 0)); then
+    ble-edit/content/reset "$_ble_hmenu_prefix" edit
+    _ble_edit_ind=${#_ble_hmenu_prefix}
+  fi
+  ble/hmenu/clear
+}
+ble-bind -m emacs -f 'C-[' hmenu-close
+ble-bind -m auto_complete -f 'C-[' hmenu-close

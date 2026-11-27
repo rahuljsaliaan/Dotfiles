@@ -22,6 +22,9 @@ if [[ ${BLE_VERSION-} ]]; then
   ble-import -d integration/fzf-key-bindings
   # History dropdown while typing.
   [[ -r ~/.config/bash/ble-history-menu.bash ]] && source ~/.config/bash/ble-history-menu.bash
+  # A lone Esc (close the dropdown) acts after 10 ms, not readline's 500 ms
+  # wait for an Alt key; terminals send Alt keys in one write, so they still work.
+  bind 'set keyseq-timeout 10'
 fi
 # Ctrl+R: the same bordered dropdown as on Zorin.
 export FZF_CTRL_R_OPTS="--layout=reverse --border --info=inline --delimiter='\t' --with-nth=2.."
