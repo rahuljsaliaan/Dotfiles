@@ -20,6 +20,8 @@ if [[ ${BLE_VERSION-} ]]; then
   bleopt highlight_syntax=
   # Omarchy's fzf Ctrl+R, bound through ble.sh so the two do not fight.
   ble-import -d integration/fzf-key-bindings
+  # History dropdown while typing.
+  [[ -r ~/.config/bash/ble-history-menu.bash ]] && source ~/.config/bash/ble-history-menu.bash
 fi
 # Ctrl+R: the same bordered dropdown as on Zorin.
 export FZF_CTRL_R_OPTS="--layout=reverse --border --info=inline --delimiter='\t' --with-nth=2.."
