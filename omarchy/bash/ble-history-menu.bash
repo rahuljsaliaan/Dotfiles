@@ -133,8 +133,12 @@ function ble/hmenu/draw {
   # ble/edit/info/show would re-parse all of this one character at a time
   # (~300 ms for the box). The layout is known here, so hand the panel the
   # finished text: every row is inner+3 columns wide, n+1 newlines.
-  if ble/is-function ble/edit/info/.render-content; then
+  # Put the cursor back on the prompt line before anything is written, so the
+  # terminal never shows it down in the box (one write, cursor hidden).
+  if ble/is-function ble/edit/info/.render-content && ble/is-function ble/canvas/panel/save-position; then
+    local pos; ble/canvas/panel/save-position; pos=$ret
     ble/edit/info/.render-content $((inner + 3)) $((n + 1)) "${text//$'\n'/$'\r\n'}"
+    ble/canvas/panel/load-position "$pos"
     ble/util/buffer.flush
     _ble_edit_info_scene=show
   else
