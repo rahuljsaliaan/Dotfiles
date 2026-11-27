@@ -236,19 +236,15 @@ function ble/hmenu/on-exec { ble/hmenu/clear; _ble_hmenu_drawn=; }
 blehook PREEXEC+=ble/hmenu/on-exec
 blehook PRECMD+=ble/hmenu/on-exec
 
-# Esc closes the list until you type again. If an entry was highlighted, the
-# line goes back to what you typed.
+# Esc closes the list until you type again and leaves exactly what you typed:
+# a highlighted entry is undone and the grey suggestion is dropped too.
 function ble/widget/hmenu-close {
-  if ((${#_ble_hmenu_items[@]})); then
-    if ((_ble_hmenu_index >= 0)); then
-      [[ $_ble_decode_keymap == auto_complete ]] && ble/widget/auto_complete/cancel
-      ble-edit/content/reset "$_ble_hmenu_prefix" edit
-      _ble_edit_ind=${#_ble_hmenu_prefix}
-    fi
-    ble/hmenu/clear
-  elif [[ $_ble_decode_keymap == auto_complete ]]; then
-    ble/widget/auto_complete/cancel
+  [[ $_ble_decode_keymap == auto_complete ]] && ble/widget/auto_complete/cancel
+  if ((${#_ble_hmenu_items[@]} && _ble_hmenu_index >= 0)); then
+    ble-edit/content/reset "$_ble_hmenu_prefix" edit
+    _ble_edit_ind=${#_ble_hmenu_prefix}
   fi
+  ble/hmenu/clear
 }
 ble-bind -m emacs -f 'C-[' hmenu-close
 ble-bind -m auto_complete -f 'C-[' hmenu-close
